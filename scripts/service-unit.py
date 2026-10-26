@@ -31,7 +31,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 {service_options.rstrip()}
-WorkingDirectory={quoted(root)}
+WorkingDirectory={str(root).replace('%', '%%')}
 ExecStart={quoted(sys.executable)} {quoted(root / 'app.py')}
 Restart=on-failure
 RestartSec=10
