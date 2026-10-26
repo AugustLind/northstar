@@ -1,4 +1,4 @@
-let researchView=null, researchSettingsLoaded=false, chartRanges={};
+let researchView=null, researchSettingsLoaded=false, chartRanges={}, askingModel=false;
 const timeLabel=t=>t?new Date(t*1000).toLocaleString():'not yet';
 function chart(card,range='1Y'){
  const days={'1M':31,'3M':93,'1Y':370}[range];
@@ -19,7 +19,8 @@ function renderAdvice(){
  const reportOld=Date.now()/1000-r.generated>86400;const cards=r.cards.map(c=>(reportOld||!c.asof||Date.now()/1000-c.asof>4*86400)?Object.assign({},c,{action:'Insufficient data',score:null,reasons:['Report or quote is stale. Run analysis before using a recommendation.'].concat(c.reasons)}):c),buy=cards.filter(c=>!c.held&&c.action==='Consider buying'),sell=cards.filter(c=>c.held&&/selling|sell threshold|taking profits/.test(c.action));
  $('#adviceSummary').textContent=`${buy.length} buy candidate${buy.length===1?'':'s'} · ${sell.length} holding${sell.length===1?'':'s'} to review for selling · ${cards.filter(c=>c.score!==null).length}/${cards.length} stocks with usable history`;
  $('#llmStatus').textContent=`${r.model?r.model+' · ':''}${r.llm_status}. Model explanations do not change computed signals.`;
- $('#commentary').textContent=r.commentary||'The measured suggestions below work without AI. Install Ollama and enable local AI for a written briefing.';
+ const busy=!!researchView.model_busy;$('#askButton').disabled=askingModel||busy;$('#askButton').textContent=busy&&!askingModel?'Local AI busy…':'Ask local AI';
+ $('#commentary').textContent=r.commentary||(r.llm_status==='generating local briefing'?'Ollama is writing your briefing. This can take a few minutes on the one-CPU server. You can use the stock charts while you wait.':r.llm_status==='disabled'?'Enable local AI in Research settings to generate a written briefing.':'No AI briefing was generated. See the status above for the specific problem.');
  $('#providerErrors').textContent=(r.errors||[]).length?`${r.errors.length} data refresh error(s): `+r.errors.join('\n'):'';
  const filter=$('#adviceFilter').value;
  const filtered=cards.filter(c=>filter==='held'?c.held:filter==='buy'?(!c.held&&c.action==='Consider buying'):filter==='sell'?(c.held&&/selling|sell threshold|taking profits/.test(c.action)):true);
@@ -30,7 +31,7 @@ $('#adviceFilter').onchange=renderAdvice;
 $('#adviceCards').onclick=e=>{if(e.target.dataset.range){chartRanges[e.target.dataset.symbol]=e.target.dataset.range;renderAdvice();}};
 $('#analyze').onclick=async()=>{try{await api('analyze',{});$('#researchStatus').textContent='Analysis queued; results will appear automatically.';setTimeout(loadResearch,1000);}catch(e){$('#researchStatus').textContent=e.message;}};
 $('#researchSettings').onsubmit=async e=>{e.preventDefault();const f=e.target;try{await api('settings',{universe:f.elements.universe.value.split(',').map(s=>s.trim()).filter(Boolean),interval_minutes:Number(f.elements.interval_minutes.value),model:f.elements.model.value,min_turnover_nok:Number(f.elements.min_turnover_nok.value),llm_enabled:f.elements.llm_enabled.checked});$('#settingsMessage').textContent='Saved. New analysis queued.';await loadResearch();}catch(e){$('#settingsMessage').textContent=e.message;}};
-$('#askForm').onsubmit=async e=>{e.preventDefault();$('#askButton').disabled=true;$('#answer').textContent='Asking your local model…';try{const r=await api('ask',{question:$('#question').value});$('#answer').textContent=r.answer+'\n\n'+r.model+' · '+timeLabel(r.generated);}catch(e){$('#answer').textContent=e.message;}finally{$('#askButton').disabled=false;}};
+$('#askForm').onsubmit=async e=>{e.preventDefault();askingModel=true;$('#askButton').disabled=true;$('#answer').textContent='Asking your local model…';try{const r=await api('ask',{question:$('#question').value});$('#answer').textContent=r.answer+'\n\n'+r.model+' · '+timeLabel(r.generated);}catch(e){$('#answer').textContent=e.message;}finally{askingModel=false;loadResearch();}};
 for(const b of document.querySelectorAll('[data-tab]'))b.addEventListener('click',()=>{history.replaceState({},'',b.dataset.tab==='recommendations'?'/recommendations':'/');});
 if(location.pathname==='/recommendations')document.querySelector('[data-tab="recommendations"]').click();
 loadResearch();setInterval(()=>{loadResearch();load().catch(()=>{});},15000);

@@ -39,6 +39,8 @@ This downloads `qwen2.5:3b` (approximately 1.9 GB; [model details and licence](h
 
 Northstar calls only `http://127.0.0.1:11434/api/generate`, with a three-minute timeout. It generates a briefing on each research cycle, and you can ask questions on the page. Only the measured report and your notebook notes are supplied; the model has no live web/news tool. AI text is labelled separately from computed signals and cannot change actions. If Ollama is unavailable, the deterministic screen still runs and the page explains the missing AI connection.
 
+AI input is limited to eight selected stocks (named stocks in your question first, then holdings, then ranked candidates), with short notes and rounded metrics. Coverage is included in the prompt; the model does not receive all 34 full records or chart histories. Responses are capped at 300 generated tokens using a 4096-token context. While inference runs, the page disables additional questions. Connection failures, missing models, busy inference and timeouts have separate messages.
+
 ## Run continuously on Ubuntu
 
 Stop any foreground copy, then install the user service:

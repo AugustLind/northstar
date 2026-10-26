@@ -22,6 +22,10 @@ setImmediate(()=>{
  const svg=vm.runInContext("chart({symbol:'<script>',currency:'NOK',history:"+JSON.stringify(history)+"},'3M')",context);
  assert(!svg.includes('<script>'));
  assert(svg.includes('&lt;script&gt;'));
+ vm.runInContext("researchView.model_busy=true;researchView.report.llm_status='generating local briefing';renderAdvice()",context);
+ assert.strictEqual(nodes['#askButton'].disabled,true);
+ assert(nodes['#commentary'].textContent.includes('Ollama is writing'));
+ assert(!nodes['#commentary'].textContent.includes('Install Ollama'));
  console.log('UI contract and chart rendering smoke checks passed (not browser QA).');
  }catch(error){console.error(error);process.exitCode=1;}
 });

@@ -6,8 +6,10 @@ not probability of profit. Model commentary never overrides computed actions.
 import json
 import math
 import threading
+import re
 import time
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 SCOPE = 'oslo-small-cap-v1'
 UNIVERSE_SOURCE = 'https://live.euronext.com/sites/default/files/documentation/index-composition/Oslo_Bors_Small_Cap_Index_Composition.pdf'
@@ -147,17 +149,60 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
             'universe': universe, 'commentary': None, 'llm_status': 'disabled'}
 
 
+class ModelBusy(RuntimeError):
+    pass
+
+
+def llm_error(error, model):
+    if isinstance(error, ModelBusy):
+        return 'Local AI is busy generating another answer. Wait for it to finish, then retry.'
+    if isinstance(error, TimeoutError) or (isinstance(error, URLError) and isinstance(error.reason, TimeoutError)):
+        return 'Local AI timed out on this CPU. Try a shorter question or a smaller installed model.'
+    if isinstance(error, HTTPError):
+        if error.code == 404:
+            return f'Model {model} is not installed. On the server run: ollama pull {model}'
+        return f'Ollama returned HTTP {error.code}. Check the Ollama service log for memory or model errors.'
+    if isinstance(error, (URLError, ConnectionError)):
+        return 'Cannot connect to Ollama at 127.0.0.1:11434. Check sudo systemctl status ollama.'
+    return 'Local AI unavailable: the response could not be read. Check sudo journalctl -u ollama -n 30 --no-pager.'
+
+
+def compact_evidence(report, question):
+    cards = report.get('cards', [])
+    mentioned = [c for c in cards if re.search(r'(?<![A-Z0-9])' + re.escape(c['symbol'].split('.')[0]) + r'(?:\.OL)?(?![A-Z0-9])', question, re.I)]
+    ordered = mentioned + [c for c in cards if c['held']] + cards
+    selected, seen = [], set()
+    for c in ordered:
+        if c['symbol'] in seen:
+            continue
+        seen.add(c['symbol'])
+        metrics = c.get('metrics', {})
+        selected.append({'symbol': c['symbol'], 'held': c['held'], 'action': c['action'],
+                         'score': c['score'], 'price': c.get('price'), 'currency': c.get('currency'),
+                         'asof': c.get('asof'), 'source': c.get('source'),
+                         'metrics': {k: round(metrics[k], 2) for k in ('momentum3m', 'volatility', 'turnover20')
+                                     if isinstance(metrics.get(k), (int, float))},
+                         'reasons': [r[:160] for r in c.get('reasons', [])[:2]],
+                         'thesis': c.get('thesis', '')[:160], 'review': c.get('review', '')[:160]})
+        if len(selected) == 8:
+            break
+    return {'generated': report.get('generated'), 'method': report.get('method'),
+            'total_stocks': len(cards), 'included_stocks': len(selected),
+            'buy_candidates': sum(c['action'] == 'Consider buying' and not c['held'] for c in cards),
+            'note': 'Only selected stocks are included to fit the local model. Do not claim all stocks were assessed by AI.',
+            'cards': selected}
+
+
 def local_answer(model, report, question):
     # Fixed loopback URL: settings cannot redirect financial records to remote services.
-    evidence = {k: v for k, v in report.items() if k not in ('commentary', 'errors')}
-    evidence['cards'] = [{k: v for k, v in c.items() if k != 'history'} for c in report.get('cards', [])]
+    evidence = compact_evidence(report, question)
     payload = {'model': model, 'stream': False, 'system': SYSTEM,
                'prompt': json.dumps({'report': evidence, 'question': question}, ensure_ascii=False),
-               'options': {'temperature': 0.1, 'num_predict': 700}, 'keep_alive': '10m'}
+               'options': {'temperature': 0.1, 'num_predict': 300, 'num_ctx': 4096}, 'keep_alive': '10m'}
     request = Request('http://127.0.0.1:11434/api/generate', data=json.dumps(payload).encode(),
                       headers={'Content-Type': 'application/json'})
     if not MODEL_LOCK.acquire(blocking=False):
-        raise ValueError('Local model is busy; retry after the current briefing completes.')
+        raise ModelBusy('Local model is busy; retry after the current briefing completes.')
     try:
         with urlopen(request, timeout=180) as response:
             result = json.load(response)
@@ -193,11 +238,11 @@ class ResearchWorker:
                 self.write('report', report)
                 try:
                     report['commentary'] = local_answer(settings['model'], report,
-                        'Summarise which candidates pass the buy screen, which holdings need a sell review, and why. Use at most 250 words.')
+                        'Summarise the leading included buy candidates and any included holding sell reviews. Explain missing coverage. Use at most 150 words.')
                     report['llm_status'] = 'ready'
                     report['model'] = settings['model']
-                except Exception:
-                    report['llm_status'] = 'unavailable — start Ollama and pull the selected model; rule-based advice remains available'
+                except Exception as error:
+                    report['llm_status'] = llm_error(error, settings['model'])
             self.write('report', report)
         except Exception as error:
             with self.status_lock:
@@ -227,4 +272,4 @@ class ResearchWorker:
         report = self.read('report', None)
         if report and report.get('market_scope') != SCOPE:
             report = None
-        return {'report': report, 'worker': status, 'settings': self.settings()}
+        return {'report': report, 'worker': status, 'settings': self.settings(), 'model_busy': MODEL_LOCK.locked()}

@@ -2,6 +2,7 @@ import io
 import json
 import math
 import os
+from urllib.error import URLError, HTTPError
 import tempfile
 import time
 import unittest
@@ -100,6 +101,35 @@ class ScreenTests(unittest.TestCase):
         self.assertNotIn('history', json.loads(payload['prompt'])['report']['cards'][0])
         self.assertFalse(payload['stream'])
         self.assertEqual(text, 'Measured explanation.')
+
+    def test_ai_input_is_bounded_and_prioritises_named_stock(self):
+        cards = []
+        for i in range(34):
+            card = research.screen('STOCK' + str(i) + '.OL', quote())
+            card['thesis'] = 'x' * 5000
+            cards.append(card)
+        compact = research.compact_evidence({'cards': cards}, 'Explain STOCK33.OL')
+        self.assertEqual(compact['cards'][0]['symbol'], 'STOCK33.OL')
+        self.assertEqual(compact['included_stocks'], 8)
+        self.assertEqual(compact['total_stocks'], 34)
+        self.assertLess(len(json.dumps(compact)), 11000)
+
+    def test_busy_model_does_not_attempt_another_request(self):
+        research.MODEL_LOCK.acquire()
+        try:
+            with patch.object(research, 'urlopen') as request:
+                with self.assertRaises(research.ModelBusy):
+                    research.local_answer('qwen2.5:1.5b', {'cards': []}, 'Explain')
+                request.assert_not_called()
+        finally:
+            research.MODEL_LOCK.release()
+
+    def test_model_errors_are_distinguished(self):
+        self.assertIn('busy', research.llm_error(research.ModelBusy(), 'small'))
+        self.assertIn('timed out', research.llm_error(TimeoutError(), 'small'))
+        self.assertIn('Cannot connect', research.llm_error(URLError('refused'), 'small'))
+        missing = HTTPError('http://localhost', 404, 'missing', None, None)
+        self.assertIn('ollama pull small', research.llm_error(missing, 'small'))
 
     def test_worker_retains_rules_when_ai_unavailable(self):
         values = {}

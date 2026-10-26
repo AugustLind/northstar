@@ -229,8 +229,10 @@ class Handler(BaseHTTPRequestHandler):
                     report = research.build_report(state(), config['universe'], config['min_turnover_nok'])
                     answer = research.local_answer(config['model'], report, question)
                     return self.send_json({'answer': answer, 'model': config['model'], 'generated': time.time()})
-                except Exception:
-                    return self.send_json({'error': 'Local AI unavailable. Start Ollama and pull the selected model. No cloud fallback is used.'}, 503)
+                except research.ModelBusy as error:
+                    return self.send_json({'error': research.llm_error(error, config['model'])}, 429)
+                except Exception as error:
+                    return self.send_json({'error': research.llm_error(error, config['model'])}, 503)
                 finally:
                     MODEL_LOCK.release()
             else:
