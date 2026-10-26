@@ -1,6 +1,7 @@
 import io
 import json
 import math
+import os
 import tempfile
 import time
 import unittest
@@ -116,6 +117,15 @@ class ScreenTests(unittest.TestCase):
 
 
 class PersistenceTests(unittest.TestCase):
+    def test_reverse_proxy_origin_is_explicit_and_exact(self):
+        with patch.dict(os.environ, {'NORTHSTAR_PUBLIC_ORIGIN': 'https://northstar.example.com'}):
+            self.assertTrue(app.request_origin_allowed('https://northstar.example.com', '127.0.0.1:8000'))
+            self.assertFalse(app.request_origin_allowed('https://attacker.example', 'attacker.example'))
+            self.assertFalse(app.request_origin_allowed('http://northstar.example.com', 'northstar.example.com'))
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(app.request_origin_allowed('http://127.0.0.1:18080', '127.0.0.1:18080'))
+            self.assertFalse(app.request_origin_allowed('https://attacker.example', '127.0.0.1:8000'))
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.override = patch.object(app, 'DB', Path(self.tmp.name)/'db.sqlite')

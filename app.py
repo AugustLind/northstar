@@ -5,6 +5,7 @@ import re
 import sqlite3
 import time
 import threading
+import os
 import research
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +19,10 @@ DB = ROOT / 'data' / 'portfolio.db'
 REFRESH_LOCK = threading.Lock()
 WORKER = None
 MODEL_LOCK = threading.Lock()
+
+def request_origin_allowed(origin, host):
+    allowed = os.environ.get('NORTHSTAR_PUBLIC_ORIGIN') or 'http://' + host
+    return not origin or origin == allowed
 
 def connect():
     DB.parent.mkdir(exist_ok=True)
@@ -180,7 +185,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         # Reject browser cross-origin writes to this local service.
         origin = self.headers.get('Origin')
-        if origin and origin != 'http://' + self.headers.get('Host', ''):
+        if not request_origin_allowed(origin, self.headers.get('Host', '')):
             return self.send_json({'error': 'Cross-origin request rejected.'}, 403)
         if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             return self.send_json({'error': 'JSON required.'}, 415)
