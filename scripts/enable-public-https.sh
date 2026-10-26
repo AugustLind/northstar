@@ -6,7 +6,7 @@ if [[ ! "$task_domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,6
   echo 'Usage: bash scripts/enable-public-https.sh northstar.example.com' >&2
   exit 1
 fi
-sudo -v
+sudo -n true
 sudo apt-get update
 sudo apt-get install -y nginx apache2-utils certbot
 sudo mkdir -p /var/www/northstar-acme

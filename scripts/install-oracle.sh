@@ -7,7 +7,7 @@ if [[ $EUID -eq 0 ]]; then
 fi
 task_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$task_root"
-sudo -v
+sudo -n true
 sudo apt-get update
 sudo apt-get install -y python3 curl ca-certificates zstd
 task_installer="$(mktemp)"
