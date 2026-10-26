@@ -7,15 +7,15 @@ import json
 import math
 import threading
 import re
+import indicators
+import universe as oslo_universe
 import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
-SCOPE = 'oslo-small-cap-v1'
-UNIVERSE_SOURCE = 'https://live.euronext.com/sites/default/files/documentation/index-composition/Oslo_Bors_Small_Cap_Index_Composition.pdf'
-# Publicly visible subset, snapshot 2026-09-30. Not the complete index or live membership.
-DEFAULT_UNIVERSE = [s + '.OL' for s in
-    'EPR BNOR ELK MPCC NAS COSH SATS NORBT NORCO LINK PEXIP HSHP PLSV ZAP B2I ELO WWIB BONHR ELMRA KID SNTIA BOUV ENDUR BWO HEX NAPA NEL PEN ABG MEDI SWON CRNA BWE BOHUS'.split()]
+SCOPE = 'oslo-multifactor-v2'
+UNIVERSE_SOURCE = oslo_universe.SOURCE
+DEFAULT_UNIVERSE = oslo_universe.SYMBOLS
 DEFAULT_SETTINGS = {'universe': DEFAULT_UNIVERSE, 'interval_minutes': 360,
                     'model': 'qwen2.5:3b', 'llm_enabled': False,
                     'min_turnover_nok': 250000, 'market_scope': SCOPE}
@@ -81,6 +81,7 @@ def screen(symbol, q, position=None, min_turnover_nok=250000):
                          'history_end': history[-1]['time'],
                          'turnover20': q.get('turnover20'), 'turnover_days': q.get('turnover_days', 0)}
     result['score'] = score
+    result.update(indicators.analyse(history, result['metrics'], score, q.get('turnover20'), q.get('turnover_days',0), min_turnover_nok))
     reasons = [f'Latest daily close is {"above" if last > ma200 else "below"} the 200-session average.',
                f'Three-month price change: {momentum:+.1f}%.',
                f'Annualised daily-price volatility: {volatility:.1f}%.']
@@ -140,12 +141,20 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
             if weight > .25:
                 card['reasons'].append(f'{weight:.0%} of tracked stock holdings; concentration exceeds 25%. This is not your complete financial portfolio.')
     def rank(c):
-        m = c['metrics']
-        strength = m.get('momentum3m', 0)/max(m.get('volatility', 10), 10)
-        return (not c['held'], c['action'] != 'Consider buying', -(c['score'] or 0), -strength)
+        return (-c.get('composite', -1), c['symbol'])
+    ranked = sorted([c for c in cards if c.get('rank_eligible')],key=rank)
+    for number, card in enumerate(ranked,1):
+        card['rank'] = number
+    coverage = {'requested':len(cards), 'analysed':sum(c['score'] is not None for c in cards),
+                'eligible':len(ranked), 'unavailable':sum(c['score'] is None for c in cards)}
+    # Histories are served on demand; keep routine polling small across broad scans.
+    for card in cards:
+        card['sparkline'] = card['history'][-60::3]
+        card['history'] = []
     return {'generated': time.time(), 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
-            'universe_source': UNIVERSE_SOURCE, 'universe_snapshot': '2026-09-30',
-            'method': 'Price trend screen v1 · not backtested · no fundamentals/news analysis',
+            'top20':[c['symbol'] for c in ranked[:20]], 'coverage':coverage,
+            'universe_source': UNIVERSE_SOURCE, 'universe_snapshot': oslo_universe.ASOF,
+            'method': 'Multi-factor technical screen v2 · not backtested · no fundamentals/news analysis',
             'universe': universe, 'commentary': None, 'llm_status': 'disabled'}
 
 
@@ -178,7 +187,7 @@ def compact_evidence(report, question):
         seen.add(c['symbol'])
         metrics = c.get('metrics', {})
         selected.append({'symbol': c['symbol'], 'held': c['held'], 'action': c['action'],
-                         'score': c['score'], 'price': c.get('price'), 'currency': c.get('currency'),
+                         'trend_score': c['score'], 'overall_score':c.get('composite'), 'rank':c.get('rank'), 'price': c.get('price'), 'currency': c.get('currency'),
                          'asof': c.get('asof'), 'source': c.get('source'),
                          'metrics': {k: round(metrics[k], 2) for k in ('momentum3m', 'volatility', 'turnover20')
                                      if isinstance(metrics.get(k), (int, float))},
@@ -272,4 +281,5 @@ class ResearchWorker:
         report = self.read('report', None)
         if report and report.get('market_scope') != SCOPE:
             report = None
-        return {'report': report, 'worker': status, 'settings': self.settings(), 'model_busy': MODEL_LOCK.locked()}
+        return {'report': report, 'worker': status, 'settings': self.settings(), 'model_busy': MODEL_LOCK.locked(),
+                'progress': self.read('refresh_progress', None), 'default_universe':DEFAULT_UNIVERSE}

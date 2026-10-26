@@ -176,7 +176,8 @@ class PersistenceTests(unittest.TestCase):
         app.save_position(dict(symbol='KOG', currency='NOK', shares=5, cost=306))
         self.assertEqual(app.settings()['universe'], research.DEFAULT_UNIVERSE)
         self.assertTrue(app.settings()['llm_enabled'])
-        self.assertNotIn('EQNR.OL', app.settings()['universe'])
+        self.assertNotIn('MSFT', app.settings()['universe'])
+        self.assertGreaterEqual(len(app.settings()['universe']),180)
         self.assertEqual(app.state()['positions'][0]['symbol'], 'KOG')
 
     def test_research_and_holdings_share_one_provider_request(self):

@@ -12,7 +12,7 @@ import research
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, parse_qs
 from urllib.error import HTTPError, URLError
 from concurrent.futures import ThreadPoolExecutor
 
@@ -58,13 +58,15 @@ def settings():
     saved = read_meta('settings', {})
     # Migrate the earlier US/large-cap screen once without changing holdings.
     if saved.get('market_scope') != research.SCOPE:
-        saved = {k: v for k, v in saved.items() if k in ('model', 'llm_enabled', 'interval_minutes')}
+        extra = [s for s in saved.get('universe',[]) if re.fullmatch(r'[A-Z0-9][A-Z0-9\-]{0,16}\.OL',s)]
+        saved = {k: v for k, v in saved.items() if k in ('model', 'llm_enabled', 'interval_minutes', 'min_turnover_nok')}
+        saved['universe'] = list(dict.fromkeys(research.DEFAULT_UNIVERSE + extra))[:500]
     return {**research.DEFAULT_SETTINGS, **saved}
 
 def save_settings(data):
     universe = data.get('universe', [])
-    if not isinstance(universe, list) or not 1 <= len(universe) <= 100:
-        raise ValueError('Choose between 1 and 100 Oslo stock symbols.')
+    if not isinstance(universe, list) or not 1 <= len(universe) <= 500:
+        raise ValueError('Choose between 1 and 500 Oslo stock symbols.')
     symbols = list(dict.fromkeys(str(s).strip().upper() for s in universe))
     symbols = [s if s.endswith('.OL') else s + '.OL' for s in symbols]
     symbols = list(dict.fromkeys(symbols))
@@ -106,7 +108,7 @@ def save_position(data):
 
 def fetch_quote(symbol):
     # Unofficial public endpoint: errors are surfaced, never replaced with sample prices.
-    url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol, safe='') + '?range=1y&interval=1d'
+    url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol, safe='') + '?range=2y&interval=1d'
     req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     with urlopen(req, timeout=12) as response:
         result = json.load(response)['chart']['result'][0]
@@ -116,9 +118,23 @@ def fetch_quote(symbol):
     adjusted = series is not None
     if series is None:
         series = result['indicators']['quote'][0]['close']
-    history = [{'time': t, 'close': v} for t, v in zip(result.get('timestamp', []), series)
-               if isinstance(v, (int, float)) and math.isfinite(v) and v > 0]
     raw = result['indicators']['quote'][0]
+    history = []
+    for i,(t,v) in enumerate(zip(result.get('timestamp',[]),series)):
+        if (not isinstance(v,(int,float)) or not math.isfinite(v) or v<=0
+                or not isinstance(t,(int,float)) or not math.isfinite(t) or t<=0 or t>time.time()+300):
+            continue
+        point = {'time':t,'close':v}
+        fields = {k: raw.get(k,[])[i] if i<len(raw.get(k,[])) else None for k in ('open','high','low','close','volume')}
+        if (all(isinstance(fields[k],(int,float)) and math.isfinite(fields[k]) and fields[k]>0 for k in ('open','high','low','close'))
+                and fields['high']>=max(fields['open'],fields['close'])
+                and fields['low']<=min(fields['open'],fields['close'])):
+            factor = v/fields['close']
+            point.update({k:fields[k]*factor for k in ('open','high','low')})
+        if isinstance(fields['volume'],(int,float)) and math.isfinite(fields['volume']) and fields['volume']>=0:
+            point['volume']=fields['volume']
+        history.append(point)
+    history=sorted({point['time']:point for point in history}.values(),key=lambda p:p['time'])
     turnover = [p * v for p, v in zip(raw['close'][-20:], raw.get('volume', [])[-20:])
                 if isinstance(p, (int, float)) and isinstance(v, (int, float)) and
                 math.isfinite(p) and math.isfinite(v) and p > 0 and v >= 0]
@@ -128,6 +144,7 @@ def fetch_quote(symbol):
     return {'price': price, 'currency': meta['currency'], 'asof': meta['regularMarketTime'],
             'fetched': time.time(), 'source': 'Yahoo Finance (unofficial)',
             'history': history, 'history_basis': 'Dividend/split adjusted close' if adjusted else 'Provider daily close',
+            'history_version':2,
             'name': meta.get('longName') or meta.get('shortName') or symbol,
             'turnover20': sum(turnover)/len(turnover) if turnover else None, 'turnover_days': len(turnover),
             'ma200': sum(close[-200:])/200 if len(close) >= 200 else None,
@@ -145,15 +162,33 @@ def _refresh(extra_symbols=None):
         lookups.setdefault(symbol, symbol)
     lookups['NOK=X'] = 'NOK=X'
     symbols = list(dict.fromkeys(lookups.values()))
+    progress_lock = threading.Lock()
+    progress = {'done':0,'total':len(symbols),'started':time.time(),'failed':0}
+    write_meta('refresh_progress',progress)
+    with connect() as db:
+        cached = {row['symbol']:json.loads(row['payload']) for row in db.execute('SELECT * FROM quotes')}
     def one(symbol):
+        failed=False
         try:
-            payload = fetch_quote(symbol)
+            old = cached.get(symbol)
+            if extra_symbols is not None and old and old.get('history_version')==2 and time.time()-old.get('fetched',0)<1200:
+                payload=old
+            else:
+                for attempt in range(2):
+                    try:
+                        payload = fetch_quote(symbol)
+                        break
+                    except HTTPError as error:
+                        if error.code not in (429,503) or attempt==1:
+                            raise
+                        time.sleep(5)
             with connect() as db:
                 for key, lookup in lookups.items():
                     if lookup == symbol:
                         db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)', (key, json.dumps(payload)))
             return None
         except Exception as error:
+            failed=True
             if isinstance(error, HTTPError):
                 reason = ('ticker not found' if error.code == 404 else
                           'provider rate limit; try again later' if error.code == 429 else
@@ -163,7 +198,13 @@ def _refresh(extra_symbols=None):
             else:
                 reason = 'provider returned unusable data; check ticker and retry'
             return f'{symbol}: {reason}. Any previous quote retains its original timestamp.'
-    with ThreadPoolExecutor(max_workers=4) as pool:
+        finally:
+            with progress_lock:
+                progress['done']+=1
+                progress['failed']+=int(failed)
+                if progress['done']%5==0 or progress['done']==progress['total']:
+                    write_meta('refresh_progress',progress)
+    with ThreadPoolExecutor(max_workers=3) as pool:
         return [error for error in pool.map(one, symbols) if error]
 
 def state():
@@ -192,11 +233,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True})
         if self.path.startswith('/api/') and not api_authorized(self.headers.get('Authorization')):
             return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
+        if urlsplit(self.path).path == '/api/history':
+            symbol = parse_qs(urlsplit(self.path).query).get('symbol',[''])[0]
+            if not re.fullmatch(r'[A-Z0-9^][A-Z0-9.\-^]{0,19}',symbol):
+                return self.send_json({'error':'Invalid symbol.'},400)
+            with connect() as db:
+                row=db.execute('SELECT payload FROM quotes WHERE symbol=?',(symbol,)).fetchone()
+            if not row:
+                return self.send_json({'error':'History is not downloaded yet. Wait for the scan to finish.'},404)
+            return self.send_json(json.loads(row['payload']))
         if self.path == '/api/research':
             return self.send_json(WORKER.view() if WORKER else {'report': read_meta('report'), 'settings': settings(), 'worker': {}})
         if self.path == '/api/state':
-            return self.send_json(state())
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+            snapshot=state()
+            wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
+            snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
+            return self.send_json(snapshot)
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]
