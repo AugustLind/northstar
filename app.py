@@ -6,6 +6,8 @@ import sqlite3
 import time
 import threading
 import os
+import hashlib
+import hmac
 import research
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,7 +24,17 @@ MODEL_LOCK = threading.Lock()
 
 def request_origin_allowed(origin, host):
     allowed = os.environ.get('NORTHSTAR_PUBLIC_ORIGIN') or 'http://' + host
-    return not origin or origin == allowed
+    pages = os.environ.get('NORTHSTAR_PAGES_ORIGIN')
+    return not origin or origin == allowed or bool(pages and origin == pages)
+
+def api_authorized(authorization):
+    expected = os.environ.get('NORTHSTAR_ACCESS_KEY_HASH')
+    if not expected:
+        return not os.environ.get('NORTHSTAR_PAGES_ORIGIN')
+    if not authorization or not authorization.startswith('Bearer '):
+        return False
+    digest = hashlib.sha256(authorization[7:].encode()).hexdigest()
+    return hmac.compare_digest(digest, expected)
 
 def connect():
     DB.parent.mkdir(exist_ok=True)
@@ -160,20 +172,31 @@ def state():
                 'quotes': {r['symbol']: json.loads(r['payload']) for r in db.execute('SELECT * FROM quotes')}}
 
 class Handler(BaseHTTPRequestHandler):
+    def cors_headers(self):
+        origin = self.headers.get('Origin')
+        if origin and request_origin_allowed(origin, self.headers.get('Host', '')):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
+
     def send_json(self, value, status=200):
         payload = json.dumps(value, allow_nan=False).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Cache-Control', 'no-store')
+        self.cors_headers()
         self.end_headers()
         self.wfile.write(payload)
 
     def do_GET(self):
+        if self.path == '/api/health':
+            return self.send_json({'ok': True})
+        if self.path.startswith('/api/') and not api_authorized(self.headers.get('Authorization')):
+            return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
         if self.path == '/api/research':
             return self.send_json(WORKER.view() if WORKER else {'report': read_meta('report'), 'settings': settings(), 'worker': {}})
         if self.path == '/api/state':
             return self.send_json(state())
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]
@@ -182,11 +205,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write((ROOT / 'static' / name).read_bytes())
 
+    def do_OPTIONS(self):
+        origin = self.headers.get('Origin')
+        if not origin or not request_origin_allowed(origin, self.headers.get('Host', '')):
+            return self.send_json({'error': 'Origin rejected.'}, 403)
+        self.send_response(204)
+        self.cors_headers()
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Max-Age', '600')
+        self.end_headers()
+
     def do_POST(self):
         # Reject browser cross-origin writes to this local service.
         origin = self.headers.get('Origin')
         if not request_origin_allowed(origin, self.headers.get('Host', '')):
             return self.send_json({'error': 'Cross-origin request rejected.'}, 403)
+        if not api_authorized(self.headers.get('Authorization')):
+            return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
         if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             return self.send_json({'error': 'JSON required.'}, 415)
         try:

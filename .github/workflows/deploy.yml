@@ -1,0 +1,73 @@
+name: Deploy Northstar
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: northstar-production
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
+      - run: node --check static/app.js && node --check static/advice.js && node tests/test_ui.js
+      - run: for script in scripts/*.sh; do bash -n "$script"; done
+  oracle:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare verified SSH connection
+        env:
+          DEPLOY_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+          ORACLE_HOST: ${{ vars.ORACLE_HOST }}
+        run: |
+          test -n "$DEPLOY_KEY" && test -n "$KNOWN_HOSTS" && test -n "$ORACLE_HOST" || { echo 'Configure ORACLE_SSH_KEY, ORACLE_KNOWN_HOSTS and ORACLE_HOST first.'; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/northstar_deploy
+          chmod 600 ~/.ssh/northstar_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Upload tracked source and deploy Oracle
+        env:
+          ORACLE_HOST: ${{ vars.ORACLE_HOST }}
+        run: |
+          git archive --format=tar.gz HEAD > /tmp/northstar-deploy.tar.gz
+          scp -i ~/.ssh/northstar_deploy -o StrictHostKeyChecking=yes /tmp/northstar-deploy.tar.gz "ubuntu@$ORACLE_HOST:northstar-deploy.tar.gz"
+          ssh -i ~/.ssh/northstar_deploy -o StrictHostKeyChecking=yes "ubuntu@$ORACLE_HOST" 'tar -xOf ~/northstar-deploy.tar.gz scripts/deploy-oracle.sh > ~/northstar-deploy.sh && bash ~/northstar-deploy.sh ~/northstar-deploy.tar.gz'
+      - name: Remove temporary SSH key
+        if: always()
+        run: rm -f ~/.ssh/northstar_deploy
+  pages:
+    needs: oracle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/configure-pages@v5
+      - name: Build public dashboard
+        env:
+          NORTHSTAR_API_URL: ${{ vars.NORTHSTAR_API_URL }}
+        run: python scripts/build-pages.py
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages-dist
+      - uses: actions/deploy-pages@v4
+        id: deployment

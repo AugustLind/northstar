@@ -2,6 +2,8 @@
 
 A local Oslo stock research dashboard for a long-term investor using Nordnet Norway. You place every trade yourself. Python 3.10+; no Python dependencies or paid AI API.
 
+For **automatic Oracle + GitHub Pages deployment on every push**, see [GITHUB-DEPLOY.md](GITHUB-DEPLOY.md).
+
 For the Oracle Ubuntu server installer, private SSH access, and optional password-protected HTTPS hosting, see [DEPLOY.md](DEPLOY.md).
 
 ## Open the app
