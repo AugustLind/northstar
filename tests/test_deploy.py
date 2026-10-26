@@ -20,7 +20,8 @@ class DeployTests(unittest.TestCase):
                     p=fakebin/name;p.write_text('#!/bin/sh\n'+code+'\n');p.chmod(0o755)
                 archive=home/'deploy.tar.gz'
                 with tarfile.open(archive,'w:gz') as tar:
-                    for name,text in [('app.py','new_version=True\n'),('research.py',''),('tests/test_ok.py','import unittest\n')]:
+                    fixture_test = 'import unittest\n\nclass SmokeTest(unittest.TestCase):\n    def test_smoke(self):\n        self.assertTrue(True)\n'
+                    for name,text in [('app.py','new_version=True\n'),('research.py',''),('tests/test_ok.py',fixture_test)]:
                         data=text.encode();info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
                 result=subprocess.run(['bash',str(script),str(archive)],capture_output=True,text=True,
                     env={**os.environ,'HOME':str(home),'PATH':str(fakebin)+':'+os.environ['PATH']})
