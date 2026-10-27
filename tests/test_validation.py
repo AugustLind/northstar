@@ -94,6 +94,18 @@ class ValidationTests(unittest.TestCase):
         self.assertIsNotNone(r['return_pct'])
         self.assertEqual(v['snapshots'][0]['captured'],1600000000)
 
+    def test_long_window_excludes_young_history_and_compares_index_without_filling(self):
+        q=quotes(1100);q['B.OL']={'currency':'NOK','history':q['A.OL']['history'][-300:]}
+        q['OSEBX.OL']={'currency':'NOK','history':q['A.OL']['history']}
+        v=validation.evaluate(q,['A.OL','B.OL'])
+        self.assertEqual(v['sessions'],756);self.assertEqual(v['stocks'],1)
+        self.assertGreaterEqual(len(v['folds']),3)
+        self.assertEqual(v['oslo_index']['status'],'available')
+        self.assertEqual(len(v['oslo_index']['curve']),756)
+        q['OSEBX.OL']={'currency':'NOK','history':q['A.OL']['history'][:-5]}
+        v=validation.evaluate(q,['A.OL'])
+        self.assertIsNone(v['oslo_index']['return_pct'])
+
     def test_incomplete_cohort_has_no_total(self):
         db=sqlite3.connect(':memory:');db.row_factory=sqlite3.Row
         validation.capture(db,{'generated':1,'top20':['A.OL','B.OL'],'cards':[{'symbol':'A.OL'},{'symbol':'B.OL'}]},1600000000)

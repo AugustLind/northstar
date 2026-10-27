@@ -69,4 +69,4 @@ class MultiAnalysisTests(unittest.TestCase):
         with patch.object(app,'urlopen',return_value=io.BytesIO(json.dumps(payload).encode())):
             q=app.fetch_quote('EXAMPLE.OL')
         self.assertEqual(q['history'][0],{'time':1,'close':10,'open':9,'high':11,'low':8,'volume':100})
-        self.assertEqual(q['history_version'],2)
+        self.assertEqual(q['history_version'],3)

@@ -11,6 +11,8 @@ import indicators
 import fundamentals
 import portfolio_fit
 import trade_plan
+import advice_state
+import company_data
 import announcements
 import universe as oslo_universe
 import time
@@ -165,6 +167,7 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
         record = snapshot.get('fundamentals', {}).get(canonical_symbol)
         if record:
             financial = fundamentals.analyse(record, quotes.get(card['symbol']))
+            card['quality']=company_data.assessment(financial,profile['sectors'].get(canonical_symbol))
             card['fundamentals'] = {'status': financial['status'], 'period': financial['period'],
                 'signals': financial['signals'][:3], 'metrics': {k: financial['metrics'][k] for k in
                     ('revenue_growth','operating_margin','net_cash','annual_pe_proxy') if k in financial['metrics']}}
@@ -224,6 +227,8 @@ def compact_evidence(report, question):
         if c.get('portfolio_fit'):
             fit=c['portfolio_fit']
             selected[-1]['allocation_preview']={k:fit.get(k) for k in ('ready','budget_nok','max_purchase_nok','shares','fees_nok','buy_fee_nok','fee_pct','break_even_price','break_even_gain_pct','after_stock_pct','after_sector_pct','after_cash_pct','warnings')}
+        if c.get('quality'):
+            quality=c['quality'];selected[-1]['annual_quality']={k:quality.get(k) for k in ('label','period','passed','covered')}
         if c.get('fundamentals'):
             f = c['fundamentals']
             selected[-1]['fundamentals'] = {'status':f['status'], 'period':f['period'],
@@ -240,20 +245,30 @@ def compact_evidence(report, question):
     portfolio=report.get('portfolio_context')
     if portfolio:
         portfolio={k:portfolio.get(k) for k in ('complete','total_nok','cash_nok','cash_pct','sectors_complete','scope')} | {
-            'warnings':report['portfolio_context'].get('warnings',[])[:5],
+            'warnings':[w[:240] for w in report['portfolio_context'].get('warnings',[])[:5]],
             'holdings':report['portfolio_context'].get('holdings',[])[:8],
             'note':'At most eight tracked holdings included; no full-portfolio suitability assessment.'}
     plan=report.get('trade_plan') or {}
     quantities={'generated':plan.get('generated'),'shared_budget_nok':plan.get('buy_budget_nok'),
                 'buys':[{k:r.get(k) for k in ('symbol','buy_shares','total_nok','fee_nok','reason')} for r in plan.get('buys',[])[:8]],
                 'sales':[{k:r.get(k) for k in ('symbol','owned','sell_shares','remaining_shares','reasons')} for r in plan.get('holdings',[]) if r.get('sell_shares')][:8],
-                'method':plan.get('method')}
-    return {'generated': report.get('generated'), 'method': report.get('method'),
+                'method':(plan.get('method') or '')[:350], 'total_buys':len(plan.get('buys',[])),
+                'total_sale_reviews':sum(bool(r.get('sell_shares')) for r in plan.get('holdings',[]))}
+    evidence={'generated': report.get('generated'), 'method': report.get('method'),
             'total_stocks': len(cards), 'included_stocks': len(selected),
             'buy_candidates': sum(c['action'] == 'Consider buying' and not c['held'] for c in cards),
             'note': 'Only selected stocks are included to fit the local model. Do not claim all stocks were assessed by AI.',
             'portfolio_context': portfolio, 'portfolio_limits':report.get('portfolio_limits'), 'share_count_plan':quantities,
             'cards': selected}
+    # Keep the whole evidence payload bounded for the CPU model's 4096-token context.
+    while len(json.dumps(evidence,ensure_ascii=False))>8200:
+        if len(selected)>1:selected.pop()
+        elif len(quantities['sales'])>1:quantities['sales'].pop()
+        elif len(quantities['buys'])>1:quantities['buys'].pop()
+        elif portfolio and len(portfolio.get('holdings',[]))>1:portfolio['holdings'].pop()
+        else:break
+    evidence['included_stocks']=len(selected)
+    return evidence
 
 
 def local_answer(model, report, question):
@@ -294,7 +309,13 @@ class ResearchWorker:
         try:
             settings = self.settings()
             errors = self.refresh(settings['universe'])
-            report = build_report(self.snapshot(), settings['universe'], settings.get('min_turnover_nok', 250000))
+            snapshot=self.snapshot()
+            report = build_report(snapshot, settings['universe'], settings.get('min_turnover_nok', 250000))
+            signal_state=advice_state.observe(report,self.read('signal_state',{}),report['generated'])
+            self.write('signal_state',signal_state);snapshot['signal_state']=signal_state
+            report['trade_plan']=trade_plan.build(snapshot,report,snapshot.get('portfolio_preferences',{}))
+            quantities,changes=advice_state.differences(report['trade_plan'],self.read('advice_quantities',{}),snapshot.get('portfolio_preferences',{}).get('min_change_pct',20),report['generated'])
+            self.write('advice_quantities',quantities);report['recommendation_changes']=changes
             report['errors'] = errors
             self.write('report',report)
             if self.on_report:

@@ -18,6 +18,10 @@ import validation
 import portfolio_fit
 import holdings_import
 import trade_plan
+import transactions
+import company_data
+import advice_state
+import daily_board
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -31,6 +35,7 @@ REFRESH_LOCK = threading.Lock()
 WORKER = None
 FUNDAMENTALS_WORKER = None
 ANNOUNCEMENTS_WORKER = None
+COMPANY_WORKER = None
 MODEL_LOCK = threading.Lock()
 
 def request_origin_allowed(origin, host):
@@ -119,7 +124,7 @@ def save_position(data):
 
 def fetch_quote(symbol):
     # Unofficial public endpoint: errors are surfaced, never replaced with sample prices.
-    url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol, safe='') + '?range=2y&interval=1d'
+    url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol, safe='') + '?range=5y&interval=1d'
     req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     with urlopen(req, timeout=12) as response:
         result = json.load(response)['chart']['result'][0]
@@ -155,7 +160,7 @@ def fetch_quote(symbol):
     return {'price': price, 'currency': meta['currency'], 'asof': meta['regularMarketTime'],
             'fetched': time.time(), 'source': 'Yahoo Finance (unofficial)',
             'history': history, 'history_basis': 'Dividend/split adjusted close' if adjusted else 'Provider daily close',
-            'history_version':2,
+            'history_version':3,
             'name': meta.get('longName') or meta.get('shortName') or symbol,
             'turnover20': sum(turnover)/len(turnover) if turnover else None, 'turnover_days': len(turnover),
             'ma200': sum(close[-200:])/200 if len(close) >= 200 else None,
@@ -172,6 +177,7 @@ def _refresh(extra_symbols=None):
     for symbol in extra_symbols or []:
         lookups.setdefault(symbol, symbol)
     lookups['NOK=X'] = 'NOK=X'
+    if extra_symbols is not None:lookups['OSEBX.OL']='OSEBX.OL'
     symbols = list(dict.fromkeys(lookups.values()))
     progress_lock = threading.Lock()
     progress = {'done':0,'total':len(symbols),'started':time.time(),'failed':0}
@@ -182,7 +188,7 @@ def _refresh(extra_symbols=None):
         failed=False
         try:
             old = cached.get(symbol)
-            if extra_symbols is not None and old and old.get('history_version')==2 and time.time()-old.get('fetched',0)<1200:
+            if extra_symbols is not None and old and old.get('history_version')==3 and time.time()-old.get('fetched',0)<1200:
                 payload=old
             else:
                 for attempt in range(2):
@@ -224,12 +230,14 @@ def financial_symbols():
     return list(dict.fromkeys(held + settings()['universe']))
 
 def financial_view(symbol):
-    canonical = fundamentals.canonical(symbol)
-    record = read_meta('fundamentals:' + canonical)
-    with connect() as db:
-        row = db.execute('SELECT payload FROM quotes WHERE symbol IN (?,?) ORDER BY symbol DESC LIMIT 1', (canonical, symbol)).fetchone()
-    return {**fundamentals.analyse(record, json.loads(row['payload']) if row else None), 'symbol': canonical,
-            'scan': read_meta('fundamentals_progress'), 'attempted': (record or {}).get('attempted')}
+    symbol=fundamentals.canonical(symbol);snapshot=state(True)
+    record=snapshot.get('fundamentals',{}).get(symbol)
+    q=snapshot['quotes'].get(symbol) or snapshot['quotes'].get(symbol[:-3])
+    financial=fundamentals.analyse(record,q)
+    return {**financial,'symbol':symbol,'scan':read_meta('fundamentals_progress'),'attempted':(record or {}).get('attempted'),
+            'assessment':company_data.assessment(financial,snapshot['portfolio_preferences']['sectors'].get(symbol)),
+            'valuation':company_data.peer_valuation(symbol,financial,snapshot.get('fundamentals',{}),snapshot['quotes'],snapshot['portfolio_preferences']['sectors'])}
+
 
 def announcement_focus(scope='focus'):
     with connect() as db:
@@ -257,7 +265,13 @@ def state(include_fundamentals=False):
         if include_fundamentals:
             result['fundamentals'] = {r['key'].split(':', 1)[1]: json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'fundamentals:%'")}
             result['announcements']=read_meta('announcements_feed',{})
-        result['portfolio_preferences']=portfolio_fit.preferences(read_meta('portfolio_preferences',{}))
+        result['companies']={r['key'].split(':',1)[1]:json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'company:%'")}
+        result['manual_portfolio_preferences']=portfolio_fit.preferences(read_meta('portfolio_preferences',{}))
+        result['portfolio_preferences']=company_data.effective(result['manual_portfolio_preferences'],result['companies'])
+        result['signal_state']=read_meta('signal_state',{})
+        result['last_trades']=read_meta('last_trades',{})
+        baseline=read_meta('ledger_state')
+        result['ledger_reconciled']=(False if read_meta('broker_cash_check',{}).get('mismatch_active') else (baseline['fingerprint']==transactions.fingerprint(result['positions'],result['manual_portfolio_preferences']['cash_nok'])) if baseline else None)
         result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
         return result
 
@@ -316,6 +330,106 @@ def apply_import(data):
     return {'updated':result['updated']}
 
 
+def ledger_view():
+    snapshot=state();profile=snapshot['manual_portfolio_preferences'];baseline=read_meta('ledger_state')
+    with connect() as db:
+        transactions.schema(db)
+        rows=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM ledger_events ORDER BY date DESC,uid DESC LIMIT 200')]
+        count=db.execute('SELECT COUNT(*) FROM ledger_events').fetchone()[0]
+    reconciled=bool(baseline and snapshot['ledger_reconciled'])
+    return {'initialized':bool(baseline),'reconciled':reconciled,'baseline':baseline,'cash_nok':profile['cash_nok'],
+            'events':rows,'count':count,'broker_cash_check':read_meta('broker_cash_check'), 'holdings_import':read_meta('holdings_import_status'), 'method':'Net broker cash includes actual fees; the 79 NOK estimate is not charged again. '
+            'Transactions on or before the opening snapshot date are history only. Later new events update shares, weighted-average cost and cash. '
+            'Same-day buys are booked before sales for weighted-average bookkeeping; this is not FIFO tax accounting. '
+            'After a holdings CSV import or manual financial edit, reconcile by verifying holdings/cash and initializing a new snapshot.'}
+
+
+def ledger_initialize(data):
+    cutoff=transactions.date(data.get('date',''))
+    import datetime as dt
+    if cutoff>dt.datetime.now(dt.timezone.utc).date().isoformat():raise ValueError('Opening snapshot cannot be future dated.')
+    with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        positions=[dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        transactions.schema(db)
+        latest=db.execute('SELECT MAX(date) FROM ledger_events').fetchone()[0]
+        if latest and cutoff<latest:raise ValueError('A new opening snapshot must include all already-imported event dates.')
+        row=db.execute("SELECT payload FROM metadata WHERE key='portfolio_preferences'").fetchone()
+        profile=portfolio_fit.preferences(json.loads(row['payload']) if row else {})
+        baseline={'cutoff_date':cutoff,'created':time.time(),'opening_cash_nok':profile['cash_nok'],
+                  'fingerprint':transactions.fingerprint(positions,profile['cash_nok'])}
+        db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('ledger_state',json.dumps(baseline)))
+        db.execute("DELETE FROM metadata WHERE key='pending_ledger_import'")
+        db.execute("DELETE FROM metadata WHERE key='broker_cash_check'")
+    return {'initialized':True}
+
+
+def ledger_inspect(data):
+    try:raw=base64.b64decode(data.get('file_b64',''),validate=True)
+    except (ValueError,binascii.Error,TypeError):raise ValueError('Choose a valid transaction CSV.')
+    parsed=transactions.table(raw);token=secrets.token_urlsafe(24)
+    saved=read_meta('ledger_column_mapping',{})
+    mapping={k:(saved[k] if saved.get(k) in parsed['columns'] else v) for k,v in parsed['mapping'].items()}
+    write_meta('pending_ledger_table',{'token':token,'expires':time.time()+900,'parsed':parsed})
+    return {'token':token,'columns':parsed['columns'],'mapping':mapping,'fields':transactions.FIELDS,'rows':len(parsed['rows'])}
+
+
+def ledger_preview(data):
+    pending=read_meta('pending_ledger_table',{})
+    if pending.get('token')!=data.get('token') or pending.get('expires',0)<time.time():raise ValueError('Upload the transaction export again; this preview expired.')
+    snapshot=state();mapping=data.get('mapping');scope=data.get('scope','default')
+    items=transactions.events(pending['parsed'],mapping,scope,read_meta('holdings_import_aliases',{}),holdings_import.catalogue(snapshot['quotes'],read_meta('report')))
+    with connect() as db:
+        transactions.schema(db)
+        known={r['uid'] for r in db.execute('SELECT uid FROM ledger_events')}
+    for r in items:r['duplicate']=r.get('uid') in known
+    token=secrets.token_urlsafe(24)
+    write_meta('pending_ledger_import',{'token':token,'expires':time.time()+900,'items':items,'mapping':mapping,
+               'fingerprint':transactions.fingerprint(snapshot['positions'],snapshot['manual_portfolio_preferences']['cash_nok'])})
+    return {'token':token,'rows':items,'baseline':read_meta('ledger_state'),
+            'method':'Review signed NET cash amounts: buys negative, sales/dividends positive. Do not subtract fees again. '
+                     'Confirm ticker matches. Existing transaction IDs are skipped. Without broker IDs, identical events are identified by economic fields and occurrence within the file; ambiguous overlapping exports require review.'}
+
+
+def ledger_apply(data):
+    with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        def meta(key,default=None):
+            row=db.execute('SELECT payload FROM metadata WHERE key=?',(key,)).fetchone()
+            return json.loads(row['payload']) if row else default
+        pending=meta('pending_ledger_import',{})
+        if pending.get('token')!=data.get('token') or pending.get('expires',0)<time.time():raise ValueError('Transaction preview expired or was replaced. Upload again.')
+        profile=portfolio_fit.preferences(meta('portfolio_preferences',{}))
+        positions=[dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        if pending['fingerprint']!=transactions.fingerprint(positions,profile['cash_nok']):raise ValueError('Holdings or cash changed after preview. Preview again.')
+        result=transactions.apply(db,pending['items'],data.get('selections'),meta('ledger_state'),profile,positions)
+        last=meta('last_trades',{})
+        for s,t in result['last_trades'].items():last[s]=max(t,last.get(s,0))
+        for key,value in [('portfolio_preferences',result['profile']),('ledger_state',result['ledger']),('last_trades',last),('ledger_column_mapping',pending['mapping'])]:
+            db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',(key,json.dumps(value,allow_nan=False)))
+        db.execute("DELETE FROM metadata WHERE key='pending_ledger_import'")
+        db.execute("DELETE FROM metadata WHERE key='pending_ledger_table'")
+    if WORKER:WORKER.trigger()
+    return {'imported':result['imported'],'duplicates':result['duplicates']}
+
+
+def broker_cash_check(data):
+    reported=portfolio_fit.number(data.get('cash_nok'),'Broker cash',1e9)
+    tracked=state()['manual_portfolio_preferences']['cash_nok']
+    result={'checked':time.time(),'reported_cash':reported,'tracked_cash':tracked,'difference':reported-tracked,
+            'mismatch_active':abs(reported-tracked)>.01}
+    write_meta('broker_cash_check',result)
+    return result
+
+
+def daily_view():
+    snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
+    result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
+    alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
+    write_meta('dashboard_alerts',alerts);result['alerts']=alerts
+    return result
+
+
 class Handler(BaseHTTPRequestHandler):
     def cors_headers(self):
         origin = self.headers.get('Origin')
@@ -358,6 +472,8 @@ class Handler(BaseHTTPRequestHandler):
             if not row:
                 return self.send_json({'error':'History is not downloaded yet. Wait for the scan to finish.'},404)
             return self.send_json(json.loads(row['payload']))
+        if self.path == '/api/daily':return self.send_json(daily_view())
+        if self.path == '/api/ledger':return self.send_json(ledger_view())
         if self.path == '/api/trade-plan':
             snapshot=state()
             return self.send_json(trade_plan.build(snapshot,read_meta('report'),snapshot['portfolio_preferences']))
@@ -376,7 +492,7 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/trade-plan.js': ('trade-plan.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/trade-plan.js': ('trade-plan.js', 'text/javascript'), '/ledger.js': ('ledger.js','text/javascript'), '/daily.js': ('daily.js','text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]
@@ -407,12 +523,25 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'error': 'JSON required.'}, 415)
         try:
             length = int(self.headers.get('Content-Length', '0'))
-            if not 0 < length <= (400000 if self.path in ('/api/import/preview','/api/import/apply') else 50000):
+            if not 0 < length <= (400000 if self.path in ('/api/import/preview','/api/import/apply','/api/ledger/inspect','/api/ledger/preview','/api/ledger/apply') else 50000):
                 raise ValueError('Invalid request size.')
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError('JSON object required.')
-            if self.path == '/api/import/preview':
+            if self.path == '/api/ledger/reconcile':return self.send_json(broker_cash_check(data))
+            elif self.path == '/api/ledger/initialize':return self.send_json(ledger_initialize(data))
+            elif self.path == '/api/ledger/inspect':return self.send_json(ledger_inspect(data))
+            elif self.path == '/api/ledger/preview':return self.send_json(ledger_preview(data))
+            elif self.path == '/api/ledger/apply':return self.send_json(ledger_apply(data))
+            elif self.path == '/api/alerts/read':
+                ids=data.get('ids',[])
+                if not isinstance(ids,list):raise ValueError('Alert IDs must be a list.')
+                rows=read_meta('dashboard_alerts',[])
+                for r in rows:
+                    if r['id'] in ids:r['read']=True
+                write_meta('dashboard_alerts',rows)
+                return self.send_json({'saved':True})
+            elif self.path == '/api/import/preview':
                 return self.send_json(import_preview(data))
             elif self.path == '/api/import/apply':
                 return self.send_json(apply_import(data))
@@ -504,10 +633,12 @@ def report_ready():
 if __name__ == '__main__':
     connect().close()
     ANNOUNCEMENTS_WORKER = announcements.Worker(read_meta,write_meta,announcement_focus)
+    COMPANY_WORKER=company_data.Worker(read_meta,write_meta,financial_symbols)
     WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, report_ready)
     FUNDAMENTALS_WORKER = fundamentals.Worker(read_meta, write_meta, financial_symbols)
     # Bind first so a second process cannot start a competing background worker.
     server = ThreadingHTTPServer(('127.0.0.1', 8000), Handler)
+    COMPANY_WORKER.start()
     WORKER.start()
     FUNDAMENTALS_WORKER.start()
     ANNOUNCEMENTS_WORKER.start()
@@ -515,6 +646,8 @@ if __name__ == '__main__':
     try:
         server.serve_forever()
     except KeyboardInterrupt:
+        COMPANY_WORKER.stop.set()
+        COMPANY_WORKER.wake.set()
         WORKER.stop.set()
         WORKER.wake.set()
         FUNDAMENTALS_WORKER.stop.set()

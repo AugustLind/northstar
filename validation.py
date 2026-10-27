@@ -9,7 +9,7 @@ VERSION = 'technical-monthly-fixed-buy-v2'
 LIMITS = ('Exploratory, not an unbiased market backtest: today’s configured universe excludes '
           'unknown delisted stocks. Adjusted prices may be revised. Financials and news are excluded. '
           'Benchmark is the same complete-history basket bought and held, not an Oslo index. '
-          'Missing common sessions are excluded; stocks without complete test history are excluded. '
+          'Stocks without a complete reference calendar and warm-up, including younger IPOs and incomplete histories, are excluded. '
           'Uses fractional stock allocations, fixed 79 NOK per buy order and optional extra slippage. '
           'Fee reserves can leave residual cash. No selling commission, tax, market impact or cash interest is modelled.')
 
@@ -39,10 +39,14 @@ def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000)
     # Complete-case sample is explicit; never silently mark suspended assets flat.
     latest = max(int(h[-1]['time']//86400) for h in series.values())
     series = {s:h for s,h in series.items() if int(h[-1]['time']//86400) == latest}
-    common = sorted(set.intersection(*[{int(p['time']//86400) for p in h[199:]} for h in series.values()]))
-    if len(common) < 40:
-        raise ValueError('Fewer than 40 common test sessions; insufficient comparable history.')
-    common = common[-252:]
+    # A young IPO must not shorten the entire experiment to its own history length.
+    # Use the longest Oslo history's dated calendar and explicitly report complete-case exclusions.
+    anchor=max(series.values(),key=len)
+    common=sorted({int(p['time']//86400) for p in anchor[199:]})[-756:]
+    series={s:h for s,h in series.items() if set(common).issubset({int(p['time']//86400) for p in h})
+            and sum(int(p['time']//86400)<=common[0] for p in h)>=200}
+    if len(common)<40 or not series:
+        raise ValueError('Fewer than 40 complete test sessions; insufficient comparable history.')
     lookups = {s:{int(p['time']//86400):p['close'] for p in h} for s,h in series.items()}
     equity, benchmark, holdings, pending = 1., 1., {}, None
     curve, trades, decisions, fees = [], 0, 0, 0.
@@ -102,7 +106,24 @@ def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000)
     for p in curve:
         peak = max(peak,p['close'])
         drawdown = min(drawdown,p['close']/peak-1)
+    # Fixed-rule chronological holdout slices. No weights are fitted on the test returns.
+    folds=[]
+    for year in sorted({time.strftime('%Y',time.gmtime(p['time'])) for p in curve}):
+        indices=[i for i,p in enumerate(curve) if time.strftime('%Y',time.gmtime(p['time']))==year]
+        first,last=indices[0],indices[-1];base=curve[first-1] if first else {'close':1.,'benchmark':1.}
+        folds.append({'year':year,'sessions':len(indices),'from':curve[first]['time'],'to':curve[last]['time'],
+                      'strategy_pct':(curve[last]['close']/base['close']-1)*100,
+                      'basket_pct':(curve[last]['benchmark']/base['benchmark']-1)*100})
+    index_history=history(quotes.get('OSEBX.OL',{}));index_days={int(p['time']//86400):p['close'] for p in index_history}
+    comparable=all(d in index_days for d in common[1:])
+    index_curve=[{'time':d*86400,'close':1. if d<start else index_days[d]/index_days[start]} for d in common] if comparable else []
+    index={'symbol':'OSEBX.OL','name':'Oslo Børs Benchmark GR (gross return)',
+           'source_url':'https://live.euronext.com/en/product/indices/NO0007035327-XOSL',
+           'status':'available' if comparable else 'unavailable / incomplete date coverage',
+           'return_pct':(index_curve[-1]['close']-1)*100 if index_curve else None,'curve':index_curve,
+           'method':'Provider series for the OSEBX gross-return benchmark. Index is not investable; no fund fees or transaction costs applied. Never forward-filled.'}
     return {'generated':time.time(),'version':VERSION,'cost_bps':cost_bps,'limits':LIMITS,'fee_model':FEE_MODEL,
+            'folds':folds,'oslo_index':index,'test_protocol':'Technical-ranking experiment, not the personalized quantity/stability policy. Fixed rules, 200-session warm-up, monthly forward decisions and next-common-close execution; chronological calendar-year holdout slices, no parameter fitting. Point-in-time delisted coverage unavailable.',
             'initial_capital':initial_capital,'buy_fee_nok':BUY_FEE_NOK,'buy_orders':buy_orders,
             'fixed_fees_nok':fixed_fees*initial_capital,'total_costs_nok':fees*initial_capital,
             'stocks':len(series),'requested':len(set(universe)),'sessions':len(common),'decisions':decisions,
@@ -119,6 +140,7 @@ def capture(db, report, now=None):
     payload = {'version':VERSION,'symbols':[{'symbol':s,'rank':cards[s].get('rank'),'action':cards[s].get('action'),
                'composite':cards[s].get('composite'),'quote_asof':cards[s].get('asof')} for s in report.get('top20',[]) if s in cards]}
     budget=(report.get('portfolio_limits') or {}).get('purchase_nok',0)
+    payload['share_plan_audit']={'buys':(report.get('trade_plan') or {}).get('buys',[]),'sales':(report.get('trade_plan') or {}).get('holdings',[])}
     payload.update(fee_model=FEE_MODEL,buy_fee_nok=BUY_FEE_NOK,
                    order_budget_nok=budget if budget>0 else 100000/max(1,len(payload['symbols'])))
     db.execute('INSERT OR IGNORE INTO paper_snapshots VALUES (?,?,?)', (report['generated'],now,json.dumps(payload,allow_nan=False)))

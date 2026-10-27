@@ -3,6 +3,7 @@ import copy
 import math
 import time
 import portfolio_fit as pf
+import company_data
 from broker_costs import BUY_FEE_NOK
 
 VERSION='share-count-scenarios-v1'
@@ -37,6 +38,7 @@ def buy_signal(card):
 
 
 def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
+    import advice_state
     rows=[]
     for h in ctx['holdings']:
         card=cards.get(h['symbol']);q=quote_for(snapshot,h['symbol'])
@@ -51,6 +53,10 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
         if row['sell_shares'] is None:
             row['reasons'].append('Quantity unavailable: complete portfolio valuation, fresh NOK quotes and one whole-share Oslo entry per ticker are required.')
         rows.append(row)
+    if snapshot.get('ledger_reconciled') is False:
+        for r in rows:
+            r.update(sell_shares=None,gross_proceeds_nok=None,reasons=['Reconcile holdings and cash against the ledger before sizing sales.'])
+        return rows
     if not ctx['complete'] or not ctx['total_nok']:
         return rows
     total=ctx['total_nok']
@@ -67,13 +73,24 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
         if row['sell_shares'] is None:
             continue
         card=cards.get(row['symbol'])
-        if report_ok and signal_current(card,now) and card.get('action') in SELL_SIGNALS and profile['review_sell_pct']>0:
+        if report_ok and signal_current(card,now) and card.get('action') in SELL_SIGNALS and profile['review_sell_pct']>0 and not advice_state.gate(row['symbol'],'sell',snapshot,profile,now):
             add(row,math.ceil(row['owned']*profile['review_sell_pct']/100-1e-10),
                 card['action']+': your '+str(profile['review_sell_pct'])+'% sale-review setting, rounded up to whole shares.')
         if report_ok and signal_current(card,now) and card.get('action') in SELL_SIGNALS and profile['review_sell_pct']==0:
             row['reasons'].append('Technical sale review is active, but your sale-review size is 0%; no signal-based sale quantity assigned.')
+        waiting=advice_state.gate(row['symbol'],'sell',snapshot,profile,now) if report_ok and signal_current(card,now) and card.get('action') in SELL_SIGNALS else None
+        if waiting:row['reasons'].append(waiting)
         excess=row['remaining_shares']*row['price']-total*profile['max_stock_pct']/100
         add(row,ceil_shares(excess,row['price']), 'Reduce to your '+str(profile['max_stock_pct'])+'% position limit before selling costs.')
+    for issuer in sorted({h['issuer'] for h in ctx['holdings']}):
+        group=[r for r in rows if company_data.issuer(r['symbol'])==issuer]
+        if len(group)<2:continue
+        original=sum(h['value_nok'] for h in ctx['holdings'] if h['issuer']==issuer)
+        excess=original-sum(r['gross_proceeds_nok'] or 0 for r in group)-total*profile['max_stock_pct']/100
+        for row in sorted((r for r in group if r['sell_shares'] is not None),key=lambda r:(-r['remaining_shares']*r['price'],r['symbol'])):
+            if excess<=1e-8:break
+            before=row['sell_shares'];add(row,ceil_shares(excess,row['price']),'Combined company limit for alternate share classes: '+issuer)
+            excess-=(row['sell_shares']-before)*row['price']
     if ctx['sectors_complete']:
         for sector in sorted({h['sector'] for h in ctx['holdings']}):
             group=[r for r in rows if r['sector']==sector]
@@ -104,6 +121,7 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
 
 
 def build(snapshot,report,profile,now=None):
+    import advice_state
     now=time.time() if now is None else now
     profile=pf.preferences(profile)
     ctx=pf.context(snapshot,profile,now)
@@ -119,12 +137,15 @@ def build(snapshot,report,profile,now=None):
     max_orders=min(len(ranked),int(min(left,ctx['cash_nok'])/minimum_order))
     if not report_ok:
         warnings.append('Refresh the market report before generating buy quantities or signal-based sale quantities.')
+    if snapshot.get('ledger_reconciled') is False:warnings.append('Ledger reconciliation is required; buy and sale quantities are withheld.')
     if profile['purchase_nok']==0:
         warnings.append('Set your total buy-plan budget in Portfolio fit to generate purchase quantities.')
     for card in ranked:
         symbol=pf.canonical(card['symbol']);reason=None
         if not report_ok or not signal_current(card,now):
             reason='Current technical report and quote required.'
+        elif snapshot.get('ledger_reconciled') is False:
+            reason='Reconcile holdings and cash against the ledger before sizing purchases.'
         elif symbol in blocked_sales:
             reason='This stock has a sale-review quantity; no conflicting purchase is planned.'
         elif not buy_signal(card):
@@ -133,6 +154,8 @@ def build(snapshot,report,profile,now=None):
             reason='Complete tracked portfolio valuation required.'
         elif left<minimum_order-1e-8:
             reason='Remaining shared budget is below '+str(round(minimum_order,2))+' NOK needed for your purchase-fee limit.'
+        if reason is None:
+            reason=advice_state.gate(symbol,'buy',snapshot,profile,now)
         q=quote_for(working,symbol)
         if reason is None and (not pf.fresh(q,now) or q.get('currency')!='NOK'):
             reason='Fresh NOK price required.'
@@ -146,7 +169,7 @@ def build(snapshot,report,profile,now=None):
             # Reserve all possible later buy fees so the entire plan respects final weights.
             reserve_fees=max(0,max_orders-len(buys)-1)*BUY_FEE_NOK
             final_total=current['total_nok']-BUY_FEE_NOK-reserve_fees
-            held=next((h['value_nok'] for h in current['holdings'] if h['symbol']==symbol),0.)
+            held=sum(h['value_nok'] for h in current['holdings'] if h['issuer']==company_data.issuer(symbol))
             sector_value=sum(h['value_nok'] for h in current['holdings'] if h['sector']==profile['sectors'][symbol])
             capacity=min(left-BUY_FEE_NOK,profile['max_stock_pct']/100*final_total-held,
                          profile['max_sector_pct']/100*final_total-sector_value,

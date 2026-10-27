@@ -2,13 +2,14 @@
 import math
 import re
 import time
+import company_data
 from broker_costs import BUY_FEE_NOK, FEE_MODEL
 
 SECTORS = ['Energy', 'Materials', 'Industrials', 'Consumer discretionary', 'Consumer staples',
            'Health care', 'Financials', 'Information technology', 'Communication services',
            'Utilities', 'Real estate']
 DEFAULTS = {'cash_nok': 0., 'purchase_nok': 0., 'max_stock_pct': 20., 'max_sector_pct': 35.,
-            'reserve_pct': 10., 'max_buy_fee_pct': 2., 'review_sell_pct': 25., 'sectors': {}}
+            'reserve_pct': 10., 'max_buy_fee_pct': 2., 'review_sell_pct': 25., 'confirm_sessions':2., 'signal_wait_hours':24., 'trade_cooldown_days':7., 'min_change_pct':20., 'sectors': {}}
 
 
 def number(value, name, maximum):
@@ -31,10 +32,12 @@ def canonical(symbol, currency='NOK'):
 
 
 def preferences(data):
-    out = {k:number(data.get(k,DEFAULTS[k]),k,1e9 if k in ('cash_nok','purchase_nok') else 100)
+    out = {k:number(data.get(k,DEFAULTS[k]),k,1e9 if k in ('cash_nok','purchase_nok') else 720 if k=='signal_wait_hours' else 100)
            for k in DEFAULTS if k != 'sectors'}
     if out['max_stock_pct'] == 0 or out['max_sector_pct'] == 0 or out['max_buy_fee_pct']==0:
         raise ValueError('Position, sector and purchase-fee limits must be greater than zero.')
+    if out['confirm_sessions']<1 or out['confirm_sessions']!=int(out['confirm_sessions']):
+        raise ValueError('Confirmation sessions must be an integer from 1 to 100.')
     sectors = data.get('sectors',{})
     if not isinstance(sectors,dict) or len(sectors)>1000:
         raise ValueError('Sector classifications must be an object with at most 1000 symbols.')
@@ -60,7 +63,7 @@ def context(snapshot, profile, now=None):
         if p['shares']<=0:
             continue
         s=canonical(p['symbol'],p['currency'])
-        row=holdings.setdefault(s,{'symbol':s,'shares':0.,'value_nok':0.,'sector':profile['sectors'].get(s),'priced':True})
+        row=holdings.setdefault(s,{'issuer':company_data.issuer(s),'symbol':s,'shares':0.,'value_nok':0.,'sector':profile['sectors'].get(s),'priced':True})
         row['shares']+=p['shares']
         q=snapshot['quotes'].get(p['symbol']) or snapshot['quotes'].get(s)
         valid=fresh(q,now) and q.get('currency')==p['currency']
@@ -97,7 +100,15 @@ def context(snapshot, profile, now=None):
         warnings.extend(r['sector']+' exceeds your sector limit.' for r in exposure if r['sector']!='Unclassified' and r['weight_pct']>profile['max_sector_pct']+1e-8)
         if profile['cash_nok']/total*100 < profile['reserve_pct']-1e-8:
             warnings.append('Tracked cash is below your chosen reserve.')
-    return {'holdings':list(holdings.values()),'sectors':exposure,'complete':complete,'total_nok':total,
+    issuers={}
+    for r in holdings.values():
+        if r['priced']:
+            issuers[r['issuer']]=issuers.get(r['issuer'],0)+r['value_nok']
+    if total:
+        for company,value in issuers.items():
+            if sum(r['issuer']==company for r in holdings.values())>1 and value/total*100>profile['max_stock_pct']+1e-8:
+                warnings.append(company+' combined share classes exceed your company limit.')
+    return {'issuer_exposure':[{'issuer':s,'value_nok':v,'weight_pct':v/total*100 if total else None} for s,v in sorted(issuers.items())], 'holdings':list(holdings.values()),'sectors':exposure,'complete':complete,'total_nok':total,
             'priced_holdings_nok':sum(r['value_nok'] or 0 for r in holdings.values()),'cash_nok':profile['cash_nok'],
             'cash_pct':profile['cash_nok']/total*100 if total else None,
             'sectors_complete':all(r['sector'] for r in holdings.values()),'missing':sorted(set(missing)),
@@ -156,7 +167,7 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
         result['warnings'].append('Complete holdings prices and a positive tracked portfolio value are required.')
         return result
     total=ctx['total_nok'];fixed=BUY_FEE_NOK
-    existing=next((h['value_nok'] for h in ctx['holdings'] if h['symbol']==symbol),0.)
+    existing=sum(h['value_nok'] for h in ctx['holdings'] if h['issuer']==company_data.issuer(symbol))
     sector_value=sum(h['value_nok'] for h in ctx['holdings'] if sector and h['sector']==sector)
     result['current_stock_pct']=existing/total*100
     sector_known=bool(sector and ctx['sectors_complete'])
@@ -188,7 +199,7 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
     if result['fee_pct'] is not None and result['fee_pct']>profile['max_buy_fee_pct']+1e-8:
         result['warnings'].append('Purchase fee exceeds your '+str(profile['max_buy_fee_pct'])+'% fee / stock-value limit.')
     if purchase>capacities['position']+1e-8:
-        result['warnings'].append('Purchase would exceed your position limit.')
+        result['warnings'].append('Purchase would exceed your company limit, including known alternate share classes.')
     if purchase>capacities['cash reserve']+1e-8:
         result['warnings'].append('Purchase would breach your cash reserve or available cash.')
     if sector_known and purchase>capacities['sector']+1e-8:
@@ -227,7 +238,9 @@ def view(snapshot, report, profile, now=None):
                 correlations.append({'symbol':h['symbol'],**corr})
         simulation['highest_correlation']=max(correlations,key=lambda c:c['value']) if correlations else None
         candidates.append(simulation)
-    return {'trade_plan':trade_plan.build(snapshot,report,profile,now),'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
+    return {'manual_sectors':snapshot.get('manual_portfolio_preferences',{}).get('sectors',profile['sectors']),
+            'sector_sources':snapshot.get('portfolio_preferences',{}).get('sector_sources',{}),
+            'companies':snapshot.get('companies',{}), 'trade_plan':trade_plan.build(snapshot,report,profile,now),'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
             'report_generated':(report or {}).get('generated'),'report_stale':old,'buy_fee_nok':BUY_FEE_NOK,
             'fee_model':FEE_MODEL,
             'method':'Your limits are screening constraints, not a measure of investment suitability. Defaults are illustrative. '
