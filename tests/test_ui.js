@@ -4,11 +4,11 @@ const nodes={};
 function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
 const form=element();for(const name of ['universe','interval_minutes','model','min_turnover_nok','llm_enabled'])form.elements[name]=element();nodes['#researchSettings']=form;
 nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rankBy']=element();nodes['#rankBy'].value='composite';
-const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','cost_bps'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
+const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
 const now=Date.now()/1000;
 const history=Array.from({length:250},(_,i)=>({time:now-(249-i)*86400,close:100+i/10}));
 const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV.OL',name:'Bouvet',currency:'NOK',price:125,asof:now,source:'test',held:false,action:'Consider buying',score:100,reasons:['Test measured evidence'],history,history_basis:'Adjusted close',metrics:{ma200:110,momentum3m:5,drawdown:-2,volatility:20,turnover20:1000000}}]};
-const fitFixture={generated:now,report_generated:now,report_stale:false,profile:{cash_nok:10000,purchase_nok:1000,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,cost_bps:20,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null}],method:'Illustrative limits only'};
+const fitFixture={generated:now,report_generated:now,report_stale:false,profile:{cash_nok:10000,purchase_nok:1000,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
 const requests=[];
 const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console,window:{NORTHSTAR_CONFIG:{apiBase:'https://api.example.com'}},sessionStorage:{getItem(k){return k==='northstar-key'?'test-access-key':null;},setItem(){},removeItem(){}},location:{pathname:'/recommendations',hostname:'owner.github.io',hash:''},history:{replaceState(){}},setInterval(){},setTimeout(){},confirm(){return false;},
  document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-tab]'){const n=element();n.dataset.tab='recommendations';return [n];}return [];},createElement:element},
@@ -52,6 +52,10 @@ setImmediate(async()=>{
  assert(nodes['#fitCandidates'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#fitCandidates'].innerHTML.includes('<untrusted>'));
  assert(nodes['#fitCandidateCount'].textContent===0);
+ assert(nodes['#fitCandidates'].innerHTML.includes('7.9%'));
+ assert(nodes['#fitCandidates'].innerHTML.includes('79 kr per purchase'));
+ assert(nodes['#adviceCards'].innerHTML.includes('Purchase fee drag'));
+ assert(nodes['#stockFeeImpact'].textContent.includes('79 kr per order'));
  assert(nodes['#fitMethod'].textContent==='Illustrative limits only');
  assert(nodes['#fitPreferences'].elements.cash_nok.value===10000);
  vm.runInContext('fitDirty=true',context);nodes['#fitPreferences'].elements.cash_nok.value=123;

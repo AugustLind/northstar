@@ -40,7 +40,8 @@ claim a beat/miss, changed guidance or price impact unless explicitly stated.
 Headline event labels do not change computed ranks. Name the supplied source.
 When portfolio_context is supplied, use only its tracked holdings and manually entered cash.
 User limits and defaults are constraints, not proven safe allocations. Unknown sectors or missing
-prices prevent confirming portfolio fit. Use allocation_preview for calculated sizes; it checks user constraints only, not a buy signal.
+prices prevent confirming portfolio fit. Purchase previews include the user-stated flat 79 NOK fee per buy order, not per share.
+Break-even is purchase-fee-only; selling fees are unknown. Use allocation_preview for calculated sizes; it checks user constraints only, not a buy signal.
 Do not invent a purchase size or claim full suitability.
 Mention stale or missing data. Do not suggest options, leverage or automatic trades.'''
 
@@ -217,7 +218,7 @@ def compact_evidence(report, question):
                          'thesis': c.get('thesis', '')[:160], 'review': c.get('review', '')[:160]})
         if c.get('portfolio_fit'):
             fit=c['portfolio_fit']
-            selected[-1]['allocation_preview']={k:fit.get(k) for k in ('ready','budget_nok','max_purchase_nok','shares','fees_nok','after_stock_pct','after_sector_pct','after_cash_pct','warnings')}
+            selected[-1]['allocation_preview']={k:fit.get(k) for k in ('ready','budget_nok','max_purchase_nok','shares','fees_nok','buy_fee_nok','fee_pct','break_even_price','break_even_gain_pct','after_stock_pct','after_sector_pct','after_cash_pct','warnings')}
         if c.get('fundamentals'):
             f = c['fundamentals']
             selected[-1]['fundamentals'] = {'status':f['status'], 'period':f['period'],

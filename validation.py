@@ -3,13 +3,15 @@ import bisect
 import math
 import time
 import research
+from broker_costs import BUY_FEE_NOK, FEE_MODEL
 
-VERSION = 'technical-monthly-v1'
+VERSION = 'technical-monthly-fixed-buy-v2'
 LIMITS = ('Exploratory, not an unbiased market backtest: today’s configured universe excludes '
           'unknown delisted stocks. Adjusted prices may be revised. Financials and news are excluded. '
           'Benchmark is the same complete-history basket bought and held, not an Oslo index. '
           'Missing common sessions are excluded; stocks without complete test history are excluded. '
-          'No tax, market impact, minimum commission or cash interest. Costs are illustrative, not your Nordnet plan.')
+          'Uses fractional stock allocations, fixed 79 NOK per buy order and optional extra slippage. '
+          'Fee reserves can leave residual cash. No selling commission, tax, market impact or cash interest is modelled.')
 
 
 def history(q):
@@ -22,11 +24,14 @@ def history(q):
     return [points[d] for d in sorted(points)]
 
 
-def evaluate(quotes, universe, cost_bps=20, floor=250000):
+def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000):
     """Monthly decision at close; execute next common close; no future inputs to screen."""
     cost_bps = float(cost_bps)
     if not math.isfinite(cost_bps) or not 0 <= cost_bps <= 200:
-        raise ValueError('One-way cost must be 0–200 basis points.')
+        raise ValueError('Additional slippage must be 0–200 basis points.')
+    initial_capital=float(initial_capital)
+    if not math.isfinite(initial_capital) or not 1000 <= initial_capital <= 1e9:
+        raise ValueError('Starting capital must be 1,000–1,000,000,000 NOK.')
     series = {s: history(quotes.get(s, {})) for s in set(universe)}
     series = {s: h for s, h in series.items() if len(h) >= 260}
     if not series:
@@ -41,7 +46,11 @@ def evaluate(quotes, universe, cost_bps=20, floor=250000):
     lookups = {s:{int(p['time']//86400):p['close'] for p in h} for s,h in series.items()}
     equity, benchmark, holdings, pending = 1., 1., {}, None
     curve, trades, decisions, fees = [], 0, 0, 0.
-    start = common[0]
+    start = common[1]
+    benchmark_entry_fee=BUY_FEE_NOK*len(series)/initial_capital
+    if benchmark_entry_fee+cost_bps/10000>=1:
+        raise ValueError('Starting capital cannot cover benchmark purchase fees. Increase it or use a smaller universe.')
+    buy_orders=0;fixed_fees=0.
     previous = None
     month = None
     for day in common:
@@ -51,15 +60,26 @@ def evaluate(quotes, universe, cost_bps=20, floor=250000):
             grown = {s:w*lookups[s][day]/lookups[s][previous] for s,w in holdings.items()}
             total = 1-sum(holdings.values())+sum(grown.values())
             holdings = {s:w/total for s,w in grown.items()}
-        benchmark = sum(lookups[s][day]/lookups[s][start] for s in series)/len(series)
+        benchmark = (sum(lookups[s][day]/lookups[s][start] for s in series)/len(series)
+                     *(1-benchmark_entry_fee-cost_bps/10000)) if day>=start else 1.
         if pending is not None:
-            target = {s:1/len(pending) for s in pending} if pending else {}
-            turnover = sum(abs(target.get(s,0)-holdings.get(s,0)) for s in set(target)|set(holdings))
-            charge = equity*turnover*cost_bps/10000
-            equity -= charge
-            fees += charge
-            trades += sum(abs(target.get(s,0)-holdings.get(s,0))>1e-9 for s in set(target)|set(holdings))
-            holdings, pending = target, None
+            # Reserve fees for potential positive-value orders before sizing targets.
+            equal=equity/len(pending) if pending else 0.
+            potential=sum(equal-equity*holdings.get(s,0)>1e-10 for s in pending)
+            nominal={s:equal for s in pending}
+            nominal_turnover=sum(abs(nominal.get(s,0)-equity*holdings.get(s,0)) for s in set(nominal)|set(holdings))
+            reserve=potential*BUY_FEE_NOK/initial_capital+(2*equity*cost_bps/10000 if nominal_turnover>1e-10 else 0)
+            pool=max(0,equity-reserve)
+            target={s:pool/len(pending) for s in pending} if pool and pending else {}
+            moves={s:target.get(s,0)-equity*holdings.get(s,0) for s in set(target)|set(holdings)}
+            buys=sum(v>1e-10 for v in moves.values())
+            fixed=buys*BUY_FEE_NOK/initial_capital
+            charge=fixed+sum(abs(v) for v in moves.values())*cost_bps/10000
+            equity-=charge
+            fees+=charge;fixed_fees+=fixed;buy_orders+=buys
+            trades+=sum(abs(v)>1e-10 for v in moves.values())
+            holdings={s:v/equity for s,v in target.items()} if equity else {}
+            pending=None
         curve.append({'time': day*86400, 'close':equity, 'benchmark':benchmark})
         this_month = time.strftime('%Y-%m', time.gmtime(day*86400))
         if this_month != month and day != common[-1]:
@@ -82,10 +102,9 @@ def evaluate(quotes, universe, cost_bps=20, floor=250000):
     for p in curve:
         peak = max(peak,p['close'])
         drawdown = min(drawdown,p['close']/peak-1)
-    # Benchmark pays same entry-cost assumption, no terminal liquidation on either curve.
-    for p in curve:
-        p['benchmark'] *= 1-cost_bps/10000
-    return {'generated':time.time(),'version':VERSION,'cost_bps':cost_bps,'limits':LIMITS,
+    return {'generated':time.time(),'version':VERSION,'cost_bps':cost_bps,'limits':LIMITS,'fee_model':FEE_MODEL,
+            'initial_capital':initial_capital,'buy_fee_nok':BUY_FEE_NOK,'buy_orders':buy_orders,
+            'fixed_fees_nok':fixed_fees*initial_capital,'total_costs_nok':fees*initial_capital,
             'stocks':len(series),'requested':len(set(universe)),'sessions':len(common),'decisions':decisions,
             'trades':trades,'cost_pct_initial':fees*100,'return_pct':(equity-1)*100,
             'benchmark_pct':(curve[-1]['benchmark']-1)*100,'max_drawdown_pct':drawdown*100,'curve':curve}
@@ -99,6 +118,9 @@ def capture(db, report, now=None):
     cards = {c['symbol']:c for c in report.get('cards',[])}
     payload = {'version':VERSION,'symbols':[{'symbol':s,'rank':cards[s].get('rank'),'action':cards[s].get('action'),
                'composite':cards[s].get('composite'),'quote_asof':cards[s].get('asof')} for s in report.get('top20',[]) if s in cards]}
+    budget=(report.get('portfolio_limits') or {}).get('purchase_nok',0)
+    payload.update(fee_model=FEE_MODEL,buy_fee_nok=BUY_FEE_NOK,
+                   order_budget_nok=budget if budget>0 else 100000/max(1,len(payload['symbols'])))
     db.execute('INSERT OR IGNORE INTO paper_snapshots VALUES (?,?,?)', (report['generated'],now,json.dumps(payload,allow_nan=False)))
 
 
@@ -112,10 +134,22 @@ def paper_view(db, quotes, now=None):
         for item in payload['symbols']:
             h=[p for p in history(quotes.get(item['symbol'],{})) if row['captured'] < p['time'] <= now]
             # First later close is a hypothetical entry, never the signal close.
+            fixed_model=payload.get('fee_model')==FEE_MODEL
+            budget=payload.get('order_budget_nok') if fixed_model else None
+            shares=max(0,math.floor((budget-payload['buy_fee_nok'])/h[0]['close'])) if fixed_model and h else None
+            gain=None
+            if len(h)>1:
+                if fixed_model and shares:
+                    remaining=budget-shares*h[0]['close']-payload['buy_fee_nok']
+                    gain=((shares*h[-1]['close']+remaining)/budget-1)*100
+                elif not fixed_model:
+                    gain=(h[-1]['close']/h[0]['close']*(1-.002)/(1+.002)-1)*100
             results.append({**item,'entry_time':h[0]['time'] if h else None,'entry':h[0]['close'] if h else None,
-                            'asof':h[-1]['time'] if h else None,
-                            'return_pct':(h[-1]['close']/h[0]['close']*(1-.002)/(1+.002)-1)*100 if len(h)>1 else None})
+                            'asof':h[-1]['time'] if h else None,'shares':shares,'budget_nok':budget,
+                            'return_pct':gain})
         measured=[r['return_pct'] for r in results if r['return_pct'] is not None]
         out.append({'captured':row['captured'],'generated':row['generated'],'symbols':results,
+                    'fee_model':payload.get('fee_model','legacy-percentage'),
+                    'cost_note':('79 NOK per purchase; selling fees unmodelled; budget '+str(payload['order_budget_nok'])+' NOK per stock, including fees; whole shares and residual cash.' if payload.get('fee_model')==FEE_MODEL else 'Legacy cohort: original 20 bps each way; preserved without retroactive changes.'),
                     'measured':len(measured),'return_pct':sum(measured)/len(measured) if measured and len(measured)==len(results) else None})
-    return {'snapshots':out,'method':'Independent equal-weight recommendation cohorts, not a rebalanced trading account. Entry at first later daily close; 20 bps each way including hypothetical liquidation. Pending or missing stocks prevent a cohort total. No real trades.'}
+    return {'snapshots':out,'method':'Independent equal-weight recommendation cohorts, not a rebalanced trading account. Entry at first later daily close. New cohorts save the 79 NOK purchase fee and order budget at capture time; selling fees are not modelled. Legacy assumptions remain labelled on each cohort. Pending or missing stocks prevent a cohort total. No real trades.'}

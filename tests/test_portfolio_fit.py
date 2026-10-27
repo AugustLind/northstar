@@ -20,13 +20,13 @@ def snapshot():
 
 def profile(**kw):
     return pf.preferences({'cash_nok':9000,'purchase_nok':1000,'max_stock_pct':30,'max_sector_pct':50,
-                           'reserve_pct':10,'cost_bps':20,'sectors':{'A.OL':'Energy','B.OL':'Industrials'},**kw})
+                           'reserve_pct':10,'sectors':{'A.OL':'Energy','B.OL':'Industrials'},**kw})
 
 
 class PortfolioFitTests(unittest.TestCase):
     def test_limits_validate_and_reject_nonfinite(self):
         for change in ({'cash_nok':True},{'cash_nok':float('nan')},{'purchase_nok':-1},{'max_stock_pct':0},
-                       {'max_sector_pct':101},{'cost_bps':201},{'sectors':[]},{'sectors':{'A.OL':'Made up'}},
+                       {'max_sector_pct':101},{'sectors':[]},{'sectors':{'A.OL':'Made up'}},
                        {'sectors':{'<script>':'Energy'}},{'reserve_pct':None}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 profile(**change)
@@ -52,7 +52,10 @@ class PortfolioFitTests(unittest.TestCase):
         v=pf.context(s,profile(),NOW)
         self.assertIsNone(v['total_nok'])
         self.assertIsNone(v['holdings'][0]['weight_pct'])
-        self.assertFalse(pf.preview('B',1000,s,profile(),now=NOW)['ready'])
+        preview=pf.preview('B',1000,s,profile(),now=NOW)
+        self.assertFalse(preview['ready'])
+        self.assertEqual(preview['fees_nok'],79)
+        self.assertAlmostEqual(preview['fee_pct'],79/900*100)
 
     def test_usd_holdings_require_fresh_fx(self):
         s=snapshot();s['positions'].append({'symbol':'US','currency':'USD','shares':2})
@@ -67,12 +70,29 @@ class PortfolioFitTests(unittest.TestCase):
         v=pf.preview('B',1000,s,p,now=NOW)
         self.assertEqual(v['shares'],9)
         self.assertEqual(v['purchase_nok'],900)
-        self.assertAlmostEqual(v['fees_nok'],1.8)
+        self.assertAlmostEqual(v['fees_nok'],79)
         self.assertLessEqual(v['purchase_nok']+v['fees_nok'],1000)
-        self.assertAlmostEqual(v['after_stock_pct'],900/9998.2*100)
-        self.assertAlmostEqual(v['after_cash_nok'],8098.2)
+        self.assertAlmostEqual(v['after_stock_pct'],900/9921*100)
+        self.assertAlmostEqual(v['after_cash_nok'],8021)
         self.assertTrue(v['ready'])
         self.assertEqual(s,before)
+
+    def test_79_is_fixed_and_not_a_percentage_or_per_share(self):
+        for amount,shares in ((179,1),(1079,10),(10079,100)):
+            r=pf.preview('B',amount,snapshot(),profile(),now=NOW)
+            self.assertEqual(r['shares'],shares)
+            self.assertEqual(r['fees_nok'],79)
+            self.assertAlmostEqual(r['fee_pct'],79/(shares*100)*100)
+            self.assertAlmostEqual(r['break_even_price'],100+79/shares)
+        for amount in (0,79,178.99):
+            r=pf.preview('B',amount,snapshot(),profile(),now=NOW)
+            self.assertEqual(r['shares'],0)
+            self.assertEqual(r['fees_nok'],0)
+            self.assertFalse(r['ready'])
+        # Previous illustrative percentage settings must not be charged on top.
+        migrated=profile(cost_bps=20,buy_fee_nok=999)
+        self.assertNotIn('cost_bps',migrated)
+        self.assertEqual(pf.preview('B',1079,snapshot(),migrated,now=NOW)['fees_nok'],79)
 
     def test_unknown_sector_never_clears(self):
         for sectors in ({'A.OL':'Energy'},{'B.OL':'Industrials'},{}):
@@ -91,7 +111,7 @@ class PortfolioFitTests(unittest.TestCase):
         self.assertFalse(v['ready'])
         self.assertGreater(v['after_stock_pct'],10)
         self.assertGreater(v['after_sector_pct'],20)
-        self.assertAlmostEqual(v['max_purchase_nok'],1000/(1+.2*.002))
+        self.assertAlmostEqual(v['max_purchase_nok'],1000-.2*79)
 
     def test_cash_reserve_counts_costs(self):
         p=profile(max_stock_pct=100,max_sector_pct=100,reserve_pct=85)
@@ -99,7 +119,7 @@ class PortfolioFitTests(unittest.TestCase):
         self.assertFalse(v['ready'])
         self.assertLess(v['after_cash_pct'],85)
         self.assertTrue(any('reserve' in w for w in v['warnings']))
-        self.assertAlmostEqual(v['max_purchase_nok'],500/(1+.002*.15))
+        self.assertAlmostEqual(v['max_purchase_nok'],500-79*.15)
 
     def test_zero_budget_and_full_reserve_block(self):
         self.assertFalse(pf.preview('B',0,snapshot(),profile(),now=NOW)['ready'])

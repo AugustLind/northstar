@@ -2,12 +2,13 @@
 import math
 import re
 import time
+from broker_costs import BUY_FEE_NOK, FEE_MODEL
 
 SECTORS = ['Energy', 'Materials', 'Industrials', 'Consumer discretionary', 'Consumer staples',
            'Health care', 'Financials', 'Information technology', 'Communication services',
            'Utilities', 'Real estate']
 DEFAULTS = {'cash_nok': 0., 'purchase_nok': 0., 'max_stock_pct': 20., 'max_sector_pct': 35.,
-            'reserve_pct': 10., 'cost_bps': 20., 'sectors': {}}
+            'reserve_pct': 10., 'sectors': {}}
 
 
 def number(value, name, maximum):
@@ -30,7 +31,7 @@ def canonical(symbol, currency='NOK'):
 
 
 def preferences(data):
-    out = {k:number(data.get(k,DEFAULTS[k]),k,1e9 if k in ('cash_nok','purchase_nok') else 200 if k=='cost_bps' else 100)
+    out = {k:number(data.get(k,DEFAULTS[k]),k,1e9 if k in ('cash_nok','purchase_nok') else 100)
            for k in DEFAULTS if k != 'sectors'}
     if out['max_stock_pct'] == 0 or out['max_sector_pct'] == 0:
         raise ValueError('Position and sector limits must be greater than zero.')
@@ -139,30 +140,37 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
     result={'symbol':symbol,'sector':sector,'budget_nok':amount,'ready':False,'warnings':[],
             'max_purchase_nok':None,'shares':None,'purchase_nok':None,'fees_nok':None,
             'after_stock_pct':None,'after_sector_pct':None,'after_cash_nok':None,'after_cash_pct':None,
-            'current_stock_pct':None,'current_sector_pct':None,'quote_asof':q.get('asof') if q else None}
+            'current_stock_pct':None,'current_sector_pct':None,'fee_model':FEE_MODEL,'buy_fee_nok':BUY_FEE_NOK,
+            'fee_pct':None,'break_even_price':None,'break_even_gain_pct':None,'quote_asof':q.get('asof') if q else None}
     if not fresh(q,now) or q.get('currency')!='NOK':
         result['warnings'].append('Fresh NOK price required for purchase preview.')
         return result
+    # Order costs depend on this quote and budget even when portfolio valuation is incomplete.
+    shares=max(0,math.floor((amount-BUY_FEE_NOK)/q['price']))
+    purchase=shares*q['price'];fee=BUY_FEE_NOK if shares else 0.
+    result.update(shares=shares,purchase_nok=purchase,fees_nok=fee,price=q['price'],
+                  fee_pct=fee/purchase*100 if purchase else None,
+                  break_even_price=(purchase+fee)/shares if shares else None,
+                  break_even_gain_pct=fee/purchase*100 if purchase else None)
     if not ctx['complete'] or not ctx['total_nok']:
         result['warnings'].append('Complete holdings prices and a positive tracked portfolio value are required.')
         return result
-    total=ctx['total_nok'];rate=profile['cost_bps']/10000
+    total=ctx['total_nok'];fixed=BUY_FEE_NOK
     existing=next((h['value_nok'] for h in ctx['holdings'] if h['symbol']==symbol),0.)
     sector_value=sum(h['value_nok'] for h in ctx['holdings'] if sector and h['sector']==sector)
     result['current_stock_pct']=existing/total*100
     sector_known=bool(sector and ctx['sectors_complete'])
     result['current_sector_pct']=sector_value/total*100 if sector_known else None
     stock_limit=profile['max_stock_pct']/100;sector_limit=profile['max_sector_pct']/100;reserve=profile['reserve_pct']/100
-    capacities={'position':max(0,(stock_limit*total-existing)/(1+stock_limit*rate)),
-                'cash reserve':max(0,(profile['cash_nok']-reserve*total)/(1+rate*(1-reserve)))}
+    capacities={'position':max(0,stock_limit*(total-fixed)-existing),
+                'cash reserve':max(0,profile['cash_nok']-fixed-reserve*(total-fixed))}
     if sector_known:
-        capacities['sector']=max(0,(sector_limit*total-sector_value)/(1+sector_limit*rate))
+        capacities['sector']=max(0,sector_limit*(total-fixed)-sector_value)
         result['max_purchase_nok']=min(capacities.values())
     else:
         result['warnings'].append('Classify this stock and every holding before sector capacity can be confirmed.')
     # Whole shares. Budget includes estimated costs, never silently overspend the entered amount.
-    shares=math.floor(amount/(q['price']*(1+rate)))
-    purchase=shares*q['price'];fee=purchase*rate;after_total=total-fee
+    after_total=total-fee
     if after_total<=0:
         result['warnings'].append('Estimated costs exhaust the tracked portfolio.')
         return result
@@ -171,7 +179,10 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
                   after_stock_pct=(existing+purchase)/after_total*100,
                   after_sector_pct=(sector_value+purchase)/after_total*100 if sector_known else None,
                   after_cash_nok=after_cash,after_cash_pct=after_cash/after_total*100,
-                  capacity_before_costs_nok=capacities)
+                  capacity_before_costs_nok=capacities,
+                  fee_pct=fee/purchase*100 if purchase else None,
+                  break_even_price=(purchase+fee)/shares if shares else None,
+                  break_even_gain_pct=fee/purchase*100 if purchase else None)
     if shares==0:
         result['warnings'].append('Budget does not cover one whole share including estimated costs.')
     if purchase>capacities['position']+1e-8:
@@ -214,9 +225,10 @@ def view(snapshot, report, profile, now=None):
         simulation['highest_correlation']=max(correlations,key=lambda c:c['value']) if correlations else None
         candidates.append(simulation)
     return {'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
-            'report_generated':(report or {}).get('generated'),'report_stale':old,
+            'report_generated':(report or {}).get('generated'),'report_stale':old,'buy_fee_nok':BUY_FEE_NOK,
+            'fee_model':FEE_MODEL,
             'method':'Your limits are screening constraints, not a measure of investment suitability. Defaults are illustrative. '
-                     'Preview uses whole shares at the cached quote with proportional costs. No minimum brokerage, tax, '
-                     'spread, price movement or real execution is modelled. Classifications are entered by you; '
+                     'Preview uses whole shares at the cached quote and your fixed 79 NOK fee per purchase, regardless of share count. '
+                     'Selling fees, tax, spread, price movement and real execution are not modelled. Classifications are entered by you; '
                      'unclassified holdings block sector clearance. Correlations use 60–126 matching historical daily returns '
                      'in NOK, omit USD holdings, and do not predict future relationships. Purchases do not change saved holdings or cash.'}

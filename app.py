@@ -370,7 +370,7 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot=state()
                 return self.send_json(portfolio_fit.preview(data.get('symbol',''),data.get('amount',0),snapshot,snapshot['portfolio_preferences']))
             elif self.path == '/api/validation':
-                result = validation.evaluate(state()['quotes'], settings()['universe'], data.get('cost_bps',20), settings()['min_turnover_nok'])
+                result = validation.evaluate(state()['quotes'], settings()['universe'], data.get('cost_bps',0), settings()['min_turnover_nok'], data.get('initial_capital',100000))
                 write_meta('validation_report',result)
                 return self.send_json(result)
             elif self.path == '/api/analyze':

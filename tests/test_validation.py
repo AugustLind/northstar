@@ -20,7 +20,7 @@ class ValidationTests(unittest.TestCase):
             v=validation.evaluate(quotes(),['A.OL'])
         self.assertTrue(seen)
         self.assertGreater(v['return_pct'],0)
-        self.assertLess(v['return_pct'],v['benchmark_pct'])
+        self.assertAlmostEqual(v['return_pct'],v['benchmark_pct'])
 
     def test_costs_reduce_returns(self):
         a=validation.evaluate(quotes(),['A.OL'],0)
@@ -28,6 +28,51 @@ class ValidationTests(unittest.TestCase):
         self.assertGreater(a['return_pct'],b['return_pct'])
         with self.assertRaises(ValueError):
             validation.evaluate(quotes(),['A.OL'],float('nan'))
+
+    def test_fixed_fee_once_per_buy_order_not_per_share_or_month(self):
+        a=validation.evaluate(quotes(),['A.OL'],initial_capital=100000)
+        b=validation.evaluate(quotes(),['A.OL'],initial_capital=10000)
+        self.assertEqual(a['buy_orders'],1)
+        self.assertEqual(b['buy_orders'],1)
+        self.assertAlmostEqual(a['fixed_fees_nok'],79)
+        self.assertAlmostEqual(b['fixed_fees_nok'],79)
+        self.assertGreater(a['return_pct'],b['return_pct'])
+        q=quotes();q['B.OL']=q['A.OL']
+        c=validation.evaluate(q,['A.OL','B.OL'])
+        self.assertEqual(c['buy_orders'],2)
+        self.assertAlmostEqual(c['fixed_fees_nok'],158)
+        for capital in (0,float('nan'),1000000001):
+            with self.assertRaises(ValueError):
+                validation.evaluate(quotes(),['A.OL'],initial_capital=capital)
+
+    def test_flat_market_has_exact_purchase_fee_loss(self):
+        q=quotes()
+        for bar in q['A.OL']['history']:
+            bar['close']=100
+        with patch('research.screen',return_value={'symbol':'A.OL','composite':50,'rank_eligible':True}):
+            v=validation.evaluate(q,['A.OL'])
+        self.assertAlmostEqual(v['return_pct'],-.079)
+        self.assertAlmostEqual(v['benchmark_pct'],-.079)
+        self.assertEqual(v['buy_orders'],1)
+
+    def test_fixed_paper_budget_is_frozen_and_legacy_is_preserved(self):
+        import json
+        db=sqlite3.connect(':memory:');db.row_factory=sqlite3.Row
+        report={'generated':1,'top20':['A.OL'],'cards':[{'symbol':'A.OL'}],'portfolio_limits':{'purchase_nok':1000}}
+        validation.capture(db,report,1600000000)
+        report['portfolio_limits']['purchase_nok']=10000
+        validation.capture(db,report,1600000000)
+        v=validation.paper_view(db,quotes(3),1600000000+3*86400)['snapshots'][0]
+        r=v['symbols'][0]
+        self.assertEqual(r['budget_nok'],1000)
+        self.assertEqual(r['shares'],9)
+        self.assertAlmostEqual(r['return_pct'],(9*(100.2-100.1)-79)/1000*100)
+        legacy={'symbols':[{'symbol':'A.OL'}]}
+        db.execute('INSERT INTO paper_snapshots VALUES (?,?,?)',(2,1600000000,json.dumps(legacy)))
+        rows=validation.paper_view(db,quotes(3),1600000000+3*86400)['snapshots']
+        old=next(row for row in rows if row['generated']==2)
+        self.assertEqual(old['fee_model'],'legacy-percentage')
+        self.assertAlmostEqual(old['symbols'][0]['return_pct'],(100.2/100.1*.998/1.002-1)*100)
 
     def test_no_eligible_stocks_stay_cash(self):
         with patch('research.screen',return_value={'rank_eligible':False}):
