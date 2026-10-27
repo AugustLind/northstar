@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s tests -v
-      - run: node --check static/app.js && node --check static/advice.js && node --check static/charts.js && node --check static/validation.js && node --check static/news.js && node tests/test_charts.js && node tests/test_ui.js
+      - run: node --check static/app.js && node --check static/advice.js && node --check static/charts.js && node --check static/portfolio-fit.js && node --check static/validation.js && node --check static/news.js && node tests/test_charts.js && node tests/test_ui.js
       - run: for script in scripts/*.sh; do bash -n "$script"; done
   oracle:
     needs: check

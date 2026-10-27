@@ -12,6 +12,7 @@ import research
 import fundamentals
 import announcements
 import validation
+import portfolio_fit
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -251,6 +252,8 @@ def state(include_fundamentals=False):
         if include_fundamentals:
             result['fundamentals'] = {r['key'].split(':', 1)[1]: json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'fundamentals:%'")}
             result['announcements']=read_meta('announcements_feed',{})
+        result['portfolio_preferences']=portfolio_fit.preferences(read_meta('portfolio_preferences',{}))
+        result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
         return result
 
 class Handler(BaseHTTPRequestHandler):
@@ -295,6 +298,9 @@ class Handler(BaseHTTPRequestHandler):
             if not row:
                 return self.send_json({'error':'History is not downloaded yet. Wait for the scan to finish.'},404)
             return self.send_json(json.loads(row['payload']))
+        if self.path == '/api/portfolio-fit':
+            snapshot=state()
+            return self.send_json(portfolio_fit.view(snapshot,read_meta('report'),snapshot['portfolio_preferences']))
         if self.path == '/api/validation':
             with connect() as db:
                 db.execute('CREATE TABLE IF NOT EXISTS paper_snapshots (generated REAL PRIMARY KEY, captured REAL NOT NULL, payload TEXT NOT NULL)')
@@ -307,7 +313,7 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]
@@ -354,6 +360,15 @@ class Handler(BaseHTTPRequestHandler):
                     WORKER.trigger()
             elif self.path == '/api/refresh':
                 return self.send_json({'errors': refresh()})
+            elif self.path == '/api/portfolio-fit':
+                profile=portfolio_fit.preferences(data)
+                write_meta('portfolio_preferences',profile)
+                if WORKER:
+                    WORKER.trigger()
+                return self.send_json({'saved':True})
+            elif self.path == '/api/portfolio-fit/preview':
+                snapshot=state()
+                return self.send_json(portfolio_fit.preview(data.get('symbol',''),data.get('amount',0),snapshot,snapshot['portfolio_preferences']))
             elif self.path == '/api/validation':
                 result = validation.evaluate(state()['quotes'], settings()['universe'], data.get('cost_bps',20), settings()['min_turnover_nok'])
                 write_meta('validation_report',result)

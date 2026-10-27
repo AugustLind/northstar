@@ -86,6 +86,32 @@ class HostingTests(unittest.TestCase):
         self.assertEqual(self.request('POST','/api/announcements/reviewed',headers)['status'],200)
         self.assertGreater(app.read_meta('announcements_reviewed_at'),0)
 
+    def test_portfolio_fit_is_private_and_preferences_persist(self):
+        headers={'Authorization':'Bearer test-key','Content-Type':'application/json','Origin':'https://owner.github.io'}
+        self.assertEqual(self.request('GET','/api/portfolio-fit')['status'],401)
+        data={'cash_nok':10000,'purchase_nok':1000,'sectors':{'BOUV.OL':'Information technology'}}
+        self.assertEqual(self.request('POST','/api/portfolio-fit',headers,data)['status'],200)
+        view=self.request('GET','/api/portfolio-fit',headers)['body']
+        self.assertEqual(view['portfolio']['total_nok'],10000)
+        self.assertEqual(view['profile']['sectors']['BOUV.OL'],'Information technology')
+        self.assertEqual(self.request('POST','/api/portfolio-fit',{**headers,'Origin':'https://attacker.example'},data)['status'],403)
+        self.assertEqual(self.request('POST','/api/portfolio-fit',headers,{'cash_nok':-1})['status'],400)
+        self.assertEqual(app.read_meta('portfolio_preferences')['cash_nok'],10000)
+        self.assertEqual(self.request('GET','/api/state',headers)['body']['portfolio_preferences']['cash_nok'],10000)
+
+    def test_purchase_preview_leaves_real_records_unchanged(self):
+        import time
+        headers={'Authorization':'Bearer test-key','Content-Type':'application/json'}
+        self.request('POST','/api/portfolio-fit',headers,{'cash_nok':10000,'purchase_nok':1000,'sectors':{'BOUV.OL':'Information technology'}})
+        with app.connect() as db:
+            db.execute('INSERT INTO quotes VALUES (?,?)',('BOUV.OL',json.dumps({'price':100,'asof':time.time(),'currency':'NOK'})))
+        before=app.state()
+        response=self.request('POST','/api/portfolio-fit/preview',headers,{'symbol':'BOUV','amount':1000})
+        self.assertEqual(response['status'],200)
+        self.assertTrue(response['body']['ready'])
+        self.assertEqual(app.state()['positions'],before['positions'])
+        self.assertEqual(app.read_meta('portfolio_preferences')['cash_nok'],10000)
+
     def test_pages_build_contains_only_static_assets(self):
         import shutil
         root=Path(__file__).resolve().parent.parent
@@ -93,13 +119,13 @@ class HostingTests(unittest.TestCase):
             staged=Path(tmp)
             (staged/'scripts').mkdir();(staged/'static').mkdir();(staged/'data').mkdir()
             shutil.copy2(root/'scripts/build-pages.py',staged/'scripts/build-pages.py')
-            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js','favicon.svg']:
+            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js','favicon.svg']:
                 shutil.copy2(root/'static'/name,staged/'static'/name)
             (staged/'data/private.db').write_text('private portfolio')
             subprocess.run([sys.executable,str(staged/'scripts/build-pages.py')],check=True,capture_output=True,
                 env={**os.environ,'NORTHSTAR_API_URL':'https://api.example.com'})
             output=staged/'pages-dist'
-            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js','favicon.svg','config.js','.nojekyll'})
+            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js','favicon.svg','config.js','.nojekyll'})
             self.assertIn('https://api.example.com',(output/'config.js').read_text())
             self.assertNotIn('private portfolio',''.join(p.read_text() for p in output.iterdir()))
             self.assertNotIn('href="/style.css"',(output/'index.html').read_text())
