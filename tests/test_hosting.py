@@ -112,6 +112,24 @@ class HostingTests(unittest.TestCase):
         self.assertEqual(app.state()['positions'],before['positions'])
         self.assertEqual(app.read_meta('portfolio_preferences')['cash_nok'],10000)
 
+    def test_holdings_import_requires_auth_and_previews_before_saving(self):
+        import base64
+        raw='Navn;Valuta;Antall;GAV\nExample Industries ASA;NOK;5;306,00\n'.encode('utf-16')
+        body={'file_b64':base64.b64encode(raw).decode()}
+        headers={'Authorization':'Bearer test-key','Content-Type':'application/json','Origin':'https://owner.github.io'}
+        self.assertEqual(self.request('POST','/api/import/preview',{'Content-Type':'application/json'},body)['status'],401)
+        self.assertEqual(self.request('POST','/api/import/preview',{**headers,'Origin':'https://attacker.example'},body)['status'],403)
+        preview=self.request('POST','/api/import/preview',headers,body)
+        self.assertEqual(preview['status'],200)
+        self.assertEqual(app.state()['positions'],[])
+        payload={'token':preview['body']['token'],'selections':[{'id':2,'symbol':'EXA'}]}
+        self.assertEqual(self.request('POST','/api/import/apply',{'Content-Type':'application/json'},payload)['status'],401)
+        response=self.request('POST','/api/import/apply',headers,payload)
+        self.assertEqual(response['status'],200)
+        self.assertEqual(response['body']['updated'],1)
+        self.assertEqual(app.state()['positions'][0]['cost'],306)
+        self.assertEqual(self.request('POST','/api/import/apply',headers,payload)['status'],400)
+
     def test_pages_build_contains_only_static_assets(self):
         import shutil
         root=Path(__file__).resolve().parent.parent
@@ -119,13 +137,13 @@ class HostingTests(unittest.TestCase):
             staged=Path(tmp)
             (staged/'scripts').mkdir();(staged/'static').mkdir();(staged/'data').mkdir()
             shutil.copy2(root/'scripts/build-pages.py',staged/'scripts/build-pages.py')
-            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js','favicon.svg']:
+            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js', 'holdings-import.js','favicon.svg']:
                 shutil.copy2(root/'static'/name,staged/'static'/name)
             (staged/'data/private.db').write_text('private portfolio')
             subprocess.run([sys.executable,str(staged/'scripts/build-pages.py')],check=True,capture_output=True,
                 env={**os.environ,'NORTHSTAR_API_URL':'https://api.example.com'})
             output=staged/'pages-dist'
-            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js','favicon.svg','config.js','.nojekyll'})
+            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js', 'holdings-import.js','favicon.svg','config.js','.nojekyll'})
             self.assertIn('https://api.example.com',(output/'config.js').read_text())
             self.assertNotIn('private portfolio',''.join(p.read_text() for p in output.iterdir()))
             self.assertNotIn('href="/style.css"',(output/'index.html').read_text())

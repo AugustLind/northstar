@@ -8,11 +8,15 @@ import threading
 import os
 import hashlib
 import hmac
+import base64
+import binascii
+import secrets
 import research
 import fundamentals
 import announcements
 import validation
 import portfolio_fit
+import holdings_import
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -256,6 +260,61 @@ def state(include_fundamentals=False):
         result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
         return result
 
+def positions_fingerprint(positions):
+    return hashlib.sha256(json.dumps(sorted(positions,key=lambda p:p['symbol']),sort_keys=True,allow_nan=False).encode()).hexdigest()
+
+
+def import_preview(data):
+    encoded=data.get('file_b64')
+    if not isinstance(encoded,str) or len(encoded)>350000:
+        raise ValueError('Choose a holdings export up to 256 KiB.')
+    try:
+        raw=base64.b64decode(encoded,validate=True)
+    except (binascii.Error,ValueError):
+        raise ValueError('The upload could not be decoded. Choose the CSV file again.')
+    items=holdings_import.parse(raw)
+    snapshot=state()
+    companies=holdings_import.catalogue(snapshot['quotes'],read_meta('report'))
+    aliases=read_meta('holdings_import_aliases',{})
+    token=secrets.token_urlsafe(24)
+    expires=time.time()+900
+    write_meta('pending_holdings_import',{'token':token,'expires':expires,'items':items,
+                                        'fingerprint':positions_fingerprint(snapshot['positions'])})
+    rows=holdings_import.suggest(items,companies,aliases)
+    for row in rows:
+        row['existing']=next(({k:p[k] for k in ('symbol','shares','cost')} for p in snapshot['positions'] if p['currency']=='NOK' and
+                              portfolio_fit.canonical(p['symbol'])==row['symbol']),None)
+    return {'token':token,'expires':expires,'rows':rows,'companies':companies,
+            'valid':sum(not r['error'] for r in rows),
+            'existing_holdings':[{k:p[k] for k in ('symbol','currency','shares','cost')} for p in snapshot['positions']],
+            'method':'Preview only. Confirm ticker matches before applying. Quantities and GAV replace the selected existing holdings, not add to them. '
+                     'Notes and price-review levels are preserved; omitted stocks and tracked cash are unchanged. '
+                     'Use a consolidated export if the same stock is held across multiple accounts. GAV is imported unchanged, without adding another purchase fee.'}
+
+
+def apply_import(data):
+    with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        row=db.execute("SELECT payload FROM metadata WHERE key='pending_holdings_import'").fetchone()
+        pending=json.loads(row['payload']) if row else None
+        if not pending or not isinstance(data.get('token'),str) or not hmac.compare_digest(data['token'],pending['token']):
+            raise ValueError('This import preview is no longer available. Upload the export again.')
+        if pending['expires']<time.time():
+            raise ValueError('This import preview has expired. Upload the export again.')
+        positions=[dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        if positions_fingerprint(positions)!=pending['fingerprint']:
+            raise ValueError('Your holdings changed after this preview. Upload again to review the current differences.')
+        row=db.execute("SELECT payload FROM metadata WHERE key='holdings_import_aliases'").fetchone()
+        aliases=json.loads(row['payload']) if row else {}
+        result=holdings_import.save(db,pending['items'],data.get('selections'),aliases)
+        db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('holdings_import_aliases',json.dumps(result['aliases'],allow_nan=False)))
+        db.execute("DELETE FROM metadata WHERE key='pending_holdings_import'")
+        db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('holdings_import_status',json.dumps({'imported':time.time(),'updated':result['updated']})))
+    if WORKER:
+        WORKER.trigger()
+    return {'updated':result['updated']}
+
+
 class Handler(BaseHTTPRequestHandler):
     def cors_headers(self):
         origin = self.headers.get('Origin')
@@ -313,7 +372,7 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]
@@ -344,12 +403,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'error': 'JSON required.'}, 415)
         try:
             length = int(self.headers.get('Content-Length', '0'))
-            if not 0 < length <= 50000:
+            if not 0 < length <= (400000 if self.path in ('/api/import/preview','/api/import/apply') else 50000):
                 raise ValueError('Invalid request size.')
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError('JSON object required.')
-            if self.path == '/api/position':
+            if self.path == '/api/import/preview':
+                return self.send_json(import_preview(data))
+            elif self.path == '/api/import/apply':
+                return self.send_json(apply_import(data))
+            elif self.path == '/api/position':
                 save_position(data)
                 if WORKER:
                     WORKER.trigger()
