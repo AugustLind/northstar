@@ -156,6 +156,24 @@ class HostingTests(unittest.TestCase):
         self.assertTrue(all(a['read'] for a in app.read_meta('dashboard_alerts')))
         self.assertFalse(self.request('GET','/api/ledger',headers)['body']['initialized'])
 
+    def test_validation_queues_single_job_and_preserves_result_on_failure(self):
+        class ImmediateThread:
+            def __init__(self,**kwargs):self.target=kwargs['target']
+            def start(self):self.target()
+        headers={'Authorization':'Bearer test-key','Content-Type':'application/json'}
+        with patch('app.threading.Thread',ImmediateThread),patch('validation.evaluate',return_value={'generated':123,'curve':[]}):
+            response=self.request('POST','/api/validation',headers,{'initial_capital':100000})
+        self.assertTrue(response['body']['queued'])
+        self.assertEqual(app.read_meta('validation_report')['generated'],123)
+        self.assertFalse(app.read_meta('validation_progress')['running'])
+        with patch('app.threading.Thread',ImmediateThread),patch('validation.evaluate',side_effect=ValueError('Not enough history')):
+            self.request('POST','/api/validation',headers,{'initial_capital':100000})
+        self.assertEqual(app.read_meta('validation_report')['generated'],123)
+        self.assertEqual(app.read_meta('validation_progress')['error'],'Not enough history')
+        app.VALIDATION_LOCK.acquire()
+        try:self.assertFalse(self.request('POST','/api/validation',headers,{})['body']['queued'])
+        finally:app.VALIDATION_LOCK.release()
+
     def test_pages_build_contains_only_static_assets(self):
         import shutil
         root=Path(__file__).resolve().parent.parent

@@ -24,7 +24,7 @@ def history(q):
     return [points[d] for d in sorted(points)]
 
 
-def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000):
+def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000, progress=None):
     """Monthly decision at close; execute next common close; no future inputs to screen."""
     cost_bps = float(cost_bps)
     if not math.isfinite(cost_bps) or not 0 <= cost_bps <= 200:
@@ -100,6 +100,7 @@ def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000)
                     ranked.append(c)
             pending = [c['symbol'] for c in sorted(ranked,key=lambda c:(-c['composite'],c['symbol']))[:20]]
             decisions += 1
+            if progress:progress({'decisions':decisions,'session':day*86400})
             month = this_month
         previous = day
     peak, drawdown = 1., 0.

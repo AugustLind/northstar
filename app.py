@@ -32,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = Path(__file__).parent
 DB = ROOT / 'data' / 'portfolio.db'
 REFRESH_LOCK = threading.Lock()
+VALIDATION_LOCK = threading.Lock()
 WORKER = None
 FUNDAMENTALS_WORKER = None
 ANNOUNCEMENTS_WORKER = None
@@ -330,6 +331,31 @@ def apply_import(data):
     return {'updated':result['updated']}
 
 
+def start_validation(data):
+    slippage=portfolio_fit.number(data.get('cost_bps',0),'Additional slippage',200)
+    capital=portfolio_fit.number(data.get('initial_capital',100000),'Starting capital',1e9)
+    if capital<1000:raise ValueError('Starting capital must be at least 1,000 NOK.')
+    if not VALIDATION_LOCK.acquire(blocking=False):return {'queued':False,'message':'A historical experiment is already running.'}
+    try:
+        snapshot=state();config=settings();started=time.time()
+        write_meta('validation_progress',{'running':True,'started':started,'decisions':0})
+        def run():
+            try:
+                def progress(value):write_meta('validation_progress',{'running':True,'started':started,**value})
+                result=validation.evaluate(snapshot['quotes'],config['universe'],slippage,config['min_turnover_nok'],capital,progress)
+                write_meta('validation_report',result)
+                write_meta('validation_progress',{'running':False,'started':started,'finished':time.time()})
+            except Exception as error:
+                message=str(error) if isinstance(error,ValueError) else 'Historical experiment failed; previous result retained.'
+                write_meta('validation_progress',{'running':False,'started':started,'finished':time.time(),'error':message})
+            finally:VALIDATION_LOCK.release()
+        threading.Thread(target=run,name='northstar-validation',daemon=True).start()
+        return {'queued':True}
+    except Exception:
+        VALIDATION_LOCK.release()
+        raise
+
+
 def ledger_view():
     snapshot=state();profile=snapshot['manual_portfolio_preferences'];baseline=read_meta('ledger_state')
     with connect() as db:
@@ -484,7 +510,9 @@ class Handler(BaseHTTPRequestHandler):
             with connect() as db:
                 db.execute('CREATE TABLE IF NOT EXISTS paper_snapshots (generated REAL PRIMARY KEY, captured REAL NOT NULL, payload TEXT NOT NULL)')
                 paper = validation.paper_view(db, state()['quotes'])
-            return self.send_json({'historical':read_meta('validation_report'), 'paper':paper})
+            progress=read_meta('validation_progress',{})
+            if progress.get('running') and not VALIDATION_LOCK.locked():progress={**progress,'running':False,'error':'Experiment interrupted by a server restart. Run it again.'}
+            return self.send_json({'historical':read_meta('validation_report'), 'paper':paper,'progress':progress})
         if self.path == '/api/research':
             return self.send_json(WORKER.view() if WORKER else {'report': read_meta('report'), 'settings': settings(), 'worker': {}})
         if self.path == '/api/state':
@@ -566,9 +594,7 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot=state()
                 return self.send_json(portfolio_fit.preview(data.get('symbol',''),data.get('amount',0),snapshot,snapshot['portfolio_preferences']))
             elif self.path == '/api/validation':
-                result = validation.evaluate(state()['quotes'], settings()['universe'], data.get('cost_bps',0), settings()['min_turnover_nok'], data.get('initial_capital',100000))
-                write_meta('validation_report',result)
-                return self.send_json(result)
+                return self.send_json(start_validation(data))
             elif self.path == '/api/analyze':
                 if not WORKER:
                     return self.send_json({'error': 'Background worker is not started.'}, 503)

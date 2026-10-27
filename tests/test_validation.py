@@ -22,6 +22,12 @@ class ValidationTests(unittest.TestCase):
         self.assertGreater(v['return_pct'],0)
         self.assertAlmostEqual(v['return_pct'],v['benchmark_pct'])
 
+    def test_progress_reports_dated_decisions(self):
+        updates=[]
+        result=validation.evaluate(quotes(),['A.OL'],progress=updates.append)
+        self.assertEqual(len(updates),result['decisions'])
+        self.assertEqual(updates[-1]['decisions'],result['decisions'])
+
     def test_costs_reduce_returns(self):
         a=validation.evaluate(quotes(),['A.OL'],0)
         b=validation.evaluate(quotes(),['A.OL'],100)
