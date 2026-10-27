@@ -20,7 +20,7 @@ def snapshot():
 
 def profile(**kw):
     return pf.preferences({'cash_nok':9000,'purchase_nok':1000,'max_stock_pct':30,'max_sector_pct':50,
-                           'reserve_pct':10,'sectors':{'A.OL':'Energy','B.OL':'Industrials'},**kw})
+                           'reserve_pct':10,'max_buy_fee_pct':100,'sectors':{'A.OL':'Energy','B.OL':'Industrials'},**kw})
 
 
 class PortfolioFitTests(unittest.TestCase):

@@ -8,7 +8,7 @@ async function loadPortfolioFit(){
  catch(e){$('#fitStatus').textContent=e.message;}
 }
 function renderPortfolioFit(v){
- const p=v.portfolio;
+ const p=v.portfolio;if(typeof renderQuantityPlan==='function'&&v.trade_plan)renderQuantityPlan(v.trade_plan);
  $('#fitStatus').textContent='Current portfolio check: '+new Date(v.generated*1000).toLocaleString()+'. Ranking: '+(v.report_generated?new Date(v.report_generated*1000).toLocaleString():'not available')+(v.report_stale?' · stale; no candidate cleared.':'');
  $('#fitTotal').textContent=fitMoney(p.total_nok);$('#fitCash').textContent=fitMoney(p.cash_nok);$('#fitCashShare').textContent=fitPercent(p.cash_pct)+' of tracked total';
  $('#fitCandidateCount').textContent=v.candidates.filter(c=>c.buy_candidate).length;
@@ -17,7 +17,7 @@ function renderPortfolioFit(v){
  $('#fitExposure').innerHTML=p.holdings.length?'<div class="tablewrap"><table><thead><tr><th>Holding</th><th>Sector</th><th>Value · NOK</th><th>Weight incl. cash</th></tr></thead><tbody>'+p.holdings.map(h=>'<tr><td>'+esc(h.symbol)+'</td><td>'+esc(h.sector||'Unclassified')+'</td><td>'+fitMoney(h.value_nok)+'</td><td>'+fitPercent(h.weight_pct)+'</td></tr>').join('')+'</tbody></table></div>':'<p>Add holdings in Portfolio &amp; watchlist. You can also model a cash-only starting portfolio.</p>';
  $('#fitSectors').innerHTML=p.sectors.map(s=>'<div class="fitsector"><div>'+esc(s.sector)+' · '+fitMoney(s.value_nok)+' · '+fitPercent(s.weight_pct)+'</div>'+(s.weight_pct==null?'':'<div class="scoretrack"><span style="width:'+Math.min(100,Math.max(0,s.weight_pct))+'%;background:'+(s.sector==='Unclassified'||s.weight_pct>v.profile.max_sector_pct?'#b08030':'#287858')+'"></span></div>')+'</div>').join('')||'<p>No held-stock sector exposure yet.</p>';
  if(!fitDirty){
-  const f=$('#fitPreferences');for(const k of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct'])f.elements[k].value=v.profile[k];
+  const f=$('#fitPreferences');for(const k of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct'])f.elements[k].value=v.profile[k];
   const symbols=Array.from(new Set(p.holdings.map(h=>h.symbol).concat(v.candidates.map(c=>c.symbol),Object.keys(v.profile.sectors)))).sort();
   $('#fitClassifications').innerHTML=symbols.map(s=>'<label>'+esc(s)+'<select data-sector="'+esc(s)+'"><option value="">Unclassified</option>'+v.sector_choices.map(choice=>'<option value="'+esc(choice)+'"'+(v.profile.sectors[s]===choice?' selected':'')+'>'+esc(choice)+'</option>').join('')+'</select></label>').join('')||'<p>Holdings and top-20 stocks appear here after a scan.</p>';
   $('#fitExtraSector').innerHTML='<option value="">Choose a sector</option>'+v.sector_choices.map(s=>'<option>'+esc(s)+'</option>').join('');
@@ -29,7 +29,7 @@ $('#fitPreferences').oninput=()=>{fitDirty=true;$('#fitSaveStatus').textContent=
 $('#fitPreferences').onchange=()=>{fitDirty=true;$('#fitSaveStatus').textContent='Unsaved changes.';};
 $('#fitPreferences').onsubmit=async e=>{
  e.preventDefault();if(!fitView)return;const f=e.target,data={sectors:Object.assign({},fitView.profile.sectors)};
- for(const k of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct'])data[k]=Number(f.elements[k].value);
+ for(const k of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct'])data[k]=Number(f.elements[k].value);
  for(const select of document.querySelectorAll('#fitClassifications select[data-sector]')){if(select.value)data.sectors[select.dataset.sector]=select.value;else delete data.sectors[select.dataset.sector];}
  const extra=$('#fitExtraSymbol').value.trim().toUpperCase();if(extra){if(!$('#fitExtraSector').value){$('#fitSaveStatus').textContent='Choose a sector for the additional ticker.';return;}data.sectors[extra.includes('.')?extra:extra+'.OL']=$('#fitExtraSector').value;}
  const b=$('#saveFit');b.disabled=true;try{await api('portfolio-fit',data);fitDirty=false;$('#fitExtraSymbol').value='';$('#fitSaveStatus').textContent='Saved on Oracle. Purchase previews do not update cash or holdings.';$('#fitPreviewResult').innerHTML='';await loadPortfolioFit();await load();if(typeof loadResearch==='function')await loadResearch();}catch(error){$('#fitSaveStatus').textContent=error.message;}finally{b.disabled=false;}

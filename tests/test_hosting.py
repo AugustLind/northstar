@@ -89,7 +89,7 @@ class HostingTests(unittest.TestCase):
     def test_portfolio_fit_is_private_and_preferences_persist(self):
         headers={'Authorization':'Bearer test-key','Content-Type':'application/json','Origin':'https://owner.github.io'}
         self.assertEqual(self.request('GET','/api/portfolio-fit')['status'],401)
-        data={'cash_nok':10000,'purchase_nok':1000,'sectors':{'BOUV.OL':'Information technology'}}
+        data={'cash_nok':10000,'purchase_nok':1000,'max_buy_fee_pct':100,'sectors':{'BOUV.OL':'Information technology'}}
         self.assertEqual(self.request('POST','/api/portfolio-fit',headers,data)['status'],200)
         view=self.request('GET','/api/portfolio-fit',headers)['body']
         self.assertEqual(view['portfolio']['total_nok'],10000)
@@ -102,7 +102,7 @@ class HostingTests(unittest.TestCase):
     def test_purchase_preview_leaves_real_records_unchanged(self):
         import time
         headers={'Authorization':'Bearer test-key','Content-Type':'application/json'}
-        self.request('POST','/api/portfolio-fit',headers,{'cash_nok':10000,'purchase_nok':1000,'sectors':{'BOUV.OL':'Information technology'}})
+        self.request('POST','/api/portfolio-fit',headers,{'cash_nok':10000,'purchase_nok':1000,'max_buy_fee_pct':100,'sectors':{'BOUV.OL':'Information technology'}})
         with app.connect() as db:
             db.execute('INSERT INTO quotes VALUES (?,?)',('BOUV.OL',json.dumps({'price':100,'asof':time.time(),'currency':'NOK'})))
         before=app.state()
@@ -130,6 +130,20 @@ class HostingTests(unittest.TestCase):
         self.assertEqual(app.state()['positions'][0]['cost'],306)
         self.assertEqual(self.request('POST','/api/import/apply',headers,payload)['status'],400)
 
+    def test_share_count_plan_is_private_and_uses_current_holdings(self):
+        import time
+        self.assertEqual(self.request('GET','/api/trade-plan')['status'],401)
+        headers={'Authorization':'Bearer test-key'}
+        app.save_position({'symbol':'EXA','currency':'NOK','shares':10,'cost':100})
+        with app.connect() as db:
+            db.execute('INSERT INTO quotes VALUES (?,?)',('EXA',json.dumps({'price':100,'asof':time.time(),'currency':'NOK'})))
+        app.write_meta('portfolio_preferences',{'cash_nok':0,'max_stock_pct':60,'reserve_pct':0})
+        before=app.state()['positions']
+        response=self.request('GET','/api/trade-plan',headers)
+        self.assertEqual(response['status'],200)
+        self.assertEqual(response['body']['holdings'][0]['sell_shares'],4)
+        self.assertEqual(app.state()['positions'],before)
+
     def test_pages_build_contains_only_static_assets(self):
         import shutil
         root=Path(__file__).resolve().parent.parent
@@ -137,13 +151,13 @@ class HostingTests(unittest.TestCase):
             staged=Path(tmp)
             (staged/'scripts').mkdir();(staged/'static').mkdir();(staged/'data').mkdir()
             shutil.copy2(root/'scripts/build-pages.py',staged/'scripts/build-pages.py')
-            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js', 'holdings-import.js','favicon.svg']:
+            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js', 'holdings-import.js', 'trade-plan.js','favicon.svg']:
                 shutil.copy2(root/'static'/name,staged/'static'/name)
             (staged/'data/private.db').write_text('private portfolio')
             subprocess.run([sys.executable,str(staged/'scripts/build-pages.py')],check=True,capture_output=True,
                 env={**os.environ,'NORTHSTAR_API_URL':'https://api.example.com'})
             output=staged/'pages-dist'
-            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js', 'holdings-import.js','favicon.svg','config.js','.nojekyll'})
+            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js', 'portfolio-fit.js', 'holdings-import.js', 'trade-plan.js','favicon.svg','config.js','.nojekyll'})
             self.assertIn('https://api.example.com',(output/'config.js').read_text())
             self.assertNotIn('private portfolio',''.join(p.read_text() for p in output.iterdir()))
             self.assertNotIn('href="/style.css"',(output/'index.html').read_text())

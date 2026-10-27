@@ -10,6 +10,7 @@ import re
 import indicators
 import fundamentals
 import portfolio_fit
+import trade_plan
 import announcements
 import universe as oslo_universe
 import time
@@ -42,6 +43,8 @@ When portfolio_context is supplied, use only its tracked holdings and manually e
 User limits and defaults are constraints, not proven safe allocations. Unknown sectors or missing
 prices prevent confirming portfolio fit. Purchase previews include the user-stated flat 79 NOK fee per buy order, not per share.
 Break-even is purchase-fee-only; selling fees are unknown. Use allocation_preview for calculated sizes; it checks user constraints only, not a buy signal.
+Use share_count_plan for exact buy/sell quantities; do not multiply its shared budget across stocks.
+Sale quantities are rule-based review scenarios, before unknown selling costs and tax.
 Do not invent a purchase size or claim full suitability.
 Mention stale or missing data. Do not suggest options, leverage or automatic trades.'''
 
@@ -173,12 +176,14 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
                     'label':item['classification']['label']} for item in notices['items'] if not item.get('corrected_by')][:2]}
         card['sparkline'] = card['history'][-60::3]
         card['history'] = []
-    return {'generated': time.time(), 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
+    report={'generated': time.time(), 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
             'top20':[c['symbol'] for c in ranked[:20]], 'coverage':coverage,
             'portfolio_context':portfolio, 'portfolio_limits':{k:v for k,v in profile.items() if k!='sectors'},
             'universe_source': UNIVERSE_SOURCE, 'universe_snapshot': oslo_universe.ASOF,
             'method': 'Technical ranking v2; financial snapshots and NewsWeb headline metadata are supplementary and do not change ranks. No full-report news interpretation or backtest.',
             'universe': universe, 'commentary': None, 'llm_status': 'disabled'}
+    report['trade_plan']=trade_plan.build(snapshot,report,profile)
+    return report
 
 
 class ModelBusy(RuntimeError):
@@ -238,11 +243,16 @@ def compact_evidence(report, question):
             'warnings':report['portfolio_context'].get('warnings',[])[:5],
             'holdings':report['portfolio_context'].get('holdings',[])[:8],
             'note':'At most eight tracked holdings included; no full-portfolio suitability assessment.'}
+    plan=report.get('trade_plan') or {}
+    quantities={'generated':plan.get('generated'),'shared_budget_nok':plan.get('buy_budget_nok'),
+                'buys':[{k:r.get(k) for k in ('symbol','buy_shares','total_nok','fee_nok','reason')} for r in plan.get('buys',[])[:8]],
+                'sales':[{k:r.get(k) for k in ('symbol','owned','sell_shares','remaining_shares','reasons')} for r in plan.get('holdings',[]) if r.get('sell_shares')][:8],
+                'method':plan.get('method')}
     return {'generated': report.get('generated'), 'method': report.get('method'),
             'total_stocks': len(cards), 'included_stocks': len(selected),
             'buy_candidates': sum(c['action'] == 'Consider buying' and not c['held'] for c in cards),
             'note': 'Only selected stocks are included to fit the local model. Do not claim all stocks were assessed by AI.',
-            'portfolio_context': portfolio, 'portfolio_limits':report.get('portfolio_limits'),
+            'portfolio_context': portfolio, 'portfolio_limits':report.get('portfolio_limits'), 'share_count_plan':quantities,
             'cards': selected}
 
 

@@ -36,7 +36,7 @@ function renderAdvice(){
  else if(filtered.length&&filtered[0].score!==null){selectStock(filtered[0].symbol,false);}
  const compare=$('#compareStock'),previous=compare.value;compare.innerHTML='<option value="">No comparison</option>'+cards.filter(c=>c.score!==null&&c.symbol!==explorerSymbol).map(c=>`<option value="${esc(c.symbol)}">${esc(c.symbol)}</option>`).join('');compare.value=previous;
 }
-async function loadResearch(){try{researchView=await api('research');renderAdvice();}catch(e){$('#researchStatus').textContent=e.message;}}
+async function loadResearch(){try{researchView=await api('research');renderAdvice();if(typeof loadQuantityPlan==='function')loadQuantityPlan();}catch(e){$('#researchStatus').textContent=e.message;}}
 $('#adviceFilter').onchange=renderAdvice;
 $('#adviceCards').onclick=e=>{if(e.target.dataset.inspect)selectStock(e.target.dataset.inspect,true);};
 $('#stockSearch').oninput=renderAdvice;$('#rankBy').onchange=renderAdvice;

@@ -8,7 +8,7 @@ SECTORS = ['Energy', 'Materials', 'Industrials', 'Consumer discretionary', 'Cons
            'Health care', 'Financials', 'Information technology', 'Communication services',
            'Utilities', 'Real estate']
 DEFAULTS = {'cash_nok': 0., 'purchase_nok': 0., 'max_stock_pct': 20., 'max_sector_pct': 35.,
-            'reserve_pct': 10., 'sectors': {}}
+            'reserve_pct': 10., 'max_buy_fee_pct': 2., 'review_sell_pct': 25., 'sectors': {}}
 
 
 def number(value, name, maximum):
@@ -33,8 +33,8 @@ def canonical(symbol, currency='NOK'):
 def preferences(data):
     out = {k:number(data.get(k,DEFAULTS[k]),k,1e9 if k in ('cash_nok','purchase_nok') else 100)
            for k in DEFAULTS if k != 'sectors'}
-    if out['max_stock_pct'] == 0 or out['max_sector_pct'] == 0:
-        raise ValueError('Position and sector limits must be greater than zero.')
+    if out['max_stock_pct'] == 0 or out['max_sector_pct'] == 0 or out['max_buy_fee_pct']==0:
+        raise ValueError('Position, sector and purchase-fee limits must be greater than zero.')
     sectors = data.get('sectors',{})
     if not isinstance(sectors,dict) or len(sectors)>1000:
         raise ValueError('Sector classifications must be an object with at most 1000 symbols.')
@@ -185,6 +185,8 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
                   break_even_gain_pct=fee/purchase*100 if purchase else None)
     if shares==0:
         result['warnings'].append('Budget does not cover one whole share including estimated costs.')
+    if result['fee_pct'] is not None and result['fee_pct']>profile['max_buy_fee_pct']+1e-8:
+        result['warnings'].append('Purchase fee exceeds your '+str(profile['max_buy_fee_pct'])+'% fee / stock-value limit.')
     if purchase>capacities['position']+1e-8:
         result['warnings'].append('Purchase would exceed your position limit.')
     if purchase>capacities['cash reserve']+1e-8:
@@ -196,6 +198,7 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
 
 
 def view(snapshot, report, profile, now=None):
+    import trade_plan
     now=time.time() if now is None else now
     profile=preferences(profile)
     ctx=context(snapshot,profile,now)
@@ -205,7 +208,7 @@ def view(snapshot, report, profile, now=None):
     for card in sorted((c for c in cards if c.get('rank_eligible')),key=lambda c:(-c.get('composite',0),c['symbol']))[:20]:
         symbol=canonical(card['symbol'])
         simulation=preview(symbol,profile['purchase_nok'],snapshot,profile,ctx,now)
-        actionable=not old and card.get('action')=='Consider buying' and fresh({'price':card.get('price'),'asof':card.get('asof')},now)
+        actionable=not old and trade_plan.buy_signal(card) and fresh({'price':card.get('price'),'asof':card.get('asof')},now)
         simulation['technical_action']=card.get('action') if not old else 'Stale report'
         simulation['rank']=card.get('rank');simulation['name']=card.get('name',symbol)
         simulation['held']=any(h['symbol']==symbol for h in ctx['holdings'])
@@ -224,7 +227,7 @@ def view(snapshot, report, profile, now=None):
                 correlations.append({'symbol':h['symbol'],**corr})
         simulation['highest_correlation']=max(correlations,key=lambda c:c['value']) if correlations else None
         candidates.append(simulation)
-    return {'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
+    return {'trade_plan':trade_plan.build(snapshot,report,profile,now),'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
             'report_generated':(report or {}).get('generated'),'report_stale':old,'buy_fee_nok':BUY_FEE_NOK,
             'fee_model':FEE_MODEL,
             'method':'Your limits are screening constraints, not a measure of investment suitability. Defaults are illustrative. '

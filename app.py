@@ -17,6 +17,7 @@ import announcements
 import validation
 import portfolio_fit
 import holdings_import
+import trade_plan
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -357,6 +358,9 @@ class Handler(BaseHTTPRequestHandler):
             if not row:
                 return self.send_json({'error':'History is not downloaded yet. Wait for the scan to finish.'},404)
             return self.send_json(json.loads(row['payload']))
+        if self.path == '/api/trade-plan':
+            snapshot=state()
+            return self.send_json(trade_plan.build(snapshot,read_meta('report'),snapshot['portfolio_preferences']))
         if self.path == '/api/portfolio-fit':
             snapshot=state()
             return self.send_json(portfolio_fit.view(snapshot,read_meta('report'),snapshot['portfolio_preferences']))
@@ -372,7 +376,7 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/trade-plan.js': ('trade-plan.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]

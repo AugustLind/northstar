@@ -4,17 +4,18 @@ const nodes={};
 function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
 const form=element();for(const name of ['universe','interval_minutes','model','min_turnover_nok','llm_enabled'])form.elements[name]=element();nodes['#researchSettings']=form;
 nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rankBy']=element();nodes['#rankBy'].value='composite';
-const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
+const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
 const now=Date.now()/1000;
 const history=Array.from({length:250},(_,i)=>({time:now-(249-i)*86400,close:100+i/10}));
 const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV.OL',name:'Bouvet',currency:'NOK',price:125,asof:now,source:'test',held:false,action:'Consider buying',score:100,reasons:['Test measured evidence'],history,history_basis:'Adjusted close',metrics:{ma200:110,momentum3m:5,drawdown:-2,volatility:20,turnover20:1000000}}]};
-const fitFixture={generated:now,report_generated:now,report_stale:false,profile:{cash_nok:10000,purchase_nok:1000,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
+const fitFixture={generated:now,report_generated:now,report_stale:false,profile:{cash_nok:10000,purchase_nok:1000,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,max_buy_fee_pct:2,review_sell_pct:25,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
 const importFixture={token:'preview-token',expires:now+900,valid:1,rows:[{id:2,name:'Example <untrusted> ASA',currency:'NOK',shares:5,cost:306,symbol:'EXA.OL',selected:true,error:null,match:'Name match; confirm',existing:null}],companies:[{symbol:'EXA.OL',name:'Example <untrusted> ASA'}],existing_holdings:[{symbol:'EXA',currency:'NOK',shares:1,cost:100}],method:'Preview only. Preserve notes.'};
 const importSelections=[];
+const planFixture={generated:now,report_generated:now,buy_budget_nok:1000,spent_nok:979,buy_fees_nok:79,unallocated_budget_nok:21,buys:[{symbol:'EXA.OL',name:'<untrusted>',buy_shares:9,price:100,quote_asof:now,total_nok:979,fee_nok:79,fee_pct:79/900*100,reason:'Shared budget'}],holdings:[{symbol:'HELD.OL',owned:10,sell_shares:4,remaining_shares:6,gross_proceeds_nok:400,reasons:['Position limit'],price:100,quote_asof:now}],blocked_buys:[],warnings:[],method:'Rule-based scenario; selling fees and tax unmodelled'};
 const requests=[];
 const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console,btoa:s=>Buffer.from(s,'binary').toString('base64'),window:{NORTHSTAR_CONFIG:{apiBase:'https://api.example.com'}},sessionStorage:{getItem(k){return k==='northstar-key'?'test-access-key':null;},setItem(){},removeItem(){}},location:{pathname:'/recommendations',hostname:'owner.github.io',hash:''},history:{replaceState(){}},setInterval(){},setTimeout(){},confirm(){return false;},
  document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-import-select]')return importSelections;if(s==='[data-tab]'){const n=element();n.dataset.tab='recommendations';return [n];}return [];},createElement:element},
- fetch:async (path,options)=>{requests.push({path,options});return {ok:true,json:async()=>path.endsWith('/api/import/preview')?importFixture:path.endsWith('/api/import/apply')?{updated:1}:path.endsWith('/api/portfolio-fit')?fitFixture:path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
+ fetch:async (path,options)=>{requests.push({path,options});return {ok:true,json:async()=>path.endsWith('/api/trade-plan')?planFixture:path.endsWith('/api/import/preview')?importFixture:path.endsWith('/api/import/apply')?{updated:1}:path.endsWith('/api/portfolio-fit')?fitFixture:path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('static/app.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/charts.js','utf8'),context);
@@ -22,6 +23,7 @@ vm.runInContext(fs.readFileSync('static/news.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/validation.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/portfolio-fit.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/holdings-import.js','utf8'),context);
+vm.runInContext(fs.readFileSync('static/trade-plan.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/advice.js','utf8'),context);
 setImmediate(async()=>{
  try{
@@ -83,6 +85,13 @@ setImmediate(async()=>{
  assert.deepStrictEqual(JSON.parse(applied.options.body),{token:'preview-token',selections:[{id:2,symbol:'EXA.OL'}]});
  assert(nodes['#nordnetImportStatus'].textContent.includes('Imported 1 holdings'));
  assert(nodes['#nordnetImportApply'].disabled);
+ await vm.runInContext('loadQuantityPlan()',context);
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('Buy 9 shares'));
+ assert(nodes['#quantityPlanFit'].innerHTML.includes('Sell 4 shares'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('Before selling fees and tax'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('&lt;untrusted&gt;'));
+ assert(!nodes['#quantityPlanMain'].innerHTML.includes('<untrusted>'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('Shared budget'));
  console.log('UI contract and chart rendering smoke checks passed (not browser QA).');
  }catch(error){console.error(error);process.exitCode=1;}
 });
