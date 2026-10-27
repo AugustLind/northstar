@@ -40,7 +40,17 @@ The explorer supports two years of history; line/candlestick views; 1/3/6/12/24-
 
 Charts are drawn locally with native SVG and no third-party chart scripts. Full histories load on demand; normal polling sends summaries only. Scan progress reports downloaded/failed counts. Repeated background scans reuse quotes fetched within 20 minutes when they already have the new history format. Throttled provider calls get one bounded retry.
 
-This remains an **unvalidated technical screen**. It does not assess company finances, valuation, earnings, news or suitability. More indicators do not establish better investment performance. No stock rankings have been backtested yet.
+This remains an **unvalidated technical ranking**. Annual company-financial snapshots are supplementary; they do not yet change ranks or establish complete business quality. News and suitability are not assessed, and rankings have not been backtested.
+
+## Company fundamentals (first improvement)
+
+Explore a stock to see annual revenue/growth, operating and net margin, operating and free cash flow, debt, cash, equity, share-count changes and a price/annual-EPS proxy when compatible inputs exist. A separate low-concurrency worker checks the configured universe and holdings, prioritising an explicitly requested refresh. Successful records are cached for 24 hours; failed attempts back off for six hours. HTTP 401/403/429 defers remaining requests rather than repeatedly calling a blocked provider.
+
+Data comes from Yahoo's unofficial annual financial timeseries endpoint, the same endpoint family used by yfinance. No new dependency, API key or paid service is required. Coverage varies across Oslo stocks. Each field retains its currency and fiscal period end; retrieval time is separate. Fiscal period end is **not** filing publication time, and the data is **not point-in-time** or suitable for historical validation without additional filing records.
+
+Missing numbers remain unavailable, including when some other fields are known. Ratios require matching fiscal dates and known matching currencies. Annual growth requires a comparable adjacent year. Free cash flow is reported where available; otherwise derived from operating cash flow minus absolute capex only for matching dates/currencies. Price divided by positive annual diluted EPS is labelled an annual P/E proxy, never TTM P/E; it is omitted for stale quotes or currency mismatch. Debt-to-equity is omitted for non-positive equity and must be interpreted in sector context. Share-count increases are flagged for review, not declared dilution, because splits and acquisitions can change counts.
+
+The panel exposes Available / Partial / Stale / Unavailable coverage and the provider link. Annual periods older than 550 days or records not successfully retrieved in seven days are marked stale. Refresh errors retain the original successful data and dates. Records are private entries in the existing SQLite metadata table and survive deployments. AI receives only a compact, dated financial summary where available and cannot invent missing metrics. No financial score is silently blended into technical rankings.
 
 ## Free local AI
 

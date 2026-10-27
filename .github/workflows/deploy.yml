@@ -43,6 +43,10 @@ jobs:
           git archive --format=tar.gz HEAD > /tmp/northstar-deploy.tar.gz
           scp -i ~/.ssh/northstar_deploy -o StrictHostKeyChecking=yes /tmp/northstar-deploy.tar.gz "ubuntu@$ORACLE_HOST:northstar-deploy.tar.gz"
           ssh -i ~/.ssh/northstar_deploy -o StrictHostKeyChecking=yes "ubuntu@$ORACLE_HOST" 'tar -xOf ~/northstar-deploy.tar.gz scripts/deploy-oracle.sh > ~/northstar-deploy.sh && bash ~/northstar-deploy.sh ~/northstar-deploy.tar.gz'
+      - name: Check public annual financial-data coverage on Oracle
+        env:
+          ORACLE_HOST: ${{ vars.ORACLE_HOST }}
+        run: ssh -i ~/.ssh/northstar_deploy -o StrictHostKeyChecking=yes "ubuntu@$ORACLE_HOST" 'cd ~/northstar && python3 scripts/probe-financials.py'
       - name: Remove temporary SSH key
         if: always()
         run: rm -f ~/.ssh/northstar_deploy

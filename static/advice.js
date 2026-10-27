@@ -13,7 +13,8 @@ function chart(card,range='1Y'){
 }
 function renderAdvice(){
  if(!researchView)return;const r=researchView.report,w=researchView.worker||{},s=researchView.settings,p=researchView.progress;
- $('#researchStatus').textContent=(w.running?'Analysis running. ':'')+(w.running&&p&&p.started>=w.last_started-5?`Downloaded ${p.done}/${p.total}; ${p.failed} failures. `:'')+`Last report: ${r?timeLabel(r.generated):'not yet'}. Next scheduled: ${timeLabel(w.next_run)}.`+(w.error?' '+w.error:'');
+ const financialProgress=researchView.fundamentals_progress;
+ $('#researchStatus').textContent=(w.running?'Analysis running. ':'')+(w.running&&p&&p.started>=w.last_started-5?`Downloaded ${p.done}/${p.total}; ${p.failed} failures. `:'')+`Last report: ${r?timeLabel(r.generated):'not yet'}. Next scheduled: ${timeLabel(w.next_run)}.`+(w.error?' '+w.error:'')+(financialProgress&&financialProgress.running?` Financial scan: ${financialProgress.done}/${financialProgress.total}.`:'');
  if(!researchSettingsLoaded){const f=$('#researchSettings');f.elements.universe.value=s.universe.join(', ');f.elements.interval_minutes.value=s.interval_minutes;f.elements.model.value=s.model;f.elements.min_turnover_nok.value=s.min_turnover_nok;f.elements.llm_enabled.checked=s.llm_enabled;researchSettingsLoaded=true;}
  if(!r){$('#adviceCards').innerHTML='<div class="card">Preparing a broad market scan. Progress updates every 15 seconds; larger scans may take several minutes.</div>';return;}
  const reportOld=Date.now()/1000-r.generated>86400;const cards=r.cards.map(c=>(reportOld||!c.asof||Date.now()/1000-c.asof>4*86400)?Object.assign({},c,{action:'Insufficient data',score:null,composite:null,rank:null,analyses:[],rank_eligible:false,reasons:['Report or quote is stale. Run analysis before using a recommendation.'].concat(c.reasons)}):c),buy=cards.filter(c=>!c.held&&c.action==='Consider buying'),sell=cards.filter(c=>c.held&&/selling|sell threshold|taking profits/.test(c.action));
@@ -31,7 +32,7 @@ function renderAdvice(){
  $('#rankingCoverage').textContent=`${filtered.length} shown · ${eligible.length} eligible for ranking · ${cards.filter(c=>c.score===null).length} without sufficient data. Top-20 requires liquidity and volatility checks; a ranked stock is not necessarily a buy.`;
  $('#adviceCards').innerHTML=filtered.length?'<div class="tablewrap"><table class="ranktable"><thead><tr><th>Overall rank</th><th>Stock</th><th>Overall</th><th>Trend</th><th>Momentum</th><th>Risk</th><th>Timing</th><th>Liquidity</th><th>Action</th><th></th></tr></thead><tbody>'+filtered.map(c=>`<tr><td>${c.rank||'—'}</td><td><b>${esc(c.symbol)}</b><small>${esc(c.name||'')} ${c.held?'· Owned':''}</small></td><td><b>${c.composite==null?'—':c.composite.toFixed(1)}</b></td>${['Trend','Momentum','Risk','Timing','Liquidity'].map(name=>{const part=(c.analyses||[]).find(p=>p.name===name);return `<td>${part?part.score.toFixed(0):'—'}</td>`;}).join('')}<td><span class="signal ${c.action==='Consider buying'?'buy':''}">${esc(c.action)}</span></td><td><button data-inspect="${esc(c.symbol)}">Explore</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="card">No stocks match this view. Try All analysed stocks, a different search, or wait for scan completion.</div>';
  // Keep detailed charts stable across background polling and tab changes.
- if(explorerSymbol){const selected=cards.find(c=>c.symbol===explorerSymbol);if(selected){renderStockDetail(selected);const cached=explorerCache[explorerSymbol];if(cached&&cached.asof!==selected.asof&&!explorerDrag)selectStock(explorerSymbol,false);}}
+ if(explorerSymbol){const selected=cards.find(c=>c.symbol===explorerSymbol);if(selected){renderStockDetail(selected);const cached=explorerCache[explorerSymbol];if(cached&&cached.asof!==selected.asof&&!explorerDrag)selectStock(explorerSymbol,false);else loadFinancials(explorerSymbol);}}
  else if(filtered.length&&filtered[0].score!==null){selectStock(filtered[0].symbol,false);}
  const compare=$('#compareStock'),previous=compare.value;compare.innerHTML='<option value="">No comparison</option>'+cards.filter(c=>c.score!==null&&c.symbol!==explorerSymbol).map(c=>`<option value="${esc(c.symbol)}">${esc(c.symbol)}</option>`).join('');compare.value=previous;
 }
@@ -54,6 +55,7 @@ function renderStockDetail(c){
 async function selectStock(symbol,scroll){
  explorerSymbol=symbol;const token=++explorerLoad;const card=researchView&&researchView.report&&researchView.report.cards.find(c=>c.symbol===symbol);if(card)renderStockDetail(card);
  $('#chartPlot').innerHTML='<p>Loading daily price and volume history…</p>';$('#chartTooltip').textContent='';
+ loadFinancials(symbol);
  try{const quote=await api('history?symbol='+encodeURIComponent(symbol));if(token!==explorerLoad)return;explorerCache[symbol]=quote;const n=(quote.history||[]).length;explorerWindow={start:Math.max(0,n-252),end:Math.max(0,n-1)};explorerCompare='';$('#compareStock').value='';drawExplorer();if(scroll&&$('#explorer').scrollIntoView)$('#explorer').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){if(token===explorerLoad)$('#chartPlot').textContent=e.message;}
 }
 function drawExplorer(){
@@ -84,6 +86,23 @@ function initExplorer(){
  plot.addEventListener('keydown',e=>{if(e.key==='+'||e.key==='='){e.preventDefault();zoomExplorer(.7);}else if(e.key==='-'){e.preventDefault();zoomExplorer(1.4);}else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const shift=(e.key==='ArrowLeft'?-1:1)*Math.max(1,Math.round((explorerWindow.end-explorerWindow.start)/10));explorerWindow=ChartKit.windowBounds(currentHistory().length,explorerWindow.start+shift,explorerWindow.end+shift);drawExplorer();}});
  $('#resetUniverse').onclick=async()=>{try{const settings={...researchView.settings,universe:researchView.default_universe||researchView.settings.universe};await api('settings',settings);researchSettingsLoaded=false;await loadResearch();$('#settingsMessage').textContent='Broad universe restored. Scan queued.';}catch(e){$('#message').textContent=e.message;}};
 }
+
+let financialRequest=0;
+const financialLabels={revenue:'Revenue',revenue_growth:'Revenue growth',operating_income:'Operating profit',operating_margin:'Operating margin',net_income:'Net income',net_margin:'Net margin',operating_cash_flow:'Operating cash flow',capital_expenditure:'Capital expenditure',free_cash_flow:'Free cash flow',debt:'Total debt',cash:'Cash & short-term investments',equity:'Equity',net_cash:'Cash minus debt',debt_to_equity:'Debt / equity',diluted_eps:'Annual diluted EPS',annual_pe_proxy:'Annual P/E proxy',ordinary_shares:'Year-end ordinary shares',diluted_shares:'Annual diluted average shares',share_count_change:'Share-count change'};
+function financialValue(metric){if(!metric||!Number.isFinite(metric.value))return 'Unavailable';if(metric.unit==='percent')return metric.value.toFixed(1)+'%';if(metric.unit==='ratio')return metric.value.toFixed(2)+'×';if(metric.unit==='shares')return new Intl.NumberFormat('nb-NO',{maximumFractionDigits:0}).format(metric.value)+' shares';if(metric.currency)return money(metric.value,metric.currency);return new Intl.NumberFormat('nb-NO',{maximumFractionDigits:2}).format(metric.value)+' (currency unspecified)';}
+async function loadFinancials(symbol){
+ const token=++financialRequest;
+ try{const f=await api('fundamentals?symbol='+encodeURIComponent(symbol));if(token!==financialRequest||symbol!==explorerSymbol)return;
+ $('#financialStatus').textContent=`Coverage: ${f.status}. Fiscal period end: ${f.period||'unavailable'}. Retrieved: ${timeLabel(f.fetched)}.`+(f.error?' Latest refresh: '+f.error:'')+(f.scan&&f.scan.running?` Background scan: ${f.scan.done}/${f.scan.total}.`:'');
+ $('#financialSignals').innerHTML=(f.signals||[]).length?'<ul>'+f.signals.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>':'<p>Financial statements have not been retrieved for this company yet, or the provider has no coverage. Missing figures are not treated as zero.</p>';
+ const keys=['revenue','revenue_growth','operating_margin','net_income','operating_cash_flow','free_cash_flow','debt','cash','net_cash','debt_to_equity','annual_pe_proxy','share_count_change'];
+ $('#financialMetrics').innerHTML=keys.map(k=>{const m=(f.metrics||{})[k];return `<article><small>${financialLabels[k]}</small><strong>${financialValue(m)}</strong><small>${m?esc(m.period):'No matching annual observation'}</small>${m&&m.note?'<p>'+esc(m.note)+'</p>':''}</article>`;}).join('');
+ const rows=[];for(const [key,values]of Object.entries(f.history||{}))for(const v of values)rows.push(`<tr><td>${esc(financialLabels[key]||key)}</td><td>${esc(v.period)}</td><td>${financialValue({...v,unit:key==='ordinary_shares'||key==='diluted_shares'?'shares':'amount'})}</td></tr>`);
+ $('#financialHistory').innerHTML=rows.length?'<table><thead><tr><th>Annual field</th><th>Fiscal period end</th><th>Reported value</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>':'<p>No annual history available.</p>';
+ $('#financialSource').innerHTML=(f.source?esc(f.source)+'. ':'')+'Fiscal period end is not the filing publication date. These snapshots are not point-in-time historical data.'+(f.source_url&&f.source_url.startsWith('https://finance.yahoo.com/quote/')?' <a href="'+esc(f.source_url)+'" target="_blank" rel="noopener noreferrer">View provider financial statements ↗</a>':'');
+ }catch(e){if(token===financialRequest)$('#financialStatus').textContent=e.message;}
+}
+$('#refreshFinancials').onclick=async()=>{if(!explorerSymbol)return;const button=$('#refreshFinancials');button.disabled=true;try{const r=await api('fundamentals',{symbol:explorerSymbol});$('#financialStatus').textContent=r.queued?'Financial refresh queued. Results appear automatically.':r.message;}catch(e){$('#financialStatus').textContent=e.message;}finally{button.disabled=false;}};
 
 initExplorer();
 loadResearch();setInterval(()=>{loadResearch();load().catch(()=>{});},15000);

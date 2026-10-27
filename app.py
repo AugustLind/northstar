@@ -9,6 +9,7 @@ import os
 import hashlib
 import hmac
 import research
+import fundamentals
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -20,6 +21,7 @@ ROOT = Path(__file__).parent
 DB = ROOT / 'data' / 'portfolio.db'
 REFRESH_LOCK = threading.Lock()
 WORKER = None
+FUNDAMENTALS_WORKER = None
 MODEL_LOCK = threading.Lock()
 
 def request_origin_allowed(origin, host):
@@ -207,10 +209,26 @@ def _refresh(extra_symbols=None):
     with ThreadPoolExecutor(max_workers=3) as pool:
         return [error for error in pool.map(one, symbols) if error]
 
-def state():
+def financial_symbols():
     with connect() as db:
-        return {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
+        held = [fundamentals.canonical(r['symbol']) for r in db.execute("SELECT symbol FROM positions WHERE currency='NOK' ORDER BY shares DESC")]
+    return list(dict.fromkeys(held + settings()['universe']))
+
+def financial_view(symbol):
+    canonical = fundamentals.canonical(symbol)
+    record = read_meta('fundamentals:' + canonical)
+    with connect() as db:
+        row = db.execute('SELECT payload FROM quotes WHERE symbol IN (?,?) ORDER BY symbol DESC LIMIT 1', (canonical, symbol)).fetchone()
+    return {**fundamentals.analyse(record, json.loads(row['payload']) if row else None), 'symbol': canonical,
+            'scan': read_meta('fundamentals_progress'), 'attempted': (record or {}).get('attempted')}
+
+def state(include_fundamentals=False):
+    with connect() as db:
+        result = {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
                 'quotes': {r['symbol']: json.loads(r['payload']) for r in db.execute('SELECT * FROM quotes')}}
+        if include_fundamentals:
+            result['fundamentals'] = {r['key'].split(':', 1)[1]: json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'fundamentals:%'")}
+        return result
 
 class Handler(BaseHTTPRequestHandler):
     def cors_headers(self):
@@ -233,6 +251,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True})
         if self.path.startswith('/api/') and not api_authorized(self.headers.get('Authorization')):
             return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
+        if urlsplit(self.path).path == '/api/fundamentals':
+            try:
+                symbol = parse_qs(urlsplit(self.path).query).get('symbol',[''])[0]
+                return self.send_json(financial_view(symbol))
+            except ValueError as error:
+                return self.send_json({'error': str(error)}, 400)
         if urlsplit(self.path).path == '/api/history':
             symbol = parse_qs(urlsplit(self.path).query).get('symbol',[''])[0]
             if not re.fullmatch(r'[A-Z0-9^][A-Z0-9.\-^]{0,19}',symbol):
@@ -301,6 +325,15 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({'error': 'Background worker is not started.'}, 503)
                 WORKER.trigger()
                 return self.send_json({'queued': True})
+            elif self.path == '/api/fundamentals':
+                symbol = fundamentals.canonical(data.get('symbol', ''))
+                if not FUNDAMENTALS_WORKER:
+                    return self.send_json({'error': 'Financial scan worker is not started.'}, 503)
+                cached = read_meta('fundamentals:' + symbol, {})
+                if time.time() - cached.get('attempted', 0) < 60:
+                    return self.send_json({'queued': False, 'message': 'Financial figures were checked within the last minute.'})
+                FUNDAMENTALS_WORKER.request(symbol)
+                return self.send_json({'queued': True})
             elif self.path == '/api/settings':
                 save_settings(data)
                 if WORKER:
@@ -315,7 +348,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not MODEL_LOCK.acquire(blocking=False):
                     return self.send_json({'error': 'A question is already being answered. Please wait.'}, 429)
                 try:
-                    report = research.build_report(state(), config['universe'], config['min_turnover_nok'])
+                    report = research.build_report(state(True), config['universe'], config['min_turnover_nok'])
                     answer = research.local_answer(config['model'], report, question)
                     return self.send_json({'answer': answer, 'model': config['model'], 'generated': time.time()})
                 except research.ModelBusy as error:
@@ -332,15 +365,19 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     connect().close()
-    WORKER = research.ResearchWorker(refresh, state, read_meta, write_meta, settings)
+    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings)
+    FUNDAMENTALS_WORKER = fundamentals.Worker(read_meta, write_meta, financial_symbols)
     # Bind first so a second process cannot start a competing background worker.
     server = ThreadingHTTPServer(('127.0.0.1', 8000), Handler)
     WORKER.start()
+    FUNDAMENTALS_WORKER.start()
     print('Open http://127.0.0.1:8000 — press Ctrl+C to stop', flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         WORKER.stop.set()
         WORKER.wake.set()
+        FUNDAMENTALS_WORKER.stop.set()
+        FUNDAMENTALS_WORKER.wake.set()
     finally:
         server.server_close()
