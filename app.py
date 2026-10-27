@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import research
 import fundamentals
+import announcements
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -22,6 +23,7 @@ DB = ROOT / 'data' / 'portfolio.db'
 REFRESH_LOCK = threading.Lock()
 WORKER = None
 FUNDAMENTALS_WORKER = None
+ANNOUNCEMENTS_WORKER = None
 MODEL_LOCK = threading.Lock()
 
 def request_origin_allowed(origin, host):
@@ -222,12 +224,32 @@ def financial_view(symbol):
     return {**fundamentals.analyse(record, json.loads(row['payload']) if row else None), 'symbol': canonical,
             'scan': read_meta('fundamentals_progress'), 'attempted': (record or {}).get('attempted')}
 
+def announcement_focus(scope='focus'):
+    with connect() as db:
+        held=[fundamentals.canonical(r['symbol']) for r in db.execute("SELECT symbol FROM positions WHERE currency='NOK' AND shares>0")]
+    if scope=='held':
+        return list(dict.fromkeys(held))
+    if scope=='universe':
+        return list(dict.fromkeys(held+settings()['universe']))
+    report=read_meta('report',{})
+    return list(dict.fromkeys(held+report.get('top20',[])))
+
+def announcement_view(symbol=None, scope='focus'):
+    if scope not in ('focus','held','universe'):
+        raise ValueError('Unknown announcement scope.')
+    wanted=[fundamentals.canonical(symbol)] if symbol else announcement_focus(scope)
+    result=announcements.view(read_meta('announcements_feed'),wanted)
+    result.update(focus_symbols=wanted,reviewed_at=read_meta('announcements_reviewed_at',0),
+                  progress=read_meta('announcements_progress'))
+    return result
+
 def state(include_fundamentals=False):
     with connect() as db:
         result = {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
                 'quotes': {r['symbol']: json.loads(r['payload']) for r in db.execute('SELECT * FROM quotes')}}
         if include_fundamentals:
             result['fundamentals'] = {r['key'].split(':', 1)[1]: json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'fundamentals:%'")}
+            result['announcements']=read_meta('announcements_feed',{})
         return result
 
 class Handler(BaseHTTPRequestHandler):
@@ -251,6 +273,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True})
         if self.path.startswith('/api/') and not api_authorized(self.headers.get('Authorization')):
             return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
+        if urlsplit(self.path).path == '/api/announcements':
+            try:
+                query=parse_qs(urlsplit(self.path).query)
+                return self.send_json(announcement_view(query.get('symbol',[None])[0],query.get('scope',['focus'])[0]))
+            except ValueError as error:
+                return self.send_json({'error':str(error)},400)
         if urlsplit(self.path).path == '/api/fundamentals':
             try:
                 symbol = parse_qs(urlsplit(self.path).query).get('symbol',[''])[0]
@@ -273,7 +301,7 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]
@@ -334,6 +362,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({'queued': False, 'message': 'Financial figures were checked within the last minute.'})
                 FUNDAMENTALS_WORKER.request(symbol)
                 return self.send_json({'queued': True})
+            elif self.path == '/api/announcements/refresh':
+                if not ANNOUNCEMENTS_WORKER:
+                    return self.send_json({'error':'Announcement worker is not started.'},503)
+                record=read_meta('announcements_feed',{})
+                if time.time()-record.get('attempted',0)<300:
+                    return self.send_json({'queued':False,'message':'The announcement feed was checked within the last five minutes.'})
+                ANNOUNCEMENTS_WORKER.trigger()
+                return self.send_json({'queued':True})
+            elif self.path == '/api/announcements/reviewed':
+                write_meta('announcements_reviewed_at',time.time())
             elif self.path == '/api/settings':
                 save_settings(data)
                 if WORKER:
@@ -365,12 +403,14 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     connect().close()
-    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings)
+    ANNOUNCEMENTS_WORKER = announcements.Worker(read_meta,write_meta,announcement_focus)
+    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, ANNOUNCEMENTS_WORKER.trigger)
     FUNDAMENTALS_WORKER = fundamentals.Worker(read_meta, write_meta, financial_symbols)
     # Bind first so a second process cannot start a competing background worker.
     server = ThreadingHTTPServer(('127.0.0.1', 8000), Handler)
     WORKER.start()
     FUNDAMENTALS_WORKER.start()
+    ANNOUNCEMENTS_WORKER.start()
     print('Open http://127.0.0.1:8000 — press Ctrl+C to stop', flush=True)
     try:
         server.serve_forever()
@@ -379,5 +419,7 @@ if __name__ == '__main__':
         WORKER.wake.set()
         FUNDAMENTALS_WORKER.stop.set()
         FUNDAMENTALS_WORKER.wake.set()
+        ANNOUNCEMENTS_WORKER.stop.set()
+        ANNOUNCEMENTS_WORKER.wake.set()
     finally:
         server.server_close()

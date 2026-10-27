@@ -14,7 +14,7 @@ out = root / 'pages-dist'
 if out.exists():
     shutil.rmtree(out)
 out.mkdir()
-for name in ['index.html', 'style.css', 'app.js', 'advice.js', 'charts.js', 'favicon.svg']:
+for name in ['index.html', 'style.css', 'app.js', 'advice.js', 'charts.js', 'news.js', 'favicon.svg']:
     shutil.copy2(root / 'static' / name, out / name)
 (out / 'config.js').write_text('window.NORTHSTAR_CONFIG = ' + json.dumps({'apiBase': api}) + ';\n')
 (out / '.nojekyll').touch()

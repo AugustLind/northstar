@@ -76,6 +76,16 @@ class HostingTests(unittest.TestCase):
         headers.update(Authorization='Bearer test-key',Origin='https://attacker.example')
         self.assertEqual(self.request('POST','/api/position',headers)['status'],403)
 
+    def test_announcement_records_and_review_state_require_authentication(self):
+        self.assertEqual(self.request('GET','/api/announcements?symbol=KOG')['status'],401)
+        headers={'Authorization':'Bearer test-key','Content-Type':'application/json'}
+        response=self.request('GET','/api/announcements?symbol=KOG',headers)
+        self.assertEqual(response['status'],200)
+        self.assertEqual(response['body']['focus_symbols'],['KOG.OL'])
+        self.assertEqual(response['body']['status'],'unavailable')
+        self.assertEqual(self.request('POST','/api/announcements/reviewed',headers)['status'],200)
+        self.assertGreater(app.read_meta('announcements_reviewed_at'),0)
+
     def test_pages_build_contains_only_static_assets(self):
         import shutil
         root=Path(__file__).resolve().parent.parent
@@ -83,13 +93,13 @@ class HostingTests(unittest.TestCase):
             staged=Path(tmp)
             (staged/'scripts').mkdir();(staged/'static').mkdir();(staged/'data').mkdir()
             shutil.copy2(root/'scripts/build-pages.py',staged/'scripts/build-pages.py')
-            for name in ['index.html','style.css','app.js','advice.js','charts.js','favicon.svg']:
+            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js','favicon.svg']:
                 shutil.copy2(root/'static'/name,staged/'static'/name)
             (staged/'data/private.db').write_text('private portfolio')
             subprocess.run([sys.executable,str(staged/'scripts/build-pages.py')],check=True,capture_output=True,
                 env={**os.environ,'NORTHSTAR_API_URL':'https://api.example.com'})
             output=staged/'pages-dist'
-            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','favicon.svg','config.js','.nojekyll'})
+            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js','favicon.svg','config.js','.nojekyll'})
             self.assertIn('https://api.example.com',(output/'config.js').read_text())
             self.assertNotIn('private portfolio',''.join(p.read_text() for p in output.iterdir()))
             self.assertNotIn('href="/style.css"',(output/'index.html').read_text())

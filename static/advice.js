@@ -32,7 +32,7 @@ function renderAdvice(){
  $('#rankingCoverage').textContent=`${filtered.length} shown · ${eligible.length} eligible for ranking · ${cards.filter(c=>c.score===null).length} without sufficient data. Top-20 requires liquidity and volatility checks; a ranked stock is not necessarily a buy.`;
  $('#adviceCards').innerHTML=filtered.length?'<div class="tablewrap"><table class="ranktable"><thead><tr><th>Overall rank</th><th>Stock</th><th>Overall</th><th>Trend</th><th>Momentum</th><th>Risk</th><th>Timing</th><th>Liquidity</th><th>Action</th><th></th></tr></thead><tbody>'+filtered.map(c=>`<tr><td>${c.rank||'—'}</td><td><b>${esc(c.symbol)}</b><small>${esc(c.name||'')} ${c.held?'· Owned':''}</small></td><td><b>${c.composite==null?'—':c.composite.toFixed(1)}</b></td>${['Trend','Momentum','Risk','Timing','Liquidity'].map(name=>{const part=(c.analyses||[]).find(p=>p.name===name);return `<td>${part?part.score.toFixed(0):'—'}</td>`;}).join('')}<td><span class="signal ${c.action==='Consider buying'?'buy':''}">${esc(c.action)}</span></td><td><button data-inspect="${esc(c.symbol)}">Explore</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="card">No stocks match this view. Try All analysed stocks, a different search, or wait for scan completion.</div>';
  // Keep detailed charts stable across background polling and tab changes.
- if(explorerSymbol){const selected=cards.find(c=>c.symbol===explorerSymbol);if(selected){renderStockDetail(selected);const cached=explorerCache[explorerSymbol];if(cached&&cached.asof!==selected.asof&&!explorerDrag)selectStock(explorerSymbol,false);else loadFinancials(explorerSymbol);}}
+ if(explorerSymbol){const selected=cards.find(c=>c.symbol===explorerSymbol);if(selected){renderStockDetail(selected);const cached=explorerCache[explorerSymbol];if(cached&&cached.asof!==selected.asof&&!explorerDrag)selectStock(explorerSymbol,false);else {loadFinancials(explorerSymbol);if(typeof loadStockAnnouncements==='function')loadStockAnnouncements(explorerSymbol);}}}
  else if(filtered.length&&filtered[0].score!==null){selectStock(filtered[0].symbol,false);}
  const compare=$('#compareStock'),previous=compare.value;compare.innerHTML='<option value="">No comparison</option>'+cards.filter(c=>c.score!==null&&c.symbol!==explorerSymbol).map(c=>`<option value="${esc(c.symbol)}">${esc(c.symbol)}</option>`).join('');compare.value=previous;
 }
@@ -44,7 +44,7 @@ $('#analyze').onclick=async()=>{try{await api('analyze',{});$('#researchStatus')
 $('#researchSettings').onsubmit=async e=>{e.preventDefault();const f=e.target;try{await api('settings',{universe:f.elements.universe.value.split(',').map(s=>s.trim()).filter(Boolean),interval_minutes:Number(f.elements.interval_minutes.value),model:f.elements.model.value,min_turnover_nok:Number(f.elements.min_turnover_nok.value),llm_enabled:f.elements.llm_enabled.checked});$('#settingsMessage').textContent='Saved. New analysis queued.';await loadResearch();}catch(e){$('#settingsMessage').textContent=e.message;}};
 $('#askForm').onsubmit=async e=>{e.preventDefault();askingModel=true;$('#askButton').disabled=true;$('#answer').textContent='Asking your local model…';try{const r=await api('ask',{question:$('#question').value});$('#answer').textContent=r.answer+'\n\n'+r.model+' · '+timeLabel(r.generated);}catch(e){$('#answer').textContent=e.message;}finally{askingModel=false;loadResearch();}};
 for(const b of document.querySelectorAll('[data-tab]'))b.addEventListener('click',()=>{history.replaceState({},'','#'+b.dataset.tab);});
-if(location.pathname==='/recommendations'||location.hash==='#recommendations'||location.hostname.endsWith('.github.io'))document.querySelector('[data-tab="recommendations"]').click();
+const requestedTab=location.hash.slice(1);if(['recommendations','portfolio','announcements','briefing','method'].includes(requestedTab))document.querySelector('[data-tab="'+requestedTab+'"]').click();else if(location.pathname==='/recommendations'||location.hostname.endsWith('.github.io'))document.querySelector('[data-tab="recommendations"]').click();
 let explorerSymbol='',explorerCache={},explorerWindow={start:0,end:1},explorerCompare='',explorerDrag=null,explorerLoad=0;
 function currentHistory(){return (explorerCache[explorerSymbol]||{}).history||[];}
 function renderStockDetail(c){
@@ -55,7 +55,7 @@ function renderStockDetail(c){
 async function selectStock(symbol,scroll){
  explorerSymbol=symbol;const token=++explorerLoad;const card=researchView&&researchView.report&&researchView.report.cards.find(c=>c.symbol===symbol);if(card)renderStockDetail(card);
  $('#chartPlot').innerHTML='<p>Loading daily price and volume history…</p>';$('#chartTooltip').textContent='';
- loadFinancials(symbol);
+ loadFinancials(symbol);if(typeof loadStockAnnouncements==='function')loadStockAnnouncements(symbol);
  try{const quote=await api('history?symbol='+encodeURIComponent(symbol));if(token!==explorerLoad)return;explorerCache[symbol]=quote;const n=(quote.history||[]).length;explorerWindow={start:Math.max(0,n-252),end:Math.max(0,n-1)};explorerCompare='';$('#compareStock').value='';drawExplorer();if(scroll&&$('#explorer').scrollIntoView)$('#explorer').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){if(token===explorerLoad)$('#chartPlot').textContent=e.message;}
 }
 function drawExplorer(){

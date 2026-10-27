@@ -10,10 +10,11 @@ const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV
 const requests=[];
 const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console,window:{NORTHSTAR_CONFIG:{apiBase:'https://api.example.com'}},sessionStorage:{getItem(k){return k==='northstar-key'?'test-access-key':null;},setItem(){},removeItem(){}},location:{pathname:'/recommendations',hostname:'owner.github.io',hash:''},history:{replaceState(){}},setInterval(){},setTimeout(){},confirm(){return false;},
  document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-tab]'){const n=element();n.dataset.tab='recommendations';return [n];}return [];},createElement:element},
- fetch:async (path,options)=>{requests.push({path,options});return {ok:true,json:async()=>path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
+ fetch:async (path,options)=>{requests.push({path,options});return {ok:true,json:async()=>path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('static/app.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/charts.js','utf8'),context);
+vm.runInContext(fs.readFileSync('static/news.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/advice.js','utf8'),context);
 setImmediate(()=>{
  try{
@@ -27,6 +28,11 @@ setImmediate(()=>{
  assert(nodes['#financialStatus'].textContent.includes('available'));
  assert(nodes['#financialMetrics'].innerHTML.includes('Revenue'));
  assert(nodes['#financialSignals'].innerHTML.includes('Annual revenue increased.'));
+ assert(nodes['#newsCount'].textContent===1);
+ assert(nodes['#newsItems'].innerHTML.includes('Q3 results &lt;untrusted&gt;'));
+ assert(!nodes['#newsItems'].innerHTML.includes('<untrusted>'));
+ assert(nodes['#stockNewsItems'].innerHTML.includes('Q3 results &lt;untrusted&gt;'));
+ assert(vm.runInContext("officialNoticeUrl('https://attacker.example/message/1')",context)==='');
  const svg=vm.runInContext("chart({symbol:'<script>',currency:'NOK',history:"+JSON.stringify(history)+"},'3M')",context);
  assert(!svg.includes('<script>'));
  assert(svg.includes('&lt;script&gt;'));

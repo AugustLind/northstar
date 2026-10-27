@@ -40,7 +40,7 @@ The explorer supports two years of history; line/candlestick views; 1/3/6/12/24-
 
 Charts are drawn locally with native SVG and no third-party chart scripts. Full histories load on demand; normal polling sends summaries only. Scan progress reports downloaded/failed counts. Repeated background scans reuse quotes fetched within 20 minutes when they already have the new history format. Throttled provider calls get one bounded retry.
 
-This remains an **unvalidated technical ranking**. Annual company-financial snapshots are supplementary; they do not yet change ranks or establish complete business quality. News and suitability are not assessed, and rankings have not been backtested.
+This remains an **unvalidated technical ranking**. Annual company-financial snapshots are supplementary; they do not yet change ranks or establish complete business quality. NewsWeb headline metadata is presented separately; full-report interpretation and suitability are not assessed, and rankings have not been backtested.
 
 ## Company fundamentals (first improvement)
 
@@ -51,6 +51,18 @@ Data comes from Yahoo's unofficial annual financial timeseries endpoint, the sam
 Missing numbers remain unavailable, including when some other fields are known. Ratios require matching fiscal dates and known matching currencies. Annual growth requires a comparable adjacent year. Free cash flow is reported where available; otherwise derived from operating cash flow minus absolute capex only for matching dates/currencies. Price divided by positive annual diluted EPS is labelled an annual P/E proxy, never TTM P/E; it is omitted for stale quotes or currency mismatch. Debt-to-equity is omitted for non-positive equity and must be interpreted in sector context. Share-count increases are flagged for review, not declared dilution, because splits and acquisitions can change counts.
 
 The panel exposes Available / Partial / Stale / Unavailable coverage and the provider link. Annual periods older than 550 days or records not successfully retrieved in seven days are marked stale. Refresh errors retain the original successful data and dates. Records are private entries in the existing SQLite metadata table and survive deployments. AI receives only a compact, dated financial summary where available and cannot invent missing metrics. No financial score is silently blended into technical rankings.
+
+## Company announcements and earnings updates (second improvement)
+
+The **Announcements** tab shows exchange-hosted issuer notices from Oslo Børs NewsWeb, with publication times in Europe/Oslo, original source links, correction relationships, and topic labels. It defaults to your NOK holdings plus the current top 20; switch to holdings only or the configured universe. Each stock’s explorer also shows its latest covered notices and extracted reporting dates.
+
+A separate worker refreshes every 30 minutes. It fetches seven calendar days of NewsWeb metadata, splitting overflowing date windows until daily granularity. A single-day overflow is marked partial rather than silently treated as complete. Notice IDs deduplicate updates; retained metadata is bounded to 30 days and 3,000 notices. Coverage/status, latest successful retrieval and errors stay visible. Failed refreshes preserve the original data and dates. The API returns at most the newest 100 matching retained notices; this is not a complete announcement archive.
+
+The daily summary counts notices published in the last 24 hours and highlights earnings/business updates and headline review flags. Labels are deterministic rules for guidance/risk, reporting calendars, earnings, capital/financing, corporate actions, contracts, ownership, distributions and governance. They do not establish sentiment, an earnings beat/miss or future price impact. Superseded notices are excluded from the daily digest. You can mark notices reviewed; this does not delete them.
+
+Upcoming report/presentation dates are extracted only from explicit full dates on the same text line as a reporting/results label. Missing years, ambiguous multi-date sentences and invalid dates are ignored. At most eight relevant new calendar notices are checked per cycle. Bodies are processed in memory for calendar facts only; full text and attachments are not retained, downloaded or summarised. A newer full financial calendar replaces previously extracted calendar entries. All displayed dates link to the issuer notice and remain subject to subsequent corrections. No extracted event does not mean no event is scheduled.
+
+This is the public NewsWeb website’s undocumented data service, not a licensed completeness guarantee. General publisher news is not ingested. The existing access key protects these API responses. Headlines, dates and limited classifications can be supplied to local AI as evidence, with explicit instructions that headlines are not full reports and cannot override computed ranks. AI input remains bounded to avoid overloading the one-CPU server.
 
 ## Free local AI
 
@@ -64,7 +76,7 @@ bash scripts/setup-local-ai.sh
 
 This downloads `qwen2.5:3b` (approximately 1.9 GB; [model details and licence](https://ollama.com/library/qwen2.5:3b)). Enable **Generate local AI briefings** in Research settings. Choose a different installed Ollama model there if preferred. Hardware and electricity are your costs; no paid API is used.
 
-Northstar calls only `http://127.0.0.1:11434/api/generate`, with a three-minute timeout. It generates a briefing on each research cycle, and you can ask questions on the page. Only the measured report and your notebook notes are supplied; the model has no live web/news tool. AI text is labelled separately from computed signals and cannot change actions. If Ollama is unavailable, the deterministic screen still runs and the page explains the missing AI connection.
+Northstar calls only `http://127.0.0.1:11434/api/generate`, with a three-minute timeout. It generates a briefing on each research cycle, and you can ask questions on the page. Only the measured report and your notebook notes are supplied; the model has no live web tool. It can use cached NewsWeb headline metadata, not full notice text. AI text is labelled separately from computed signals and cannot change actions. If Ollama is unavailable, the deterministic screen still runs and the page explains the missing AI connection.
 
 AI input is limited to eight selected stocks (named stocks in your question first, then holdings, then ranked candidates), with short notes and rounded metrics. Coverage is included in the prompt; the model does not receive the entire scan’s full records or chart histories. Responses are capped at 300 generated tokens using a 4096-token context. While inference runs, the page disables additional questions. Connection failures, missing models, busy inference and timeouts have separate messages.
 
