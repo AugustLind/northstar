@@ -48,14 +48,14 @@ def is_fresh(q, now=None):
                 -300 <= now - q['asof'] < 4 * 86400)
 
 
-def screen(symbol, q, position=None, min_turnover_nok=250000):
+def screen(symbol, q, position=None, min_turnover_nok=250000, as_of=None):
     held = bool(position and position['shares'] > 0)
     result = {'symbol': symbol, 'held': held, 'action': 'Insufficient data', 'score': None,
               'reasons': [], 'asof': q.get('asof') if q else None,
               'source': q.get('source') if q else None, 'metrics': {}, 'history': [],
               'thesis': (position or {}).get('thesis', ''),
               'review': (position or {}).get('review', '')}
-    if not is_fresh(q):
+    if not is_fresh(q, as_of):
         result['reasons'] = ['No fresh quote. No actionable signal generated.']
         return result
     if position and q.get('currency') != position['currency']:
@@ -71,7 +71,7 @@ def screen(symbol, q, position=None, min_turnover_nok=250000):
     history = [p for p in q.get('history', []) if isinstance(p.get('close'), (int, float))
                and math.isfinite(p['close']) and p['close'] > 0]
     result['history'] = history
-    if len(history) < 200 or time.time() - history[-1]['time'] > 4 * 86400:
+    if len(history) < 200 or (time.time() if as_of is None else as_of) - history[-1]['time'] > 4 * 86400:
         result['reasons'] = ['At least 200 recent daily observations required. Refresh to download history.']
         return result
     closes = [p['close'] for p in history]

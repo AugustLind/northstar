@@ -15,6 +15,7 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync('static/app.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/charts.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/news.js','utf8'),context);
+vm.runInContext(fs.readFileSync('static/validation.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/advice.js','utf8'),context);
 setImmediate(()=>{
  try{
@@ -40,6 +41,10 @@ setImmediate(()=>{
  assert.strictEqual(nodes['#askButton'].disabled,true);
  assert(nodes['#commentary'].textContent.includes('Ollama is writing'));
  assert(!nodes['#commentary'].textContent.includes('Install Ollama'));
+ vm.runInContext("renderValidation({generated:1,stocks:1,requested:2,sessions:2,decisions:1,trades:1,return_pct:2,benchmark_pct:3,max_drawdown_pct:-1,cost_pct_initial:.2,limits:'Limited coverage',curve:[{time:1600000000,close:1,benchmark:1},{time:1600086400,close:1.02,benchmark:1.03}]})",context);
+ assert(nodes['#validationChart'].innerHTML.includes('<svg'));
+ assert(nodes['#validationLimits'].textContent==='Limited coverage');
+ assert(nodes['#validationPoints'].innerHTML.includes('102.00'));
  console.log('UI contract and chart rendering smoke checks passed (not browser QA).');
  }catch(error){console.error(error);process.exitCode=1;}
 });

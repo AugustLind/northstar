@@ -138,3 +138,11 @@ node tests/test_ui.js
 ```
 
 Tests use temporary databases and mocked providers. They cover indicator actions, missing/stale data, currency checks, Oslo suffix handling, liquidity, settings, provider parsing, background analysis persistence and local AI requests. External Yahoo/Ollama connectivity, browser rendering, GitHub push and service startup must be checked on the host where those services are available.
+
+### Historical experiments and forward tracking
+
+The Validation & paper tracking tab runs a monthly, equal-weight top-20 technical-ranking experiment on cached Oslo histories. Decisions use only bars available through each decision date and execute at the next common session close. Empty selections remain cash. One-way costs default to an illustrative 20 basis points and are configurable; these are not Nordnet fee estimates. Results include return, drawdown, simulated weight changes, cost drag and daily strategy/benchmark values. The benchmark buys and holds the same complete-history stock basket. Neither side assumes terminal liquidation.
+
+This is a survivor-biased, complete-case experiment on today's universe, not validated market performance or a point-in-time fundamental/news backtest. Adjusted historical prices can change; adjusted close times raw volume approximates historical turnover. Incomplete histories and missing common sessions are excluded. Taxes, cash interest, minimum fees and market impact are omitted. Histories cover roughly two years with a 200-observation warm-up.
+
+Every newly completed scan automatically appends an immutable recommendation cohort to SQLite, including capture time, ranks, actions, scores and quote timestamps. No existing report is backdated. Paper tracking uses the first later daily close as hypothetical entry and only reports returns after another later observation, with 20 basis points charged each way. Missing members prevent cohort totals. Independent cohorts overlap; they are not a funded, rebalanced account and never modify real holdings. The UI shows the latest 60 cohorts; earlier rows remain in the server database.

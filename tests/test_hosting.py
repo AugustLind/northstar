@@ -93,13 +93,13 @@ class HostingTests(unittest.TestCase):
             staged=Path(tmp)
             (staged/'scripts').mkdir();(staged/'static').mkdir();(staged/'data').mkdir()
             shutil.copy2(root/'scripts/build-pages.py',staged/'scripts/build-pages.py')
-            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js','favicon.svg']:
+            for name in ['index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js','favicon.svg']:
                 shutil.copy2(root/'static'/name,staged/'static'/name)
             (staged/'data/private.db').write_text('private portfolio')
             subprocess.run([sys.executable,str(staged/'scripts/build-pages.py')],check=True,capture_output=True,
                 env={**os.environ,'NORTHSTAR_API_URL':'https://api.example.com'})
             output=staged/'pages-dist'
-            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js','favicon.svg','config.js','.nojekyll'})
+            self.assertEqual(set(p.name for p in output.iterdir()),{'index.html','style.css','app.js','advice.js','charts.js','news.js', 'validation.js','favicon.svg','config.js','.nojekyll'})
             self.assertIn('https://api.example.com',(output/'config.js').read_text())
             self.assertNotIn('private portfolio',''.join(p.read_text() for p in output.iterdir()))
             self.assertNotIn('href="/style.css"',(output/'index.html').read_text())

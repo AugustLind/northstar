@@ -11,6 +11,7 @@ import hmac
 import research
 import fundamentals
 import announcements
+import validation
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -294,6 +295,11 @@ class Handler(BaseHTTPRequestHandler):
             if not row:
                 return self.send_json({'error':'History is not downloaded yet. Wait for the scan to finish.'},404)
             return self.send_json(json.loads(row['payload']))
+        if self.path == '/api/validation':
+            with connect() as db:
+                db.execute('CREATE TABLE IF NOT EXISTS paper_snapshots (generated REAL PRIMARY KEY, captured REAL NOT NULL, payload TEXT NOT NULL)')
+                paper = validation.paper_view(db, state()['quotes'])
+            return self.send_json({'historical':read_meta('validation_report'), 'paper':paper})
         if self.path == '/api/research':
             return self.send_json(WORKER.view() if WORKER else {'report': read_meta('report'), 'settings': settings(), 'worker': {}})
         if self.path == '/api/state':
@@ -301,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]
@@ -348,6 +354,10 @@ class Handler(BaseHTTPRequestHandler):
                     WORKER.trigger()
             elif self.path == '/api/refresh':
                 return self.send_json({'errors': refresh()})
+            elif self.path == '/api/validation':
+                result = validation.evaluate(state()['quotes'], settings()['universe'], data.get('cost_bps',20), settings()['min_turnover_nok'])
+                write_meta('validation_report',result)
+                return self.send_json(result)
             elif self.path == '/api/analyze':
                 if not WORKER:
                     return self.send_json({'error': 'Background worker is not started.'}, 503)
@@ -401,10 +411,18 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, TypeError, KeyError) as error:
             self.send_json({'error': str(error)}, 400)
 
+def report_ready():
+    report = read_meta('report')
+    if report:
+        with connect() as db:
+            validation.capture(db,report)
+    if ANNOUNCEMENTS_WORKER:
+        ANNOUNCEMENTS_WORKER.trigger()
+
 if __name__ == '__main__':
     connect().close()
     ANNOUNCEMENTS_WORKER = announcements.Worker(read_meta,write_meta,announcement_focus)
-    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, ANNOUNCEMENTS_WORKER.trigger)
+    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, report_ready)
     FUNDAMENTALS_WORKER = fundamentals.Worker(read_meta, write_meta, financial_symbols)
     # Bind first so a second process cannot start a competing background worker.
     server = ThreadingHTTPServer(('127.0.0.1', 8000), Handler)
