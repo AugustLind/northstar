@@ -8,11 +8,14 @@ if [[ ! "$task_owner" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$ ]]; then echo "Invalid 
 read -r -p 'Path to the Oracle SSH private key on this computer: ' task_key
 task_key="$(python3 -c 'import os,sys; print(os.path.expanduser(sys.argv[1]))' "$task_key")"
 if [[ ! -f "$task_key" ]]; then echo 'Private key file not found.' >&2; exit 1; fi
-read -r -p 'Oracle public IP [152.70.43.0]: ' task_host
-task_host="${task_host:-152.70.43.0}"
-if [[ ! "$task_host" =~ ^[0-9.]+$ ]]; then echo 'Enter the Oracle IPv4 address.' >&2; exit 1; fi
-read -r -p 'Oracle HTTPS hostname [152-70-43-0.sslip.io]: ' task_domain
-task_domain="${task_domain:-152-70-43-0.sslip.io}"
+read -r -p 'Oracle public IPv4 address: ' task_host
+if ! python3 -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$task_host" >/dev/null 2>&1; then
+  echo 'Enter a valid Oracle IPv4 address.' >&2
+  exit 1
+fi
+task_default_domain="${task_host//./-}.sslip.io"
+read -r -p "Oracle HTTPS hostname [$task_default_domain]: " task_domain
+task_domain="${task_domain:-$task_default_domain}"
 if [[ ! "$task_domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,63}$ ]]; then echo 'Enter a valid hostname.' >&2; exit 1; fi
 # Reuse the already trusted SSH connection to obtain the server's public host key.
 task_public_host_key="$(ssh -i "$task_key" -o StrictHostKeyChecking=yes "ubuntu@$task_host" 'cat /etc/ssh/ssh_host_ed25519_key.pub')"

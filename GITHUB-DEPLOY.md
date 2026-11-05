@@ -15,14 +15,14 @@ First allow inbound **TCP 80 and 443** for the Oracle VM in its security list/NS
 From your own computer, in the repository containing these files:
 
 ```bash
-cd ~/repos/stockPredicter/northstar
+cd /path/to/northstar
 gh auth login -h github.com
 bash scripts/setup-github-deploy.sh
 ```
 
 The helper asks for the SSH key path, Oracle IP and API hostname. It obtains the server's public host key through your already trusted SSH connection, stores deployment secrets in GitHub Actions, uploads tracked source once, and runs the HTTPS setup on Oracle. Your private key is not printed or committed. This key grants the workflow the same server access as that SSH account; use a dedicated key if you want to revoke deployment independently.
 
-If you have no domain, the suggested free hostname is **152-70-43-0.sslip.io**. This service resolves names containing the IP to that IP; you do not register a domain. It is a third-party DNS service and certificate issuance/availability are not guaranteed. [Service documentation](https://sslip.io/). If your VM IP changes, update DNS/configuration and the GitHub variables.
+If you have no domain, the helper suggests **`<your-ip-with-dashes>.sslip.io`**, derived from the server IP you enter. This service resolves names containing the IP to that IP; you do not register a domain. It is a third-party DNS service and certificate issuance/availability are not guaranteed. [Service documentation](https://sslip.io/). If your VM IP changes, update DNS/configuration and the GitHub variables.
 
 In GitHub, open **Settings → Pages → Source → GitHub Actions**. GitHub Free requires a public repository for Pages; supported paid plans also support private source repositories. The workflow does not change repository visibility. The dashboard's static files are public, but API records require your access key.
 

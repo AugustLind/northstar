@@ -4,15 +4,15 @@ Target: Ubuntu 24.04 aarch64 VM, 1 OCPU, 6 GB RAM. SSH user: ubuntu.
 
 ## Copy the code from your own computer
 
-No GitHub authentication is needed to transfer source with SSH. On your **own computer**, replace `/path/to/key` with the SSH key you already use:
+Replace `YOUR_ORACLE_IP` with your server address and `/path/to/northstar` with your checkout. No GitHub authentication is needed to transfer source with SSH. On your **own computer**, replace `/path/to/key` with the SSH key you already use:
 
 ```bash
-cd ~/repos/stockPredicter/northstar
-tar --exclude='data' --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' -czf /tmp/northstar-source.tar.gz .
-scp -i /path/to/key /tmp/northstar-source.tar.gz ubuntu@152.70.43.0:/home/ubuntu/
+cd /path/to/northstar
+git archive --format=tar.gz --output=/tmp/northstar-source.tar.gz HEAD
+scp -i /path/to/key /tmp/northstar-source.tar.gz ubuntu@YOUR_ORACLE_IP:/home/ubuntu/
 ```
 
-This archive excludes your existing portfolio. To migrate it, stop the local app and separately copy `data/portfolio.db` into the server checkout's `data/` directory before running the installer. It stays private and ignored by Git. Do not overwrite a server database after adding holdings there.
+The archive contains committed source only; commit intended source changes before creating it. It excludes untracked/ignored local credentials and your existing portfolio. Review tracked files before transferring it. To migrate it, stop the local app and separately copy `data/portfolio.db` into the server checkout's `data/` directory before running the installer. It stays private and ignored by Git. Do not overwrite a server database after adding holdings there.
 
 ## Install on the Oracle server
 
@@ -32,7 +32,7 @@ The script uses sudo to install Python prerequisites and, if missing, Ollama fro
 From **your own computer**, keep this tunnel open:
 
 ```bash
-ssh -i /path/to/key -N -L 18080:127.0.0.1:8000 ubuntu@152.70.43.0
+ssh -i /path/to/key -N -L 18080:127.0.0.1:8000 ubuntu@YOUR_ORACLE_IP
 ```
 
 Open **http://127.0.0.1:18080/recommendations**. This is the full remote application, not a static report. SSH encrypts traffic to the server; no application ports need exposing. Ollama generation on one CPU can be slow. Charts and computed advice publish before the model finishes; inference has a three-minute timeout.
