@@ -34,7 +34,6 @@ $('#ledgerApply').onclick=async()=>{
  catch(e){$('#ledgerMessage').textContent=e.message;$('#ledgerApply').disabled=false;}
 };
 $('#ledgerFile').onchange=()=>{ledgerPreview=null;ledgerTable=null;$('#ledgerApply').disabled=true;$('#ledgerRows').innerHTML='';};
-for(const b of document.querySelectorAll('[data-tab="activity"]'))b.addEventListener('click',loadLedger);
 
 $('#checkBrokerCash').onclick=async()=>{try{if(!$('#brokerCash').value)throw Error('Enter Nordnet’s available cash balance.');const r=await api('ledger/reconcile',{cash_nok:Number($('#brokerCash').value)});$('#brokerCashStatus').textContent=(r.mismatch_active?'Mismatch: ':'Matched: ')+'Nordnet '+money(r.reported_cash)+' · Tracked '+money(r.tracked_cash)+' · Difference '+money(r.difference)+'.';await loadLedger();if(typeof loadQuantityPlan==='function')loadQuantityPlan();}catch(e){$('#brokerCashStatus').textContent=e.message;}};
 

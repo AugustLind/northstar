@@ -19,6 +19,6 @@ async function loadQuantityPlan(){
  try{const plan=await api('trade-plan');if(token===quantityPlanRequest)renderQuantityPlan(plan);}
  catch(e){if(token!==quantityPlanRequest)return;for(const id of ['quantityPlanMain','quantityPlanFit']){const node=$('#'+id);if(node)node.textContent='Share-count plan unavailable: '+e.message;}}
 }
-for(const b of document.querySelectorAll('[data-plan-settings]'))b.onclick=()=>{document.querySelector('[data-tab="fit"]').click();if($('#fitPreferences').scrollIntoView)$('#fitPreferences').scrollIntoView({behavior:'smooth',block:'start'});};
+for(const b of document.querySelectorAll('[data-plan-settings]'))b.onclick=()=>{openWorkspace('fit');if($('#fitPreferences').scrollIntoView)$('#fitPreferences').scrollIntoView({behavior:'smooth',block:'start'});};
 
-for(const b of document.querySelectorAll('[data-view-plan]'))b.onclick=()=>{document.querySelector('[data-tab="recommendations"]').click();loadQuantityPlan();if($('#quantityPlanMain').scrollIntoView)$('#quantityPlanMain').scrollIntoView({behavior:'smooth',block:'start'});};
+for(const b of document.querySelectorAll('[data-view-plan]'))b.onclick=()=>{document.querySelector('[data-tab="recommendations"]').click();loadQuantityPlan();const group=$('#quantityPlanMain').closest('details');if(group)group.open=true;if($('#quantityPlanMain').scrollIntoView)$('#quantityPlanMain').scrollIntoView({behavior:'smooth',block:'start'});};

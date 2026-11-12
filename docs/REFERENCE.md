@@ -104,7 +104,7 @@ systemctl --user restart northstar
 systemctl --user disable --now northstar
 ```
 
-The computer must be awake and connected to fetch data. This service does not install/start Ollama; its official Linux installation supports a separate Ollama service. No email, mobile push or broker execution is implemented.
+The computer must be awake and connected to fetch data. This service does not install/start Ollama; its official Linux installation supports a separate Ollama service. Optional server-side email is described below. Mobile push and broker execution are not implemented.
 
 ## Portfolio and storage
 
@@ -193,7 +193,7 @@ The helper asks for your provider's SMTP hostname, port, TLS mode, username, sen
 
 In **Daily overview → Email alerts**, select **Enable email alerts** if paused, then **Send test email**. Check the status, inbox and spam folder. Settings, pause and test controls require the existing Northstar access key. Pause persists across restarts; a message already in flight may still arrive. Status reports acceptance by the SMTP server, which does not guarantee inbox delivery.
 
-The email worker checks once per minute and wakes after completed scans. It uses confirmed, nonzero quantities from the current shared-budget plan, including configured confirmation/cooldown rules, cash, allocation, reconciliation and fee constraints. Set those portfolio inputs before expecting stock alerts. A scan is still scheduled at your configured research interval; email polling does not create new market data. Notifications include ticker, direction, shares, quote/report dates and the sizing reason. They exclude your access key, SMTP credentials, full portfolio and AI commentary. Up to 50 updates are grouped into one email; tests are separate. Identical change IDs and small sizing drift are deduplicated across scans and restarts. Important updates receive new IDs. Withdrawals are emailed only when the original suggestion was accepted by the mail server.
+The email worker checks once per minute and wakes after completed scans. It uses confirmed, nonzero quantities from the current shared-budget plan, including configured confirmation/cooldown rules, cash, allocation, reconciliation and fee constraints. Set those portfolio inputs before expecting stock alerts. A scan is still scheduled at your configured research interval; email polling does not create new market data. Notifications include ticker, direction, shares, quote/report dates and the sizing reason. They exclude your access key, SMTP credentials, full portfolio and AI commentary. Up to 50 updates are grouped into one email; tests are separate, take priority over stock updates, and can send even if research or plan generation fails. Identical change IDs and small sizing drift are deduplicated across scans and restarts. Important updates receive new IDs. Withdrawals are emailed only when the original suggestion was accepted by the mail server.
 
 An SQLite outbox preserves failed deliveries and retries with backoff from one minute up to one hour. Each retry rechecks the live plan; outdated, stale, withdrawn, conflicting or newly blocked suggestions are cancelled. Pending withdrawal notices survive subsequent scans while the original suggestion remains absent. A pause cancels pending deliveries; resuming may email still-current suggestions that were never sent. Sent event IDs remain in the private database for deduplication, and changing the provider/sender/recipient starts a separate delivery history. A crash or ambiguous SMTP timeout after acceptance can cause a duplicate; SMTP does not provide exactly-once delivery. TLS certificate checks are mandatory; only STARTTLS and implicit TLS are supported. No new Python package is needed.
 
@@ -211,3 +211,54 @@ For manual configuration, the service loads these variables from `/etc/northstar
 | `NORTHSTAR_EMAIL_TO` | One recipient address |
 
 After manual edits, restart the service. `GET /api/email` exposes only configuration readiness, safe delivery errors, queue counts and timestamps; it never returns SMTP credentials or email addresses. `POST /api/email/settings` accepts `{ "enabled": true }` or `{ "enabled": false }`. `POST /api/email/test` queues a test, limited to once per minute. No public email-sending endpoint exists.
+
+
+## Research workspace and expanded diagnostics
+
+The dashboard has four workspaces: **Overview**, **Research**, **Portfolio**, and
+**Strategy lab**. Overview groups priority reviews, email, issuer notices and
+methodology. Portfolio groups holdings, allocation and transaction reconciliation.
+Legacy hashes such as `#fit`, `#activity` and `#announcements` still open the
+appropriate workspace and expand their section.
+
+Research retains the existing five-component ranking and entry/exit policy.
+Additional diagnostics do **not** alter rankings, share quantities or email rules.
+A new completed scan populates them in saved reports; older reports remain readable.
+
+- Returns use 5, 21, 63, 126 and 252 daily intervals. Missing horizons stay unavailable.
+- Volatility uses sample standard deviation of daily simple returns, annualised
+  with 252 sessions. Rolling chart volatility uses 20 return observations.
+- Risk diagnostics use at most 252 daily returns (253 closes). Drawdown measures
+  peak-to-trough loss; recovery measures the gain needed to regain the window peak.
+  Underwater duration counts observed sessions, with history truncated at the window.
+- Historical daily 95% VaR uses the linearly interpolated empirical 5th percentile.
+  Expected shortfall averages exactly the worst 5% probability mass, including a
+  fractional boundary observation. Both are displayed as nonnegative losses and
+  describe the sample; neither is a forecast or an upper bound on loss.
+- ATR and ADX use Wilder's 14-interval smoothing and require valid high/low/close
+  history. ADX measures directional strength, not whether the direction is positive.
+  Relative volume divides the latest observation by the preceding 20-session mean;
+  missing volume is not treated as zero.
+- Trend fit is the R-squared of a 63-close log-price regression. Efficiency divides
+  the absolute 20-interval net change by total absolute changes. Range position uses
+  up to 252 closes, not intraday highs/lows or projected support/resistance.
+- The chart supports price/log/percentage scales, EMA20, MA50/200, Bollinger bands,
+  volume, RSI, MACD, drawdown and rolling-volatility panels. MACD lines require 26
+  observations; its signal requires 34. Scroll/keyboard zoom, drag/keyboard pan,
+  date fields and a full-history position slider share the same selected window.
+- Selected-period statistics recalculate from displayed closes. Risk ratios assume
+  zero risk-free return and exclude fees. At least 20 return observations are needed
+  for VaR, expected shortfall and Sharpe display.
+- Comparisons align on shared UTC dates and anchor at the subject's close on the
+  first shared date. Missing dates remain gaps. Return differences use that shared
+  period; correlation and beta require at least 20 shared-date return intervals.
+  Gaps can make these intervals longer than one trading session.
+
+Loaded-history drawdown in the chart panel can include a peak before the visible
+window. Selected-period maximum drawdown starts at the first displayed close.
+The price basis, provider timestamp and sample sizes remain visible. Adjusted
+provider prices may reflect distributions and corporate actions; these statistics
+are not a reconstructed account performance record.
+
+Indicator references: [ATR and true range](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/atr),
+[historical expected shortfall methodology](https://arxiv.org/abs/2005.12593).

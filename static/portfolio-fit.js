@@ -45,4 +45,3 @@ async function previewFitPurchase(){
 $('#fitPreviewForm').onsubmit=e=>{e.preventDefault();previewFitPurchase();};
 $('#fitCandidates').onclick=e=>{if(!e.target.dataset.fitPreview)return;$('#fitPreviewSymbol').value=e.target.dataset.fitPreview;$('#fitPreviewAmount').value=fitView.profile.purchase_nok;previewFitPurchase();if($('#fitPreviewForm').scrollIntoView)$('#fitPreviewForm').scrollIntoView({behavior:'smooth',block:'start'});};
 $('#refreshFit').onclick=loadPortfolioFit;
-for(const b of document.querySelectorAll('[data-tab="fit"]'))b.addEventListener('click',loadPortfolioFit);

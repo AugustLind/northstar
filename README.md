@@ -32,7 +32,11 @@ not guaranteed; offline operation depends on previously cached data.
 
 - Screens an editable universe of Oslo stocks using technical signals and
   liquidity checks, with a top-20 view passing the shared entry policy.
-- Draws interactive price, volume, and indicator charts in the browser.
+- Groups daily reviews, research, portfolio tools and strategy experiments into four workspaces.
+- Draws interactive price, log-scale, volume, momentum, drawdown and volatility charts,
+  with period statistics and shared-date company comparisons.
+- Measures return horizons, ATR/ADX, trend consistency, volume and historical tail risk
+  alongside the existing technical entry rules.
 - Shows available annual financial data, company metadata, and issuer notices
   with coverage and freshness information.
 - Tracks manually entered holdings, cash, review notes, and transaction records,

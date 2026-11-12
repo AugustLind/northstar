@@ -245,13 +245,26 @@ class Worker:
             config = self.config()
             if not config['configured'] or not config['enabled'] or not self.read('email_enabled', True):
                 return
-            report, plan = self.current_plan()
+            # Test delivery must work even if research/plan generation is broken.
+            with self.connect() as db:
+                schema(db)
+                test_pending = db.execute("""SELECT 1 FROM email_outbox WHERE target=? AND kind='test'
+                    AND created>=? AND next_attempt<=? AND
+                    (status='pending' OR (status='sending' AND updated<?)) LIMIT 1""",
+                    (config['target'], now-3600, now, now-LEASE_SECONDS)).fetchone()
+            if not test_pending:
+                report, plan = self.current_plan()
             with self.connect() as db:
                 schema(db)
                 db.execute('BEGIN IMMEDIATE')
                 db.execute("UPDATE email_outbox SET status='pending' WHERE status='sending' AND updated<?", (now-LEASE_SECONDS,))
-                sync(db, report, plan, config, now)
-                events = db.execute("SELECT * FROM email_outbox WHERE target=? AND status='pending' AND next_attempt<=? ORDER BY created,id LIMIT 50",
+                if test_pending:
+                    db.execute("UPDATE email_outbox SET status='cancelled',updated=? WHERE status='pending' AND kind='test' AND (target!=? OR created<?)",
+                               (now, config['target'], now-3600))
+                else:
+                    sync(db, report, plan, config, now)
+                selection = " AND kind='test'" if test_pending else ''
+                events = db.execute("SELECT * FROM email_outbox WHERE target=? AND status='pending' AND next_attempt<=?"+selection+" ORDER BY created,id LIMIT 50",
                                     (config['target'], now)).fetchall()
                 if events:
                     is_test = events[0]['kind'] == 'test'

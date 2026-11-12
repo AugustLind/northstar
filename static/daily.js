@@ -4,7 +4,7 @@ function safeDailyLink(url){return typeof officialNoticeUrl==='function'?officia
 function renderEmailStatus(v){
  if(!v)return;
  if(dailyView)dailyView.email=v;
- $('#emailStatus').textContent=(!v.configured?'Email is not configured on the server. Complete email setup before enabling alerts.':v.server_enabled===false?'Email delivery is disabled in the server settings.':!v.enabled?'Email alerts are paused.':'Email alerts are enabled and work with this page closed. '+v.pending+' update(s) waiting.')+(v.last_sent?' Last accepted by the mail server: '+new Date(v.last_sent*1000).toLocaleString()+'.':'')+(v.error?' '+v.error:'');
+ $('#emailStatus').textContent=(!v.configured?'Email is not configured on the server. '+(v.configuration_errors||[]).join(' ')+' Run python3 scripts/setup-email.py on the server, then restart Northstar.':v.server_enabled===false?'Email delivery is disabled in the server settings.':!v.enabled?'Email alerts are paused.':'Email alerts are enabled and work with this page closed. '+v.pending+' update(s) waiting.')+(v.last_sent?' Last accepted by the mail server: '+new Date(v.last_sent*1000).toLocaleString()+'.':'')+(v.error?' '+v.error:'');
  $('#enableEmail').disabled=!v.configured||v.server_enabled===false||v.enabled;$('#pauseEmail').disabled=!v.enabled;$('#testEmail').disabled=!v.active;
 }
 function renderDaily(v){
@@ -33,5 +33,4 @@ $('#enableEmail').onclick=()=>emailSetting(true);
 $('#pauseEmail').onclick=()=>emailSetting(false);
 $('#testEmail').onclick=async()=>{const b=$('#testEmail');b.disabled=true;try{const r=await api('email/test',{});$('#emailActionMessage').textContent=r.message;}catch(e){$('#emailActionMessage').textContent=e.message;}finally{if(dailyView&&dailyView.email)renderEmailStatus(dailyView.email);}};
 $('#dailyTop').onclick=e=>{const symbol=e.target.dataset.dailyStock;if(!symbol)return;document.querySelector('[data-tab="recommendations"]').click();if(typeof selectStock==='function')selectStock(symbol,true);};
-for(const b of document.querySelectorAll('[data-tab="daily"]'))b.addEventListener('click',loadDaily);
 setInterval(()=>{if(apiBase&&accessKey)loadDaily();},60000);

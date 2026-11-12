@@ -31,6 +31,20 @@ $('#add').onclick=()=>edit();$('#close').onclick=()=>$('#editor').close();
 $('#positionForm').onsubmit=async e=>{e.preventDefault();try{await api('position',Object.fromEntries(new FormData(e.target)));$('#editor').close();await load();}catch(e){$('#formError').textContent=e.message;}};
 $('#holdings').onclick=async e=>{const editSymbol=e.target.dataset.edit,del=e.target.dataset.delete;if(editSymbol)edit(state.positions.find(p=>p.symbol===editSymbol));if(del&&confirm(`Remove ${del} and its notes?`)){try{await api('delete',{symbol:del});await load();}catch(e){$('#message').textContent=e.message;}}};
 $('#refresh').onclick=async()=>{const b=$('#refresh');b.disabled=true;b.textContent='Refreshing…';$('#message').textContent='Fetching quotes. This may take a moment.';try{const r=await api('refresh',{});await load();$('#message').textContent=r.errors.length?r.errors.join('\n'):'Refresh complete. Check provider timestamps before making a decision.';}catch(e){$('#message').textContent=e.message;}finally{b.disabled=false;b.textContent='Refresh market data';}};
-for(const b of document.querySelectorAll('[data-tab]'))b.onclick=()=>{for(const t of document.querySelectorAll('.tab'))t.hidden=t.id!==b.dataset.tab;for(const n of document.querySelectorAll('[data-tab]'))n.classList.toggle('active',n===b);};
+const workspaceRoutes={daily:'daily',announcements:'daily',briefing:'daily',method:'daily',recommendations:'recommendations',portfolio:'portfolio',fit:'portfolio',activity:'portfolio',validation:'validation'};
+function openWorkspace(target,updateHash=true){
+ if(!Object.prototype.hasOwnProperty.call(workspaceRoutes,target))target='daily';
+ const page=workspaceRoutes[target]||'daily';
+ for(const section of document.querySelectorAll('.tab'))section.hidden=section.id!==page;
+ for(const button of document.querySelectorAll('[data-tab]')){const active=button.dataset.tab===page;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
+ if(target!==page){const group=$('#'+target+'Group');if(group)group.open=true;const section=$('#'+target);if(section&&section.scrollIntoView)section.scrollIntoView({behavior:'smooth',block:'start'});}
+ if(updateHash&&typeof history!=='undefined'&&history.replaceState)history.replaceState({},'','#'+target);
+ if(page==='daily'&&typeof loadDaily==='function')loadDaily();
+ if(page==='portfolio'){if(typeof loadPortfolioFit==='function')loadPortfolioFit();if(typeof loadLedger==='function')loadLedger();if(typeof loadQuantityPlan==='function')loadQuantityPlan();}
+ if(page==='validation'&&typeof loadValidation==='function')loadValidation();
+}
+for(const button of document.querySelectorAll('[data-tab]'))button.onclick=()=>openWorkspace(button.dataset.tab);
+if(window.addEventListener)window.addEventListener('hashchange',()=>openWorkspace(location.hash.slice(1),false));
+
 $('#export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='northstar-notebook.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 load().catch(e=>$('#message').textContent=e.message);

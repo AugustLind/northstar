@@ -206,6 +206,19 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.worker.queue_test(NOW+120)
 
+    def test_test_email_bypasses_broken_plan_and_pending_suggestions(self):
+        self.send.side_effect = TimeoutError()
+        self.worker.tick(NOW)
+        self.send.side_effect = None
+        self.worker.current_plan = Mock(side_effect=RuntimeError('Plan unavailable'))
+        self.worker.queue_test(NOW+61)
+        self.worker.tick(NOW+61)
+        self.worker.current_plan.assert_not_called()
+        self.assertEqual(self.send.call_count, 2)
+        self.assertEqual(self.send.call_args.args[1]['Subject'], 'Northstar: email test')
+        self.assertEqual(next(r for r in self.rows() if r['kind'] == 'test')['status'], 'sent')
+        self.assertEqual(next(r for r in self.rows() if r['kind'] == 'suggestion')['status'], 'pending')
+
     def test_incomplete_configuration_never_contacts_smtp(self):
         del self.env['NORTHSTAR_SMTP_PASSWORD']
         self.worker.tick(NOW)

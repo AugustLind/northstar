@@ -1,7 +1,7 @@
 // DOM contract smoke checks without installing a browser or packages.
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const nodes={};
-function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
+function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
 const form=element();for(const name of ['universe','interval_minutes','model','min_turnover_nok','llm_enabled'])form.elements[name]=element();nodes['#researchSettings']=form;
 nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rankBy']=element();nodes['#rankBy'].value='composite';
 const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct','confirm_sessions','signal_wait_hours','trade_cooldown_days','min_change_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
@@ -18,8 +18,11 @@ let notificationRequests=0,notificationCount=0;
 class FakeNotification{constructor(){notificationCount++;}static async requestPermission(){notificationRequests++;FakeNotification.permission='granted';return 'granted';}}FakeNotification.permission='default';
 const browserStorage=new Map([['northstar-key','test-access-key']]);
 const requests=[];
+const workspaceNames=['daily','recommendations','portfolio','validation'];
+const workspaceSections=workspaceNames.map(id=>{const n=element();n.id=id;nodes['#'+id]=n;return n;});
+const workspaceButtons=workspaceNames.map(tab=>{const n=element();n.dataset.tab=tab;nodes['[data-tab="'+tab+'"]']=n;return n;});
 const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console,Notification:FakeNotification,btoa:s=>Buffer.from(s,'binary').toString('base64'),window:{NORTHSTAR_CONFIG:{apiBase:'https://api.example.com'}},sessionStorage:{getItem(k){return browserStorage.get(k)||null;},setItem(k,v){browserStorage.set(k,v);},removeItem(k){browserStorage.delete(k);}},location:{pathname:'/recommendations',hostname:'owner.github.io',hash:''},history:{replaceState(){}},setInterval(){},setTimeout(){},confirm(){return false;},
- document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-import-select]')return importSelections;if(s==='[data-tab]'){const n=element();n.dataset.tab='recommendations';return [n];}return [];},createElement:element},
+ document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-import-select]')return importSelections;if(s==='[data-tab]')return workspaceButtons;if(s==='.tab')return workspaceSections;return [];},createElement:element},
  fetch:async (path,options)=>{requests.push({path,options});if(path.endsWith('/api/email/settings')){emailFixture.enabled=JSON.parse(options.body).enabled;emailFixture.active=emailFixture.enabled;return {ok:true,json:async()=>emailFixture};}if(path.endsWith('/api/email/test'))return {ok:true,json:async()=>({queued:true,message:'Test queued. Check delivery status and your inbox.'})};return {ok:true,json:async()=>path.endsWith('/api/daily')?dailyFixture:path.endsWith('/api/ledger')?{initialized:false,reconciled:false,cash_nok:0,count:0,events:[],method:'Net cash already includes fees'}:path.endsWith('/api/alerts/read')?{saved:true}:path.endsWith('/api/trade-plan')?planFixture:path.endsWith('/api/import/preview')?importFixture:path.endsWith('/api/import/apply')?{updated:1}:path.endsWith('/api/portfolio-fit')?fitFixture:path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',assessment:{label:'Mixed annual conditions',passed:2,covered:3,period:'2025-12-31',checks:[{passes:false,label:'Annual income positive',period:'2025-12-31'}],method:'Annual checks only'},fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('static/app.js','utf8'),context);
@@ -34,6 +37,26 @@ vm.runInContext(fs.readFileSync('static/daily.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/advice.js','utf8'),context);
 setImmediate(async()=>{
  try{
+ assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
+ assert.strictEqual(nodes['#recommendations'].hidden,false);
+ for(const [target,page] of [['unrecognised:hash','daily'],['fit','portfolio'],['activity','portfolio'],['announcements','daily'],['method','daily'],['validation','validation']]){
+  vm.runInContext("openWorkspace('"+target+"')",context);
+  assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
+  assert.strictEqual(nodes['#'+page].hidden,false);
+  assert.strictEqual(nodes['[data-tab="'+page+'"]'].attributes['aria-current'],'page');
+  if(target!==page&&target!=='unrecognised:hash')assert(nodes['#'+target+'Group'].open);
+ }
+ vm.runInContext("openWorkspace('recommendations')",context);
+ assert(nodes['#windowStats'].innerHTML.includes('Period return'));
+ assert(nodes['#advancedMetrics'].innerHTML.includes('ADX'));
+ nodes['#showLog'].checked=true;nodes['#showLog'].onchange();
+ assert(nodes['#chartPlot'].innerHTML.includes('logarithmic'));
+ nodes['#showPercent'].checked=true;nodes['#showPercent'].onchange();
+ assert.strictEqual(nodes['#showLog'].checked,false);
+ nodes['#chartPanel'].value='drawdown';nodes['#chartPanel'].onchange();
+ assert(nodes['#chartPlot'].innerHTML.includes('loaded-history peak'));
+ nodes['#chartPosition'].value='0';nodes['#chartPosition'].oninput();
+ assert.strictEqual(vm.runInContext('explorerWindow.start',context),0);
  assert(requests.length>=2);assert(requests.every(r=>r.path.startsWith('https://api.example.com/api/')));assert(requests.every(r=>r.options.headers.Authorization==='Bearer test-access-key'));
  assert(nodes['#chartPlot'].innerHTML.includes('<svg'));
  assert(nodes['#adviceCards'].innerHTML.includes('Consider buying'));
