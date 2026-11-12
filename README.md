@@ -41,7 +41,12 @@ not guaranteed; offline operation depends on previously cached data.
   with coverage and freshness information.
 - Tracks manually entered holdings, cash, review notes, and transaction records,
   with previewed CSV imports and hypothetical allocation/share-count plans.
-- Supports historical experiments and forward paper cohorts with explicit
+- Adds portfolio risk attribution, correlations and hypothetical equity/FX shocks,
+  multi-year financial charts, same-sector comparisons and a current stock decision summary.
+- Shows private service/data health and email acceptance history, with chart preferences
+  and CSV/SVG exports.
+- Supports chronological holdout, parameter/cost sensitivity, configurable experiment
+  sale fees, and forward paper cohorts with explicit
   missing-data and methodology limitations.
 - Optionally generates briefings through a locally running Ollama model.
 - Emails confirmed share-plan changes through privately configured SMTP, with

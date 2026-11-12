@@ -35,7 +35,7 @@ function renderAdvice(){
  // Keep detailed charts stable across background polling and tab changes.
  if(explorerSymbol){const selected=cards.find(c=>c.symbol===explorerSymbol);if(selected){renderStockDetail(selected);const cached=explorerCache[explorerSymbol];if(cached&&cached.asof!==selected.asof&&!explorerDrag)selectStock(explorerSymbol,false);else {loadFinancials(explorerSymbol);if(typeof loadStockAnnouncements==='function')loadStockAnnouncements(explorerSymbol);}}}
  else if(filtered.length&&filtered[0].score!==null){selectStock(filtered[0].symbol,false);}
- const compare=$('#compareStock'),previous=compare.value;compare.innerHTML='<option value="">No comparison</option>'+cards.filter(c=>c.score!==null&&c.symbol!==explorerSymbol).map(c=>`<option value="${esc(c.symbol)}">${esc(c.symbol)}</option>`).join('');compare.value=previous;
+ const compare=$('#compareStock'),previous=compare.value;compare.innerHTML='<option value="">No comparison</option><option value="OSEBX.OL">Oslo benchmark · OSEBX GR</option>'+cards.filter(c=>c.score!==null&&c.symbol!==explorerSymbol).map(c=>`<option value="${esc(c.symbol)}">${esc(c.symbol)}</option>`).join('');compare.value=previous;
 }
 async function loadResearch(){try{researchView=await api('research');renderAdvice();if(typeof loadQuantityPlan==='function')loadQuantityPlan();}catch(e){$('#researchStatus').textContent=e.message;}}
 $('#adviceFilter').onchange=renderAdvice;
@@ -44,7 +44,7 @@ $('#stockSearch').oninput=renderAdvice;$('#rankBy').onchange=renderAdvice;
 $('#analyze').onclick=async()=>{try{await api('analyze',{});$('#researchStatus').textContent='Analysis queued; results will appear automatically.';setTimeout(loadResearch,1000);}catch(e){$('#researchStatus').textContent=e.message;}};
 $('#researchSettings').onsubmit=async e=>{e.preventDefault();const f=e.target;try{await api('settings',{universe:f.elements.universe.value.split(',').map(s=>s.trim()).filter(Boolean),interval_minutes:Number(f.elements.interval_minutes.value),model:f.elements.model.value,min_turnover_nok:Number(f.elements.min_turnover_nok.value),llm_enabled:f.elements.llm_enabled.checked});$('#settingsMessage').textContent='Saved. New analysis queued.';await loadResearch();}catch(e){$('#settingsMessage').textContent=e.message;}};
 $('#askForm').onsubmit=async e=>{e.preventDefault();askingModel=true;$('#askButton').disabled=true;$('#answer').textContent='Asking your local model…';try{const r=await api('ask',{question:$('#question').value});$('#answer').textContent=r.answer+'\n\n'+r.model+' · '+timeLabel(r.generated);}catch(e){$('#answer').textContent=e.message;}finally{askingModel=false;loadResearch();}};
-let explorerSymbol='',explorerCache={},explorerWindow={start:0,end:1},explorerCompare='',explorerDrag=null,explorerLoad=0;
+let explorerSymbol='',explorerEvents={},explorerCache={},explorerWindow={start:0,end:1},explorerCompare='',explorerDrag=null,explorerLoad=0;
 function currentHistory(){return (explorerCache[explorerSymbol]||{}).history||[];}
 function diagnosticTile(label,value,note='',tone=''){
  return '<article><small>'+esc(label)+'</small><strong class="'+tone+'">'+esc(value)+'</strong>'+(note?'<small>'+esc(note)+'</small>':'')+'</article>';
@@ -70,7 +70,7 @@ function renderDiagnostics(c){
  $('#diagnosticNote').textContent=m.risk_sessions?'Diagnostics as of '+timeLabel(m.history_end)+' · '+m.risk_sessions+' daily returns in the risk window. Descriptive measurements; they do not change entry scores. ATR/ADX require complete high/low data. Missing values stay unavailable.':'Run a new analysis to populate the expanded diagnostics. Existing research and charts remain available.';
 }
 function renderStockDetail(c){
- renderDiagnostics(c);
+ renderDiagnostics(c);if(typeof loadStockDecision==='function')loadStockDecision(c.symbol);
  $('#explorer').hidden=false;$('#explorerTitle').textContent=(c.name||c.symbol)+' · '+c.symbol;$('#explorerAction').textContent=c.action;
  $('#componentScores').innerHTML=(c.analyses||[]).map(p=>`<article><small>${esc(p.name)} · ${p.weight}% weight</small><strong>${p.score.toFixed(0)}<small>/100</small></strong><div class="scoretrack"><span style="width:${Math.max(0,Math.min(100,p.score))}%"></span></div><p>${esc(p.explanation)}</p></article>`).join('');
  const fee=c.portfolio_fit;$('#stockFeeImpact').textContent=fee&&fee.fee_model==='fixed-buy-79-v1'&&fee.shares?'Purchase fee: 79 kr once for '+fee.shares+' shares · '+fee.fee_pct.toFixed(2)+'% of stock value. Price needed to recover this purchase fee: '+money(fee.break_even_price,c.currency)+' (+'+fee.break_even_gain_pct.toFixed(2)+'%). Selling fees are not included.':'Your purchase fee is 79 kr per order. Open Portfolio fit to calculate its impact for your budget.';
@@ -79,8 +79,8 @@ function renderStockDetail(c){
 async function selectStock(symbol,scroll){
  explorerSymbol=symbol;const token=++explorerLoad;const card=researchView&&researchView.report&&researchView.report.cards.find(c=>c.symbol===symbol);if(card)renderStockDetail(card);
  $('#chartPlot').innerHTML='<p>Loading daily price and volume history…</p>';$('#chartTooltip').textContent='';
- loadFinancials(symbol);if(typeof loadStockAnnouncements==='function')loadStockAnnouncements(symbol);
- try{const quote=await api('history?symbol='+encodeURIComponent(symbol));if(token!==explorerLoad)return;explorerCache[symbol]=quote;const n=(quote.history||[]).length;explorerWindow={start:Math.max(0,n-252),end:Math.max(0,n-1)};explorerCompare='';$('#compareStock').value='';drawExplorer();if(scroll&&$('#explorer').scrollIntoView)$('#explorer').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){if(token===explorerLoad)$('#chartPlot').textContent=e.message;}
+ if(typeof loadStockDecision==='function')loadStockDecision(symbol);loadFinancials(symbol);if(typeof loadStockAnnouncements==='function')loadStockAnnouncements(symbol);
+ try{const quote=await api('history?symbol='+encodeURIComponent(symbol));if(token!==explorerLoad)return;explorerCache[symbol]=quote;const h=quote.history||[],n=h.length,days=typeof chartPreferenceDays==='function'?chartPreferenceDays():370,limit=n?h[n-1].time-days*86400:0;explorerWindow={start:Math.max(0,h.findIndex(p=>p.time>=limit)),end:Math.max(0,n-1)};explorerCompare='';$('#compareStock').value='';drawExplorer();if(typeof restoreBenchmark==='function')restoreBenchmark();if(scroll&&$('#explorer').scrollIntoView)$('#explorer').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){if(token===explorerLoad)$('#chartPlot').textContent=e.message;}
 }
 function drawExplorer(){
  const quote=explorerCache[explorerSymbol];if(!quote)return;const history=quote.history||[];
@@ -88,10 +88,10 @@ function drawExplorer(){
  explorerWindow=ChartKit.windowBounds(history.length,explorerWindow.start,explorerWindow.end);
  const overlays=[];if($('#show20').checked)overlays.push('ema20');if($('#show50').checked)overlays.push('ma50');if($('#show200').checked)overlays.push('ma200');if($('#showBands').checked)overlays.push('upper','lower');
  const compare=explorerCompare?(explorerCache[explorerCompare]||{}).history:null;
- $('#chartPlot').innerHTML=ChartKit.svg(history,{...explorerWindow,symbol:explorerSymbol,compact:window.innerWidth<=600,type:$('#chartType').value,panel:$('#chartPanel').value,percent:$('#showPercent').checked,log:$('#showLog').checked,currency:quote.currency,overlays,compare});
+ $('#chartPlot').innerHTML=ChartKit.svg(history,{...explorerWindow,symbol:explorerSymbol,compact:window.innerWidth<=600,type:$('#chartType').value,panel:$('#chartPanel').value,percent:$('#showPercent').checked,log:$('#showLog').checked,currency:quote.currency,overlays,compare,events:typeof currentStockEvents==='function'?currentStockEvents():[]});
  $('#chartFrom').value=new Date(history[explorerWindow.start].time*1000).toISOString().slice(0,10);$('#chartTo').value=new Date(history[explorerWindow.end].time*1000).toISOString().slice(0,10);
  const visible=history.slice(explorerWindow.start,explorerWindow.end+1);
- renderWindowStats(visible,compare);
+ renderWindowStats(visible,compare);if(typeof renderEventSources==='function')renderEventSources();
  $('#chartNavigator').innerHTML=ChartKit.navigator(history,explorerWindow.start,explorerWindow.end);
  const position=$('#chartPosition');position.max=history.length-visible.length;position.value=explorerWindow.start;position.disabled=visible.length===history.length;
  const candlesMissing=$('#chartType').value==='candles'&&!visible.every(p=>p.open>0&&p.high>=Math.max(p.open,p.close)&&p.low>0&&p.low<=Math.min(p.open,p.close));
@@ -142,6 +142,7 @@ async function loadFinancials(symbol){
  const token=++financialRequest;
  try{const f=await api('fundamentals?symbol='+encodeURIComponent(symbol));if(token!==financialRequest||symbol!==explorerSymbol)return;
  $('#financialStatus').textContent=`Coverage: ${f.status}. Fiscal period end: ${f.period||'unavailable'}. Retrieved: ${timeLabel(f.fetched)}.`+(f.error?' Latest refresh: '+f.error:'')+(f.scan&&f.scan.running?` Background scan: ${f.scan.done}/${f.scan.total}.`:'');
+ if(typeof renderFinancialTrends==='function')renderFinancialTrends(f);
  const quality=f.assessment||{};$('#qualitySummary').textContent=(quality.label||'Assessment unavailable')+' · '+(quality.passed||0)+' / '+(quality.covered||0)+' covered accounting checks positive · Fiscal year '+(quality.period||'unknown')+'.';$('#qualityChecks').innerHTML=(quality.checks||[]).map(c=>'<p>'+esc(c.passes?'✓ ':'Review: ')+esc(c.label)+' · '+esc(c.period)+'</p>').join('');$('#qualityMethod').textContent=quality.method||'Financial coverage is not ready.';const valuation=f.valuation||{};$('#valuationSummary').textContent=valuation.median_annual_pe_proxy!=null?'Annual P/E proxy '+valuation.subject_annual_pe_proxy.toFixed(2)+'× versus sector median '+valuation.median_annual_pe_proxy.toFixed(2)+'× ('+valuation.peer_count+' other companies with matching fiscal periods). '+valuation.method:'Peer valuation unavailable: at least three comparable fresh same-sector annual observations are required. Annual P/E is not TTM and does not establish cheapness.';
  $('#financialSignals').innerHTML=(f.signals||[]).length?'<ul>'+f.signals.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>':'<p>Financial statements have not been retrieved for this company yet, or the provider has no coverage. Missing figures are not treated as zero.</p>';
  const keys=['revenue','revenue_growth','operating_margin','net_income','operating_cash_flow','free_cash_flow','debt','cash','net_cash','debt_to_equity','annual_pe_proxy','share_count_change'];

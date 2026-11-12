@@ -163,7 +163,7 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
         card['history'] = []
     report={'generated': time.time(), 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
             'top20':[c['symbol'] for c in ranked[:policy.MAX_CANDIDATES]], 'coverage':coverage,
-            'policy_version':policy.VERSION,
+            'policy_version':policy.VERSION,'min_turnover_nok':min_turnover_nok,
             'portfolio_context':portfolio, 'portfolio_limits':{k:v for k,v in profile.items() if k!='sectors'},
             'universe_source': UNIVERSE_SOURCE, 'universe_snapshot': oslo_universe.ASOF,
             'method': 'Shared technical entry/exit policy. Only stocks passing every entry rule receive entry ranks; component scores order them. Portfolio sizing and confirmation are additional gates. Financial snapshots and NewsWeb headlines do not change signals.',

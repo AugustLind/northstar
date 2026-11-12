@@ -56,7 +56,7 @@ const ChartKit=(()=>{
   for(const key of overlays)if(calc[key])values.push(...calc[key].slice(s,e+1).filter(v=>Number.isFinite(v)&&(!log||v>0)));
   const transformed=values.filter(v=>Number.isFinite(v)&&(!log||v>0)).map(convert),lo0=Math.min(...transformed),hi0=Math.max(...transformed),pad=(hi0-lo0)*.08||(log?.01:1),lo=percent||log?lo0-pad:Math.max(0,lo0-pad),hi=hi0+pad,y=v=>T+(hi-convert(v))/(hi-lo)*(P-T);
   const path=(v,yy=y)=>{let active=false;return v.map((n,i)=>{if(i<s||i>e||n==null||!Number.isFinite(n)){active=false;return '';}const p=(active?'L':'M')+x(i).toFixed(2)+','+yy(n).toFixed(2);active=true;return p;}).join(' ');};
-  let out=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Interactive ${escape(options.symbol||'stock')} price chart"><title>${escape(options.symbol||'Stock')} historical chart</title><text x="${L}" y="17">${percent?'Period change (%)':log?'Price · logarithmic scale':'Price · '+escape(options.currency||'NOK')}</text>`;
+  let out=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Interactive ${escape(options.symbol||'stock')} price chart"><title>${escape(options.symbol||'Stock')} historical chart</title><text x="${L}" y="17">${percent?'Period change (%)':log?'Price · logarithmic scale':'Price · '+escape(options.currency||'NOK')}</text>`;
   for(let i=0;i<5;i++){const value=lo+(hi-lo)*i/4,yy=T+(hi-value)/(hi-lo)*(P-T),label=log?Math.exp(value):value;out+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="#e0e8dd"/><text x="${L-8}" y="${yy+4}" text-anchor="end">${label.toFixed(2)}${percent?'%':''}</text>`;}
   if(overlays.includes('upper')&&overlays.includes('lower')){const idx=Array.from({length:e-s+1},(_,i)=>s+i).filter(i=>calc.lower[i]!=null&&(!log||calc.lower[i]>0));if(idx.length>1)out+=`<path d="M${idx.map(i=>x(i)+','+y(calc.upper[i])).join(' L')} L${idx.slice().reverse().map(i=>x(i)+','+y(calc.lower[i])).join(' L')} Z" fill="#a48cae14"/>`;}
   const candles=options.type==='candles'&&pts.every(p=>p.open>0&&p.high>=Math.max(p.open,p.close)&&p.low>0&&p.low<=Math.min(p.open,p.close)),bar=Math.max(1,Math.min(12,(W-L-R)/pts.length*.6));
@@ -65,7 +65,11 @@ const ChartKit=(()=>{
   const colors={ema20:'#138c9c',ma50:'#c08a24',ma200:'#596eae',upper:'#a48cae',lower:'#a48cae'};
   for(const key of overlays)if(calc[key])out+=`<path d="${path(calc[key].map(v=>log&&v<=0?null:v))}" fill="none" stroke="${colors[key]||'#777'}" stroke-width="1.5" ${key==='upper'||key==='lower'?'stroke-dasharray="5 4"':''}/>`;
   if(comparedValues)out+=`<path d="${path(comparedValues)}" fill="none" stroke="#bc6340" stroke-width="2" stroke-dasharray="6 3"/>`;
-  const panel=options.panel||'volume',labels={rsi:'RSI (14)',macd:'MACD (12,26,9)',drawdown:'Drawdown from loaded-history peak (%)',volatility:'20-session annualised volatility (%)',volume:'Daily volume'};
+  const dateIndices=new Map(history.map((p,i)=>[day(p),i]));
+  const eventRows=(options.events||[]).filter(event=>Number.isFinite(event.time)&&dateIndices.has(day(event))&&dateIndices.get(day(event))>=s&&dateIndices.get(day(event))<=e).slice(0,100);
+  const perDay=new Map();
+  for(const event of eventRows){const i=dateIndices.get(day(event)),stack=perDay.get(i)||0;perDay.set(i,stack+1);const color=event.kind==='dividend'?'#596eae':event.kind==='split'?'#b08030':'#9c5985',yy=T+14+stack*16;out+=`<g><title>${escape(day(event)+' · '+event.label+' · '+(event.source||'Source unavailable'))}</title><line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${P}" stroke="${color}" stroke-dasharray="2 5" opacity=".35"/><circle cx="${x(i)}" cy="${yy}" r="7" fill="${color}"/><text x="${x(i)}" y="${yy+3}" text-anchor="middle" style="fill:white;font-size:9px">${event.kind==='dividend'?'D':event.kind==='split'?'S':'E'}</text></g>`;}
+  const panel=options.panel||'volume',labels={rsi:'RSI (14)',macd:'MACD (12,26,9)',drawdown:'Drawdown from loaded-history peak (%)',volatility:'20-session annualised volatility (%)',relative:'Relative performance · ratio rebased to 100',volume:'Daily volume'};
   out+=`<line x1="${L}" x2="${W-R}" y1="${P+15}" y2="${P+15}" stroke="#dce5d7"/><text x="${L}" y="${P+40}">${labels[panel]||labels.volume}</text>`;
   const panelTop=P+58,panelHeight=B-panelTop;
   if(panel==='rsi'){const yy=v=>B-v/100*panelHeight;for(const level of [30,70])out+=`<line x1="${L}" x2="${W-R}" y1="${yy(level)}" y2="${yy(level)}" stroke="#a9b3a9" stroke-dasharray="4"/><text x="${L-8}" y="${yy(level)+4}" text-anchor="end">${level}</text>`;out+=`<path d="${path(calc.rsi,yy)}" fill="none" stroke="#7964a3" stroke-width="2"/>`;}
@@ -73,6 +77,10 @@ const ChartKit=(()=>{
    const data=panel==='drawdown'?calc.drawdown:calc.volatility20,visible=data.slice(s,e+1).filter(Number.isFinite),min=panel==='drawdown'?Math.min(-1,...visible):0,max=panel==='drawdown'?0:Math.max(1,...visible)*1.1,yy=v=>B-(v-min)/(max-min)*panelHeight;
    for(const level of [min,(max+min)/2,max])out+=`<line x1="${L}" x2="${W-R}" y1="${yy(level)}" y2="${yy(level)}" stroke="#e0e8dd"/><text x="${L-8}" y="${yy(level)+4}" text-anchor="end">${level.toFixed(1)}%</text>`;
    out+=`<path d="${path(data,yy)}" fill="none" stroke="${panel==='drawdown'?'#bc4b49':'#596eae'}" stroke-width="2"/>`;
+  }
+  else if(panel==='relative'){
+   if(!compared||compared.pairs.length<2)out+=`<text x="${L}" y="${B-20}">Choose a comparison with shared dates</text>`;
+   else{const data=[...Array(s).fill(null),...compared.values.map((v,i)=>v==null?null:pts[i].close/v*100)],visible=data.filter(Number.isFinite),min=Math.min(...visible,100),max=Math.max(...visible,100),pad=(max-min)*.1||1,yy=v=>B-(v-min+pad)/(max-min+2*pad)*panelHeight;out+=`<line x1="${L}" x2="${W-R}" y1="${yy(100)}" y2="${yy(100)}" stroke="#a9b3a9" stroke-dasharray="4"/><text x="${L-8}" y="${yy(100)+4}" text-anchor="end">100</text><path d="${path(data,yy)}" fill="none" stroke="#138c9c" stroke-width="2"/>`;}
   }
   else if(panel==='macd'){
    const histogram=calc.macd.map((v,i)=>v==null||calc.signal[i]==null?null:v-calc.signal[i]),max=Math.max(...calc.macd.slice(s,e+1).filter(Number.isFinite).map(Math.abs),...calc.signal.slice(s,e+1).filter(Number.isFinite).map(Math.abs),...histogram.slice(s,e+1).filter(Number.isFinite).map(Math.abs),.001),yy=v=>B-panelHeight/2-v/max*panelHeight/2;
@@ -82,6 +90,13 @@ const ChartKit=(()=>{
   for(const i of [...new Set([s,Math.round((s+e)/2),e])])out+=`<text x="${x(i)}" y="${H-18}" text-anchor="${i===s?'start':i===e?'end':'middle'}">${day(history[i])}</text>`;
   return out+`<line id="explorerCursor" x1="0" x2="0" y1="${T}" y2="${B}" stroke="#627867" stroke-dasharray="3" visibility="hidden"/></svg>`;
  }
- return {series,svg,windowBounds,analytics,comparison,navigator,layout};
+ function csv(history,options={}){
+  if(!history.length)return '';
+  const bounds=windowBounds(history.length,options.start==null?0:options.start,options.end==null?history.length-1:options.end),calc=series(history),keys=['ema20','ma50','ma200','rsi','macd','signal','drawdown','volatility20'];
+  const rows=[['Date UTC','Close','Open','High','Low','Volume','EMA20','MA50','MA200','RSI14','MACD','MACD signal','Loaded-history drawdown %','20-session annual volatility %']];
+  for(let i=bounds.start;i<=bounds.end;i++){const p=history[i];rows.push([day(p),p.close,p.open,p.high,p.low,p.volume,...keys.map(k=>calc[k][i])]);}
+  return rows.map(row=>row.map(v=>v==null?'':String(v)).join(',')).join('\r\n')+'\r\n';
+ }
+ return {series,svg,windowBounds,analytics,comparison,navigator,layout,csv};
 })();
 if(typeof module!=='undefined')module.exports=ChartKit;

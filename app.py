@@ -23,6 +23,10 @@ import company_data
 import advice_state
 import daily_board
 import email_alerts
+import portfolio_risk
+import financial_analysis
+import stock_summary
+import system_status
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -31,6 +35,7 @@ from urllib.error import HTTPError, URLError
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = Path(__file__).parent
+STARTED_AT=time.time()
 DB = ROOT / 'data' / 'portfolio.db'
 REFRESH_LOCK = threading.Lock()
 VALIDATION_LOCK = threading.Lock()
@@ -127,7 +132,7 @@ def save_position(data):
 
 def fetch_quote(symbol):
     # Unofficial public endpoint: errors are surfaced, never replaced with sample prices.
-    url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol, safe='') + '?range=5y&interval=1d'
+    url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol, safe='') + '?range=5y&interval=1d&events=div%2Csplits'
     req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     with urlopen(req, timeout=12) as response:
         result = json.load(response)['chart']['result'][0]
@@ -160,10 +165,26 @@ def fetch_quote(symbol):
     price = float(meta['regularMarketPrice'])
     if price <= 0 or not math.isfinite(price):
         raise ValueError('Provider returned an invalid price.')
+    events=[]
+    event_source='https://finance.yahoo.com/quote/'+quote(symbol,safe='')+'/history/'
+    for kind,key in [('dividend','dividends'),('split','splits')]:
+        for item in (result.get('events',{}).get(key,{}) or {}).values():
+            stamp=item.get('date')
+            if not isinstance(stamp,(int,float)) or not math.isfinite(stamp) or not 0<stamp<=time.time()+86400:continue
+            if kind=='dividend':
+                amount=item.get('amount')
+                if not isinstance(amount,(int,float)) or not math.isfinite(amount) or amount<0:continue
+                label='Provider dividend / ex-date: '+str(amount)+' '+meta.get('currency','')
+            else:
+                numerator=item.get('numerator');denominator=item.get('denominator')
+                if not all(isinstance(v,(int,float)) and math.isfinite(v) and v>0 for v in (numerator,denominator)):continue
+                amount=None;label='Provider split: '+str(numerator)+':'+str(denominator)
+            events.append({'time':stamp,'kind':kind,'label':label,'amount':amount,'currency':meta.get('currency'),
+                           'source':'Yahoo Finance chart events (unofficial)','source_url':event_source})
     return {'price': price, 'currency': meta['currency'], 'asof': meta['regularMarketTime'],
             'fetched': time.time(), 'source': 'Yahoo Finance (unofficial)',
             'history': history, 'history_basis': 'Dividend/split adjusted close' if adjusted else 'Provider daily close',
-            'history_version':3,
+            'history_version':3,'events_version':1,'events':sorted(events,key=lambda e:e['time']),
             'name': meta.get('longName') or meta.get('shortName') or symbol,
             'turnover20': sum(turnover)/len(turnover) if turnover else None, 'turnover_days': len(turnover),
             'ma200': sum(close[-200:])/200 if len(close) >= 200 else None,
@@ -191,7 +212,7 @@ def _refresh(extra_symbols=None):
         failed=False
         try:
             old = cached.get(symbol)
-            if extra_symbols is not None and old and old.get('history_version')==3 and time.time()-old.get('fetched',0)<1200:
+            if extra_symbols is not None and old and old.get('history_version')==3 and old.get('events_version')==1 and time.time()-old.get('fetched',0)<1200:
                 payload=old
             else:
                 for attempt in range(2):
@@ -237,7 +258,10 @@ def financial_view(symbol):
     record=snapshot.get('fundamentals',{}).get(symbol)
     q=snapshot['quotes'].get(symbol) or snapshot['quotes'].get(symbol[:-3])
     financial=fundamentals.analyse(record,q)
-    return {**financial,'symbol':symbol,'scan':read_meta('fundamentals_progress'),'attempted':(record or {}).get('attempted'),
+    annual=financial_analysis.timeline(record)
+    return {**financial,'annual_series':annual,'trends':financial_analysis.trends(annual),
+            'peer_comparison':financial_analysis.peers(symbol,financial,snapshot.get('fundamentals',{}),snapshot['quotes'],snapshot['portfolio_preferences']['sectors']),
+            'symbol':symbol,'scan':read_meta('fundamentals_progress'),'attempted':(record or {}).get('attempted'),
             'assessment':company_data.assessment(financial,snapshot['portfolio_preferences']['sectors'].get(symbol)),
             'valuation':company_data.peer_valuation(symbol,financial,snapshot.get('fundamentals',{}),snapshot['quotes'],snapshot['portfolio_preferences']['sectors'])}
 
@@ -337,6 +361,9 @@ def start_validation(data):
     slippage=portfolio_fit.number(data.get('cost_bps',0),'Additional slippage',200)
     capital=portfolio_fit.number(data.get('initial_capital',100000),'Starting capital',1e9)
     if capital<1000:raise ValueError('Starting capital must be at least 1,000 NOK.')
+    selling_fee=portfolio_fit.number(data.get('selling_fee_nok',0),'Selling fee',10000)
+    robustness=data.get('robustness',True)
+    if not isinstance(robustness,bool):raise ValueError('Robustness must be true or false.')
     if not VALIDATION_LOCK.acquire(blocking=False):return {'queued':False,'message':'A historical experiment is already running.'}
     try:
         snapshot=state();config=settings();started=time.time()
@@ -344,7 +371,8 @@ def start_validation(data):
         def run():
             try:
                 def progress(value):write_meta('validation_progress',{'running':True,'started':started,**value})
-                result=validation.evaluate(snapshot['quotes'],config['universe'],slippage,config['min_turnover_nok'],capital,progress)
+                runner=validation.evaluate_suite if robustness else validation.evaluate
+                result=runner(snapshot['quotes'],config['universe'],slippage,config['min_turnover_nok'],capital,progress,selling_fee_nok=selling_fee)
                 write_meta('validation_report',result)
                 write_meta('validation_progress',{'running':False,'started':started,'finished':time.time()})
             except Exception as error:
@@ -469,6 +497,15 @@ def email_worker():
     return EMAIL_WORKER or email_alerts.Worker(connect,read_meta,write_meta,email_plan)
 
 
+def operational_view():
+    snapshot=state(True)
+    worker=WORKER.view().get('worker',{}) if WORKER else {}
+    email=email_worker()
+    return system_status.build(snapshot,read_meta('report'),worker,read_meta('refresh_progress',{}),
+        read_meta('fundamentals_progress',{}),read_meta('announcements_feed',{}),read_meta('announcements_progress',{}),
+        {t.name for t in threading.enumerate() if t.is_alive()},email.status(),email.history(),STARTED_AT)
+
+
 class Handler(BaseHTTPRequestHandler):
     def cors_headers(self):
         origin = self.headers.get('Origin')
@@ -490,6 +527,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True})
         if self.path.startswith('/api/') and not api_authorized(self.headers.get('Authorization')):
             return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
+        if self.path == '/api/system-status':return self.send_json(operational_view())
+        if self.path == '/api/email/history':return self.send_json({'items':email_worker().history()})
+        if urlsplit(self.path).path in ('/api/portfolio-risk','/api/stock-summary'):
+            try:
+                query=parse_qs(urlsplit(self.path).query);snapshot=state(True);profile=snapshot['portfolio_preferences']
+                if urlsplit(self.path).path=='/api/stock-summary':
+                    return self.send_json(stock_summary.build(query.get('symbol',[''])[0],snapshot,read_meta('report'),profile))
+                stock=float(query.get('stock_shock',[-20])[0]);fx=float(query.get('fx_shock',[-10])[0])
+                return self.send_json(portfolio_risk.view(snapshot,profile,stock_shock=stock,fx_shock=fx))
+            except (ValueError,TypeError):return self.send_json({'error':'Choose a valid Oslo symbol or finite shocks between -100% and +100%.'},400)
         if urlsplit(self.path).path == '/api/announcements':
             try:
                 query=parse_qs(urlsplit(self.path).query)
@@ -534,7 +581,7 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/trade-plan.js': ('trade-plan.js', 'text/javascript'), '/ledger.js': ('ledger.js','text/javascript'), '/daily.js': ('daily.js','text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
+        files = {'/research-tools.js': ('research-tools.js','text/javascript'), '/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/trade-plan.js': ('trade-plan.js', 'text/javascript'), '/ledger.js': ('ledger.js','text/javascript'), '/daily.js': ('daily.js','text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
         if self.path not in files:
             return self.send_error(404)
         name, mime = files[self.path]

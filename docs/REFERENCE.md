@@ -131,9 +131,9 @@ Tests use temporary databases and mocked providers. They cover indicator actions
 
 ### Historical experiments and forward tracking
 
-The Validation & paper tracking tab uses the shared technical entry/exit signals on cached Oslo histories. Monthly decisions use only bars available through each decision date and execute at the next common session close. Holdings remain until the technical exit signal; vacant slots are filled by qualifying entries in score order, up to 20 positions. The experiment uses monthly equal-weight sizing, which can also trim retained holdings. Personal review prices, signal confirmation periods, cooldowns, portfolio allocation limits and personalized quantities are not simulated. Empty selections remain cash. Each buy order incurs the user-stated fixed 79 NOK fee, regardless of share count. Starting capital defaults to 100,000 NOK and is configurable because fixed costs depend on account size. Optional extra slippage defaults to zero and applies in both directions; selling commissions are not modelled. Results include return, drawdown, simulated weight changes, cost drag and daily strategy/benchmark values. The benchmark buys and holds the same complete-history stock basket. Neither side assumes terminal liquidation.
+Strategy lab uses the shared technical entry/exit signals on cached Oslo histories. Monthly decisions use only bars available through each decision date and execute at the next common session close. Holdings remain until the technical exit signal; vacant slots are filled by qualifying entries in score order, up to 20 positions. The experiment uses monthly equal-weight sizing, which can also trim retained holdings. Personal review prices, signal confirmation periods, cooldowns, portfolio allocation limits and personalized quantities are not simulated. Empty selections remain cash. Each buy order incurs the user-stated fixed 79 NOK fee, regardless of share count. Starting capital defaults to 100,000 NOK and is configurable because fixed costs depend on account size. Optional extra slippage defaults to zero and applies in both directions; selling commission is configurable (default zero, no assumed broker tariff). Results include return, drawdown, simulated weight changes, cost drag and daily strategy/benchmark values. The benchmark buys and holds the same complete-history stock basket. Neither side assumes terminal liquidation.
 
-This is a survivor-biased, complete-case experiment on today's universe, not validated market performance or a point-in-time fundamental/news backtest. Adjusted historical prices can change; adjusted close times raw volume approximates historical turnover. Incomplete histories and missing common sessions are excluded. Taxes, cash interest, selling commissions and market impact are omitted. The experiment uses fractional stock allocations; actual purchase previews use whole shares. Both strategy and benchmark enter at the next common close; the benchmark pays 79 NOK for each constituent. Rebalancing reserves fees for potential buys, only charges actual positive-value buy orders and leaves unused fee reserves as cash. Histories now request five years with a 200-observation warm-up and up to 756 dated test sessions. Stocks without complete reference-calendar coverage are explicitly excluded; recent IPOs do not shorten the entire test.
+This is a survivor-biased, complete-case experiment on today's universe, not validated market performance or a point-in-time fundamental/news backtest. Adjusted historical prices can change; adjusted close times raw volume approximates historical turnover. Incomplete histories and missing common sessions are excluded. Taxes, cash interest and market impact are omitted; sale commissions use the entered experiment setting. The experiment uses fractional stock allocations; actual purchase previews use whole shares. Both strategy and benchmark enter at the next common close; the benchmark pays 79 NOK for each constituent. Rebalancing reserves fees for potential buys, only charges actual positive-value buy orders and leaves unused fee reserves as cash. Histories now request five years with a 200-observation warm-up and up to 756 dated test sessions. Stocks without complete reference-calendar coverage are explicitly excluded; recent IPOs do not shorten the entire test.
 
 Every newly completed scan automatically appends an immutable recommendation cohort to SQLite, including capture time, ranks, actions, scores and quote timestamps. No existing report is backdated. Paper tracking uses the first later daily close as hypothetical entry and only reports returns after another later observation, with the fee model and order budget frozen at capture time. New cohorts charge 79 NOK once per purchase, use whole shares and keep residual cash; selling fees are not modelled. Each order uses the saved purchase budget, or a 100,000 NOK cohort divided equally across the selected stocks when no purchase budget is set. Existing cohorts keep their original labelled percentage assumptions. Missing members prevent cohort totals. Independent cohorts overlap; they are not a funded, rebalanced account and never modify real holdings. The UI shows the latest 60 cohorts; earlier rows remain in the server database.
 
@@ -169,7 +169,7 @@ Each row shows shares owned, shares to consider buying/selling, shares remaining
 
 1. **Activity & cash ledger.** Import a separate Nordnet transaction-history file (up to 500 rows/256 KiB) through an explicit column mapper. Map signed NET cash including actual broker charges. Supported NOK events: buys, sales, dividends, deposits, withdrawals, fees and interest. Unsupported transfers/splits and other currencies stay visible and are not inferred. Initialize from verified current holdings and cash with an end-of-day cutoff; earlier/same-day events are stored as history only, later new events update shares, weighted-average book cost and cash atomically. This is not FIFO/tax accounting. Broker IDs deduplicate imports; without IDs, economic fields plus within-file occurrence are used, and overlapping identical transactions can be ambiguous. Duplicate IDs with conflicting values and oversales are rejected. Manual financial edits/holdings imports require reconciliation; notes remain preserved. A broker cash check compares a reported balance without overwriting cash. Known mismatches withhold quantity plans. Reinitializing a verified snapshot preserves history and cannot precede already imported event dates.
 
-2. **Longer dated validation.** Historical runs execute in a single background job on Oracle, expose dated progress, retain the previous result on errors, and can be revisited after closing the browser. A restart interrupts rather than resumes an unfinished experiment. Five-year histories, fixed-rule forward decisions, chronological calendar-year return slices, and OSEBX.OL gross-return index comparison when every date is available. The independent OSEBX GR reference is [Euronext NO0007035327](https://live.euronext.com/en/product/indices/NO0007035327-XOSL). This is an index, not a traded fund; fund costs are not included. No benchmark forward-fill, future financial data, parameter optimisation or claim of proven returns. Today's universe, missing delisted stocks, revised prices, fractional historical allocations and complete-case selection remain limitations.
+2. **Longer dated validation.** Historical runs execute in a single background job on Oracle, expose dated progress, retain the previous result on errors, and can be revisited after closing the browser. A restart interrupts rather than resumes an unfinished experiment. Five-year histories, fixed-rule forward decisions, chronological calendar-year return slices, and OSEBX.OL gross-return index comparison when every date is available. The independent OSEBX GR reference is [Euronext NO0007035327](https://live.euronext.com/en/product/indices/NO0007035327-XOSL). This is an index, not a traded fund; fund costs are not included. No benchmark forward-fill, future financial data or claim of proven returns. The optional robustness view selects among four fixed variants using training metrics only, with limitations described below. Today's universe, missing delisted stocks, revised prices, fractional historical allocations and complete-case selection remain limitations.
 
 3. **Annual company assessment.** Dated positive/negative checks on revenue growth, income, cash flow, equity, margins and net cash, with missing/stale data never passing. Sector context limits industrial checks, especially for Financials. Peer valuation requires at least three other issuer groups with the same sector/fiscal period and usable matching-currency annual EPS/quotes. Annual P/E proxies are not TTM or proof of cheapness. These are supplementary and do not contaminate historical technical tests.
 
@@ -262,3 +262,130 @@ are not a reconstructed account performance record.
 
 Indicator references: [ATR and true range](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/atr),
 [historical expected shortfall methodology](https://arxiv.org/abs/2005.12593).
+
+
+## Portfolio risk and hypothetical scenarios
+
+Portfolio now includes a historical covariance model, holding-by-holding risk
+contributions, correlation matrix, concentration and equity/FX/sector shocks.
+
+- All holdings require fresh matching-currency quotes and complete current NOK
+  valuation. USD holdings require a fresh USD/NOK quote. Current NOK cash is included
+  as a zero-return asset; USD-denominated cash is not inferred.
+- Daily returns are keyed by **both** start and end UTC dates. Every held asset must
+  share at least 60 identical intervals; at most 252 are retained. USD return conversion
+  requires FX on both original stock endpoints and never bridges a missing FX day.
+  No incomplete sub-portfolio is renormalised into a purported full-portfolio result.
+- Current weights remain fixed in the historical proxy through hypothetical daily
+  rebalancing. This is not account history. Volatility uses sample covariance and
+  252-session annualisation. Variance contribution is `w_i * Cov(r_i, r_p)`;
+  the variance share divides by portfolio variance. Shares sum to 100% when variance
+  is positive; hedges may contribute negatively. Flat portfolios have no defined
+  percentage attribution. Volatility contributions sum to portfolio volatility.
+- Correlations use the same full-portfolio sample. Up to 24 largest holdings are
+  displayed in the matrix; **all** holdings remain in the covariance model. Flat
+  series have no correlation. Known issuer share classes are combined for company
+  concentration; inverse-HHI effective company count excludes cash.
+- Scenario shocks change current market values only. Stock and FX changes multiply:
+  `NOK change = current value * ((1 + stock shock) * (1 + FX shock) - 1)`.
+  FX applies only to USD-denominated holdings, not guessed company revenue exposure
+  or corporate hedges. The largest classified sector scenario excludes unknown
+  classifications. Scenario controls never update holdings, cash or trade records.
+- Benchmark beta/correlation require 60 matching portfolio/OSEBX return intervals.
+  Neither betas nor shocks are predicted future losses or diversification guarantees.
+
+The covariance relationship is described in the [CFA Institute portfolio risk
+reading](https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/portfolio-risk-return-part-1).
+
+## Financial trends, sector comparisons and stock summary
+
+Explore shows up to four reported annual periods for revenue, operating margin,
+operating/free cash flow, debt, cash and share counts. Charts retain actual fiscal
+period spacing and break lines across missing annual intervals. Amount charts
+require known matching currencies throughout; tables retain the reported values
+when a comparable chart is unavailable. Derived margins/cash-minus-debt/FCF require
+same-period, same-currency inputs. A reported FCF observation takes precedence over
+OCF minus absolute capex. Growth requires consecutive annual periods 300–430 days
+apart; revenue CAGR uses positive endpoints and actual elapsed years.
+
+Sector peer tables cover revenue growth, operating/net margins, free cash flow
+margin, debt/equity and the current-quote/annual-EPS P/E proxy when available.
+Comparisons require at least three **other issuers**, matching sector and exact
+fiscal end date, fresh statements, and compatible quote/EPS for P/E. One share class
+per peer issuer is counted. The percentile measures magnitude relative to other
+issuers, with half credit for ties; higher does not always mean better. Financial
+companies omit industrial operating-margin, cash-flow and leverage comparisons.
+Missing/stale observations are excluded. Source dates, missing coverage and the
+non-point-in-time nature of these snapshots remain explicit.
+
+Each stock has a deterministic summary of the saved technical signal, entry
+conditions, invalidation/held-stock exit rules, annual financial risk flags and
+current shared-budget quantities. It uses the report's saved turnover floor rather
+than substituting a default. Stale reports/quotes suppress qualification. Existing
+entry, confirmation, cooldown, allocation and email rules are unchanged. A change
+in entry qualification is not itself an automatic sale instruction.
+
+## Chronological holdout and execution sensitivity
+
+Strategy lab's optional robustness run evaluates a fixed grid: 10 or 20 positions,
+rebalanced every 1 or 3 calendar months. It splits the available experiment into
+approximately 70% training and 30% later holdout, with at least 20 sessions per
+segment. The selector receives **training metrics only**, maximising training
+Sharpe at zero risk-free rate, then training return, with deterministic ties.
+Holdings carry across the boundary and holdout wealth is normalised at the preceding
+close. Dates and sample sizes are shown. No future bars or current provider turnover
+enter a historical signal; simulations reuse only compact causal signal results.
+
+Four-variant holdout results and selected-variant runs at an extra 25/50 bps
+slippage (capped at 200 bps total per direction) are sensitivity diagnostics, not
+independent validation samples. The baseline full-period chart remains the fixed
+20-position monthly experiment. Performance adds CAGR (at least one year), volatility,
+Sharpe/Sortino at zero risk-free rate, drawdown, underwater duration, average invested
+weight and cumulative half-gross turnover. Per-order sale commission is configurable
+from 0 to 10,000 NOK; actual negative-value moves are charged once per sell order.
+Fee reserves leave residual cash. The strategy and buy-and-hold basket are not
+terminally liquidated. Sale fees are an **experiment** setting; they do not alter
+real share-plan estimates or retroactively change saved paper-cohort assumptions.
+
+This is retrospective chronological validation, not a claim that the historical
+holdout was never previously inspected. Repeatedly tuning against it contaminates
+an unseen-test claim. Today's survivor universe, complete-case eligibility, revised
+prices and absent point-in-time/delisted records remain material limitations.
+The temporal isolation principle is also explained in the [time-series split
+reference](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html);
+Northstar implements it with the Python standard library, without a new dependency.
+
+## Chart context, preferences and exports
+
+The explorer can compare against OSEBX GR directly and show a lower-panel relative
+price ratio rebased to 100 at the first shared date. It is a ratio of cumulative
+performance factors, not an arithmetic return difference or a forecast.
+Dividend and split markers come from the cached provider chart-events payload;
+earnings/reporting markers use explicit dates from retained issuer notices, with
+superseded/corrected calendars removed. Upcoming dates appear in source details.
+Historical issuer event coverage is bounded by retained notices, not a complete
+archive. No date is inferred from a fiscal year end. Marker dates must match an
+observed UTC chart date; event source links and original dates remain visible.
+Dividends are never added again to already-adjusted closes.
+
+CSV export contains only the selected observations and full-history-warmed
+indicators, with missing fields blank. SVG export is standalone and retains chart
+styles. Appearance, overlay, panel, relative time-window and benchmark preferences
+are saved in browser local storage; credentials, portfolio records and individual
+stock selections are not included. API access keys remain in session storage.
+
+## Private system health and email history
+
+Overview shows research freshness and provider failures, usable quote coverage,
+annual financial coverage, issuer feed state, worker-thread presence and email
+readiness. Research schedules overdue by more than five minutes receive attention.
+It exposes coverage/readiness, not proof of investment quality or guaranteed worker
+progress. Full detail uses authenticated `GET /api/system-status`; public
+`GET /api/health` remains only `{ "ok": true }`.
+
+Recent delivery history includes kind/symbol, state, attempts, retry time and SMTP
+acceptance time for the current destination. It omits credentials, addresses, payloads
+and raw provider exceptions. A generic historical failure message accompanies the
+safe current SMTP diagnosis. `GET /api/email/history`, `/api/portfolio-risk` and
+`/api/stock-summary?symbol=...` also require the existing access key. A sent outbox
+state means SMTP accepted the message; inbox delivery cannot be established from it.

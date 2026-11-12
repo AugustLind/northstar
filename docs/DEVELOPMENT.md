@@ -9,6 +9,9 @@ Return to the [README](../README.md). Run commands from the repository root.
 | HTTP API, workers, SQLite orchestration | `app.py` |
 | Screening and indicators | `research.py`, `decision_policy.py`, `indicators.py`, `universe.py` |
 | Financial, announcement, and company data | `fundamentals.py`, `announcements.py`, `company_data.py` |
+| Portfolio covariance, scenarios and decision summaries | `portfolio_risk.py`, `stock_summary.py` |
+| Multi-year financial/peer context | `financial_analysis.py` |
+| Private operational health | `system_status.py` |
 | Historical experiments and forward cohorts | `validation.py` |
 | Portfolio sizing, plans, imports, and ledger | `portfolio_fit.py`, `trade_plan.py`, `holdings_import.py`, `transactions.py` |
 | Dashboard summaries and shared state | `daily_board.py`, `advice_state.py`, `broker_costs.py` |

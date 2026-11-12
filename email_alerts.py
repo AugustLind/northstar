@@ -206,6 +206,13 @@ class Worker:
                 **self.read('email_status', {}),
                 'method': 'Server-side email for confirmed share-plan changes. Repeated scans are deduplicated; stale or blocked suggestions are cancelled. No open browser is needed.'}
 
+    def history(self,limit=30):
+        config=self.config()
+        with self.connect() as db:
+            schema(db)
+            rows=db.execute("SELECT kind,symbol,status,created,updated,attempts,next_attempt,last_error,sent FROM email_outbox WHERE target=? ORDER BY created DESC,id DESC LIMIT ?",(config['target'],max(1,min(100,int(limit))))).fetchall()
+        return [{**dict(row),'last_error':'Delivery attempt failed; see current delivery status for diagnosis.' if row['last_error'] else None} for row in rows]
+
     def set_enabled(self, enabled):
         if not isinstance(enabled, bool):
             raise ValueError('Email enabled must be true or false.')

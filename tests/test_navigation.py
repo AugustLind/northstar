@@ -25,6 +25,8 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(layout.buttons,['daily','recommendations','portfolio','validation'])
         tabs={id for id,node in layout.nodes.items() if 'tab' in node['attrs'].get('class','').split()}
         self.assertEqual(tabs,set(layout.buttons))
+        for id in ['systemHealth','portfolioRisk','stockDecision','financialTrendCharts','robustnessPanel','exportChartCSV','exportChartSVG']:
+            self.assertIn(id,layout.nodes)
         for child,parent in [('announcements','daily'),('briefing','daily'),('method','daily'),('fit','portfolio'),('activity','portfolio')]:
             self.assertIn(parent,layout.nodes[child]['ancestors'])
             self.assertIn(child+'Group',layout.nodes[child]['ancestors'])

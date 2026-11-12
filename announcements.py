@@ -234,13 +234,15 @@ def view(record, symbols=None, now=None):
     items=[item for item in record.get('items',[]) if wanted is None or issuer_group(item['symbol']) in wanted]
     recent=[item for item in items if now-24*3600<=item['published']<=now and not item.get('corrected_by')]
     relevant=sorted(recent,key=lambda item:(-item['classification']['priority'],-item['published']))
-    events={}
+    events={};chart_events={}
     for item in sorted(items,key=lambda x:x['published']):
         if item.get('corrected_by'):continue
         if item['classification']['kind']=='calendar' and re.search(r'financial calendar|finansiell kalender',item['title'],re.I):
             # A newer full calendar supersedes previously extracted calendar entries.
             events={key:value for key,value in events.items() if value['symbol']!=item['symbol']}
+            chart_events={key:value for key,value in chart_events.items() if value['symbol']!=item['symbol']}
         for event in item.get('events',[]):
+            chart_events[(event['symbol'],event['label'],event['date'])]=event
             if event['date']>=dt.datetime.fromtimestamp(now,OSLO).date().isoformat():
                 key=(event['symbol'],event['label'],event['date'][:4]) if event['label']!='Earnings / results presentation' else (event['symbol'],event['label'],event['date'])
                 events[key]=event
@@ -253,6 +255,7 @@ def view(record, symbols=None, now=None):
             'calendar_pending':sum(item['classification']['kind']=='calendar' and not item.get('calendar_checked') and not item.get('corrected_by') for item in items),
             'counts':{'last24h':len(recent),'priority_review':sum(i['classification']['priority']>=3 for i in recent),
                       'earnings':sum(i['classification']['kind']=='earnings' for i in recent)},
+            'chart_events':sorted(chart_events.values(),key=lambda e:(e['date'],e['symbol']))[-100:],
             'events':sorted(events.values(),key=lambda e:(e['date'],e['symbol']))[:50],
             'summary':('Feed unavailable or stale; absence of headlines is not evidence of no company announcements.' if stale else
                 f'{len(recent)} notices in the last 24 hours; {sum(i["classification"]["priority"]>=3 for i in recent)} flagged for closer review. Labels are headline rules, not sentiment or price-impact predictions.')}

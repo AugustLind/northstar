@@ -38,3 +38,13 @@ console.log('Period risk statistics, shared-date comparison, log scales and new 
 
 const compact=Chart.svg(h,{compact:true,log:true,panel:'drawdown'});
 assert(compact.includes('viewBox="0 0 600 440"'));assert(!/NaN|Infinity/.test(compact));
+
+const csv=Chart.csv(h,{start:10,end:15}).trim().split('\r\n');
+assert.strictEqual(csv.length,7);assert(csv[0].includes('RSI14'));
+assert(csv[1].startsWith(new Date(h[10].time*1000).toISOString().slice(0,10)));
+assert(!csv.join('').includes('undefined'));assert(!csv.join('').includes('NaN'));
+const eventSVG=Chart.svg(h,{start:0,end:299,events:[{time:h[40].time,kind:'dividend',label:'<unsafe>',source:'Provider'}],panel:'relative',compare:h});
+assert(eventSVG.includes('&lt;unsafe&gt;'));assert(!eventSVG.includes('<unsafe>'));
+assert(eventSVG.includes('ratio rebased'));assert(!/NaN|Infinity/.test(eventSVG));
+assert(Chart.svg(h,{panel:'relative'}).includes('Choose a comparison'));
+console.log('Sourced chart annotations, relative-performance panel and selected CSV export passed.');

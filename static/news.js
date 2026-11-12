@@ -26,6 +26,7 @@ async function loadStockAnnouncements(symbol){
  const token=++stockNewsRequest;
  try{const n=await api('announcements?symbol='+encodeURIComponent(symbol));if(token!==stockNewsRequest||symbol!==explorerSymbol)return;
  const aliases=Object.entries(n.issuer_aliases||{}).map(([s,issuer])=>s+' uses company issuer '+issuer).join('; ');
+ if(typeof explorerEvents!=='undefined'){explorerEvents[symbol]=(n.chart_events||n.events||[]).map(e=>({time:Date.parse(e.date+'T12:00:00Z')/1000,kind:'earnings',label:e.label+' · stated '+e.date,source_url:e.source_url,source:'NewsWeb issuer notice'}));if(typeof drawExplorer==='function')drawExplorer();}
  $('#stockNewsStatus').textContent=`NewsWeb coverage: ${n.status}. Last successful check: ${n.fetched?newsDate(n.fetched):'not yet'}. `+(n.error||'')+(aliases?' '+aliases+'.':'');
  $('#stockNewsItems').innerHTML=(n.items||[]).slice(0,5).map(i=>noticeCard(i,n.reviewed_at||0)).join('')||'<p>No matching company notices were found in the covered data. This does not mean the company has issued no announcements.</p>';
  $('#stockNewsCalendar').innerHTML=calendarRows(n.events||[]);
