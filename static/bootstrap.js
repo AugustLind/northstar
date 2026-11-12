@@ -26,3 +26,10 @@ $('#checkStockFit').onclick = () => {
   $('#fitPreviewAmount').value = (researchView.report.portfolio_limits || {}).purchase_nok || 0;
   previewFitPurchase();
 };
+
+$('#startPortfolio').onclick = () => {
+  openWorkspace('portfolio');
+  $('#add').focus();
+};
+$('#startResearch').onclick = () => openWorkspace('recommendations');
+$('#startLedger').onclick = () => openWorkspace('activity');

@@ -19,12 +19,18 @@
           Connect this dashboard to your Northstar server. Your portfolio and analysis stay on that
           server.
         </p>
+        <p id="connectionHelp">
+          Use the address and access key supplied by your server owner. The address is usually
+          prefilled. When running locally, leave it blank. Your access key is kept only for this tab
+          session.
+        </p>
         <form id="connectionForm">
           <label
             >Server address<input
               id="backendAddress"
               type="url"
-              placeholder="https://your-server.example.com" /></label
+              placeholder="https://your-server.example.com"
+              aria-describedby="connectionHelp" /></label
           ><label
             >Northstar access key<input
               id="accessKey"
@@ -70,6 +76,6 @@
       </footer>
     </main>
     {{include:position-editor.html}}
-    {{scripts}}
+      {{scripts}}
   </body>
 </html>

@@ -28,6 +28,14 @@ are shown rather than replaced with sample prices. The default research refresh
 interval is six hours and can be changed in the app. Provider availability is
 not guaranteed; offline operation depends on previously cached data.
 
+## First visit
+
+Start in **Overview → Your next steps**. Explore Research immediately, or open
+Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is
+a watchlist entry. For actual account returns, verify cash and an opening snapshot
+in **Portfolio → Activity & cash**, then import later transactions and reconcile
+with your broker. Strategy lab keeps hypothetical experiments separate from your account.
+
 ## What it does
 
 - Screens an editable universe of Oslo stocks using technical signals and
@@ -80,6 +88,7 @@ Do not put access keys or portfolio data in `static/config.js`.
 | Enable local AI or a Linux user service | [Local services](docs/LOCAL-SERVICES.md) |
 | Run on an Oracle Ubuntu server, with private SSH access | [Oracle deployment](DEPLOY.md) |
 | Deploy the API and GitHub Pages UI automatically | [GitHub deployment](GITHUB-DEPLOY.md) |
+| Back up or recover private data and a failed release | [Recovery guide](docs/RECOVERY.md) |
 | Understand modules, checks, and contribution workflow | [Development guide](docs/DEVELOPMENT.md) |
 
 Ollama is optional and installed separately. If it is unavailable, deterministic
@@ -99,7 +108,8 @@ python3 scripts/setup-email.py
 The helper prompts privately for SMTP settings, installs the server configuration
 and restarts Northstar. Open **Daily overview → Email alerts → Send test email**
 after setup. Keep passwords out of source files, GitHub and chat. Email works
-without an open browser, but requires valid confirmed share-plan quantities.
+without an open browser. Stock alerts require valid confirmed share-plan quantities;
+test emails work independently of research and plan generation.
 See the [email reference](docs/REFERENCE.md#email-alerts) for delivery behavior,
 manual settings, and limitations.
 
@@ -124,6 +134,8 @@ on your live account.
 Tests use synthetic data, temporary databases, and mocked providers. Passing
 checks do not establish live provider availability, deployment success, or
 investment performance.
+
+For contribution and review expectations, see [Contributing](CONTRIBUTING.md).
 
 ## Status and limitations
 

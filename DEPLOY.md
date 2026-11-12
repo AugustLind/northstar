@@ -2,6 +2,11 @@
 
 Target: Ubuntu 24.04 aarch64 VM, 1 OCPU, 6 GB RAM. SSH user: ubuntu.
 
+This guide covers initial installation, private SSH access and standalone Basic Auth
+hosting. For the deployed GitHub Pages dashboard and access-key API, use
+[GitHub deployment](GITHUB-DEPLOY.md). Avoid rerunning the initial installer on an
+already configured Pages server; use its deployment workflow for source updates.
+
 ## Copy the code from your own computer
 
 Replace `YOUR_ORACLE_IP` with your server address and `/path/to/northstar` with your checkout. No GitHub authentication is needed to transfer source with SSH. On your **own computer**, replace `/path/to/key` with the SSH key you already use:
@@ -61,4 +66,6 @@ curl -fsS http://127.0.0.1:11434/api/tags
 
 After uploading updated code: `sudo systemctl restart northstar`.
 
-To back up: stop Northstar, copy `~/northstar/data/portfolio.db` to a private backup destination, then start Northstar again. Keep backups off the VM too, because the free instance can be reclaimed. Deployment is not verified until the scripts have run successfully on the VM; the development environment cannot start services or reach this server.
+To back up: stop Northstar, copy `~/northstar/data/portfolio.db` to a private backup destination, then start Northstar again. Keep backups off the VM too, because the free instance can be reclaimed. Verify service status and application access after manual installation or updates.
+For automated releases, require all jobs in the deployment workflow, including
+authenticated release verification, to succeed.

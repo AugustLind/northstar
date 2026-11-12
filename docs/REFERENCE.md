@@ -17,7 +17,7 @@ python3 app.py
 
 Visit **http://127.0.0.1:8000/recommendations**. If another copy is running on port 8000, stop it with Ctrl+C first. Hard refresh the browser after updating the code.
 
-The background worker starts with the app, refreshes quotes, builds recommendations and repeats every six hours by default. Results appear automatically; the browser polls every 15 seconds. The browser can be closed without stopping research. Interval and universe are editable on the Recommendations page.
+The background worker starts with the app, refreshes quotes, builds recommendations and repeats every six hours by default. Results appear automatically; the browser polls every 15 seconds. The browser can be closed without stopping research. Interval and universe are editable in the Research workspace settings.
 
 ## Broad scan, top 20 and interactive charts
 
@@ -120,14 +120,14 @@ Enter current shares, weighted average cost, trading currency, thesis and review
 
 ```bash
 python3 -m unittest discover -s tests -v
-node --check static/app.js
-node --check static/advice.js
-node --check static/charts.js
 node tests/test_charts.js
 node tests/test_ui.js
+python3 scripts/build-ui.py --check
+for file in static/*.js; do node --check "$file"; done
+for file in scripts/*.sh; do bash -n "$file"; done
 ```
 
-Tests use temporary databases and mocked providers. They cover indicator actions, missing/stale data, currency checks, Oslo suffix handling, liquidity, settings, provider parsing, background analysis persistence and local AI requests. External Yahoo/Ollama connectivity, browser rendering, GitHub push and service startup must be checked on the host where those services are available.
+Tests use temporary databases and mocked providers. They cover indicator actions, missing/stale data, currency checks, Oslo suffix handling, liquidity, settings, provider parsing, background analysis persistence and local AI requests. Run `python3 scripts/smoke-browser.py` with Chrome for the isolated authenticated desktop/mobile workflow. Live Yahoo/Ollama connectivity and service startup require checks on the host where those services are available. The deployment workflow separately verifies authenticated API contracts and published assets; see the [development guide](DEVELOPMENT.md#authenticated-release-checks).
 
 ### Historical experiments and forward tracking
 
@@ -167,7 +167,7 @@ Each row shows shares owned, shares to consider buying/selling, shares remaining
 
 ### Six reliability improvements
 
-1. **Activity & cash ledger.** Import a separate Nordnet transaction-history file (up to 500 rows/256 KiB) through an explicit column mapper. Map signed NET cash including actual broker charges. Supported NOK events: buys, sales, dividends, deposits, withdrawals, fees and interest. Unsupported transfers/splits and other currencies stay visible and are not inferred. Initialize from verified current holdings and cash with an end-of-day cutoff; earlier/same-day events are stored as history only, later new events update shares, weighted-average book cost and cash atomically. This is not FIFO/tax accounting. Broker IDs deduplicate imports; without IDs, economic fields plus within-file occurrence are used, and overlapping identical transactions can be ambiguous. Duplicate IDs with conflicting values and oversales are rejected. Manual financial edits/holdings imports require reconciliation; notes remain preserved. A broker cash check compares a reported balance without overwriting cash. Known mismatches withhold quantity plans. Reinitializing a verified snapshot preserves history and cannot precede already imported event dates.
+1. **Activity & cash ledger.** Import a separate Nordnet transaction-history file (up to 500 rows/256 KiB) through an explicit column mapper. Map signed NET cash including actual broker charges. Supported NOK events: buys, sales, dividends, deposits, withdrawals, fees and interest. Splits require an explicitly mapped ratio and zero net cash; see [account performance](#ledger-derived-account-performance). Unsupported transfers and other currencies stay visible and are not inferred. Initialize from verified current holdings and cash with an end-of-day cutoff; earlier/same-day events are stored as history only, later new events update shares, weighted-average book cost and cash atomically. This is not FIFO/tax accounting. Broker IDs deduplicate imports; without IDs, economic fields plus within-file occurrence are used, and overlapping identical transactions can be ambiguous. Duplicate IDs with conflicting values and oversales are rejected. Manual financial edits/holdings imports require reconciliation; notes remain preserved. A broker cash check compares a reported balance without overwriting cash. Known mismatches withhold quantity plans. Reinitializing a verified snapshot preserves history and cannot precede already imported event dates.
 
 2. **Longer dated validation.** Historical runs execute in a single background job on Oracle, expose dated progress, retain the previous result on errors, and can be revisited after closing the browser. A restart interrupts rather than resumes an unfinished experiment. Five-year histories, fixed-rule forward decisions, chronological calendar-year return slices, and OSEBX.OL gross-return index comparison when every date is available. The independent OSEBX GR reference is [Euronext NO0007035327](https://live.euronext.com/en/product/indices/NO0007035327-XOSL). This is an index, not a traded fund; fund costs are not included. No benchmark forward-fill, future financial data or claim of proven returns. The optional robustness view selects among four fixed variants using training metrics only, with limitations described below. Today's universe, missing delisted stocks, revised prices, fractional historical allocations and complete-case selection remain limitations.
 
@@ -479,3 +479,20 @@ filters capture-dated lists; storage totals describe current storage.
 `GET /api/release` is also authenticated and returns only source fingerprint,
 process start time and configured public origin. No access key or database content
 is included in public HTML, assets or release strings.
+
+## Forward cohort benchmark comparison
+
+Saved paper cohorts now show OSEBX GR on the same entry and ending sessions only.
+All stock outcomes must be measurable with identical entry/end dates, and the NOK
+index must have both exact dates. Otherwise the benchmark comparison stays pending
+or unavailable; no dates are filled or shifted. Cohort minus index is an arithmetic
+percentage-point difference, not alpha. Stock returns include the cohort's saved cost
+model; the gross-return index has no trading costs and is not an investable fund.
+Provider revisions can still change measured outcomes; capture dates do not make
+future provider data immutable. Existing cohort records and fee assumptions are retained.
+
+Independent accounting reference cases in `tests/test_account_reference.py` use
+explicit opening/current holdings and hand-calculated expected values, without the
+production event-application helper. They cover end-of-day deposits/withdrawals,
+daily linking, Modified Dietz, reverse splits, dividend price drops and net fees.
+These are software checks, not external certification of investment results.

@@ -123,6 +123,39 @@ function render() {
 async function load() {
   state = await api('state');
   render();
+  renderGettingStarted();
+}
+function renderGettingStarted() {
+  if (!$('#gettingStarted')) return;
+  const held = state.positions.some((p) => p.shares > 0);
+  const tracked = state.positions.length > 0;
+  const priced =
+    tracked &&
+    state.positions.every(
+      (p) => fresh(state.quotes[p.symbol]) && state.quotes[p.symbol].currency === p.currency
+    );
+  const reconciled = state.ledger_reconciled === true;
+  const steps = [
+    [
+      tracked,
+      'Add a holding or watchlist company in Portfolio, or import your Nordnet holdings CSV.',
+    ],
+    [priced, 'Refresh market data and check the quote dates and currencies.'],
+    [
+      reconciled,
+      'For account returns, verify cash and an opening snapshot in Activity & cash. Import later transactions and reconcile with your broker.',
+    ],
+  ];
+  $('#gettingStarted').hidden = false;
+  $('#setupProgress').textContent =
+    reconciled && priced
+      ? 'Your records are ready for review. Check account-performance coverage in Portfolio.'
+      : held
+      ? 'Continue setting up your portfolio. Research is available while you do this.'
+      : 'Start with research or add your portfolio. You can use either independently.';
+  $('#setupChecklist').innerHTML = steps
+    .map(([done, text]) => '<li>' + (done ? '✓ Completed: ' : 'Next: ') + esc(text) + '</li>')
+    .join('');
 }
 function edit(
   p = {

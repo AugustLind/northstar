@@ -20,12 +20,18 @@
           Connect this dashboard to your Northstar server. Your portfolio and analysis stay on that
           server.
         </p>
+        <p id="connectionHelp">
+          Use the address and access key supplied by your server owner. The address is usually
+          prefilled. When running locally, leave it blank. Your access key is kept only for this tab
+          session.
+        </p>
         <form id="connectionForm">
           <label
             >Server address<input
               id="backendAddress"
               type="url"
-              placeholder="https://your-server.example.com" /></label
+              placeholder="https://your-server.example.com"
+              aria-describedby="connectionHelp" /></label
           ><label
             >Northstar access key<input
               id="accessKey"
@@ -70,6 +76,43 @@
           </div>
           <button id="refreshDaily">Refresh overview</button>
         </div>
+        <section class="card" id="gettingStarted" hidden aria-labelledby="gettingStartedTitle">
+          <h2 id="gettingStartedTitle">Your next steps</h2>
+          <p id="setupProgress" role="status"></p>
+          <ol id="setupChecklist"></ol>
+          <div class="researchtools">
+            <button type="button" id="startPortfolio">Add or import holdings</button>
+            <button type="button" id="startResearch">Explore companies</button>
+            <button type="button" id="startLedger">Set up activity &amp; cash</button>
+          </div>
+          <p class="muted">
+            Research works without holdings. Add a company with zero shares to keep a watchlist. Nothing
+            here places trades or connects to your broker.
+          </p>
+        </section>
+        <details class="card">
+          <summary>How to use Northstar</summary>
+          <p>
+            <b>Overview:</b> review changes and check whether data is current. <b>Research:</b> explore
+            companies and the reasons behind a score. <b>Portfolio:</b> record holdings, cash and
+            transactions. <b>Strategy lab:</b> inspect experiments and saved forward results.
+          </p>
+          <p>
+            <b>Account performance</b> measures your recorded holdings and cash flows. A
+            <b>historical proxy</b> models today's holdings in the past. A <b>paper cohort</b> follows a
+            saved research list without real trades. These answer different questions.
+          </p>
+          <p>
+            <b>Drawdown:</b> a fall from an earlier peak. <b>Volatility:</b> how much returns vary.
+            <b>Basis point:</b> 0.01 percentage points. A score is a ranking signal, not a probability of
+            profit.
+          </p>
+          <p>
+            If a result is unavailable, follow its coverage message. Check your ticker and currency,
+            refresh data, and reconcile holdings/cash before relying on account returns. Do not replace
+            missing data with guesses.
+          </p>
+        </details>
         <p id="dailyStatus" role="status">Loading the daily overview…</p>
         <section class="card" id="systemHealth">
           <div class="sectionhead">
@@ -79,9 +122,7 @@
             </div>
             <button id="refreshSystemStatus" type="button">Refresh status</button>
           </div>
-          <p id="systemStatus" role="status">
-            Checking research, data providers and background workers…
-          </p>
+          <p id="systemStatus" role="status">Checking research, data providers and background workers…</p>
           <details>
             <summary>Data sources, workers &amp; delivery details</summary>
             <div id="systemComponents" class="healthgrid"></div>
@@ -89,8 +130,7 @@
               <summary>Workers &amp; recent email delivery</summary>
               <div id="workerStatus"></div>
               <p>
-                Accepted means the SMTP server accepted the message; it does not confirm inbox
-                delivery.
+                Accepted means the SMTP server accepted the message; it does not confirm inbox delivery.
               </p>
               <div id="emailHistory" class="tablewrap"></div>
             </details>
@@ -101,9 +141,8 @@
           <h2>What changed since the previous scan?</h2>
           <div id="dailyChanges"></div>
           <p class="muted">
-            New, updated, unchanged and withdrawn suggestions use recorded scans. Small sizing drift
-            below your change threshold keeps the alert unchanged. No suggestion guarantees a
-            profitable trade.
+            New, updated, unchanged and withdrawn suggestions use recorded scans. Small sizing drift below
+            your change threshold keeps the alert unchanged. No suggestion guarantees a profitable trade.
           </p>
         </section>
         <section class="card">
@@ -151,12 +190,8 @@
               ><button id="reviewedNews">Mark current notices reviewed</button>
             </div>
             <div class="metrics">
-              <article>
-                <small>Notices · last 24 hours</small><strong id="newsCount">—</strong>
-              </article>
-              <article>
-                <small>Headline review flags</small><strong id="newsPriority">—</strong>
-              </article>
+              <article><small>Notices · last 24 hours</small><strong id="newsCount">—</strong></article>
+              <article><small>Headline review flags</small><strong id="newsPriority">—</strong></article>
               <article>
                 <small>Earnings / business updates</small><strong id="newsEarnings">—</strong>
               </article>
@@ -170,9 +205,9 @@
               <h2>Confirmed dates found in issuer notices</h2>
               <div id="newsCalendar"></div>
               <p class="muted">
-                Only explicit full dates associated with results or financial reports are extracted.
-                Dates are as stated in the issuer notice; event times are not extracted. New notices
-                can revise a calendar.
+                Only explicit full dates associated with results or financial reports are extracted. Dates
+                are as stated in the issuer notice; event times are not extracted. New notices can revise
+                a calendar.
               </p>
             </div>
             <div class="sectionhead"><h2>Recent notices</h2></div>
@@ -204,8 +239,8 @@
               Source:
               <a href="https://newsweb.oslobors.no/" target="_blank" rel="noopener noreferrer"
                 >Oslo Børs NewsWeb ↗</a
-              >. This feed does not include general publisher news. Topic and review labels are
-              headline rules, not sentiment analysis or recommendations to trade.
+              >. This feed does not include general publisher news. Topic and review labels are headline
+              rules, not sentiment analysis or recommendations to trade.
             </p>
           </section>
         </details>
@@ -214,8 +249,8 @@
           <section id="briefing">
             <h2>What deserves attention</h2>
             <p>
-              Review alerts against your investment thesis. A price trend alone does not establish
-              whether a business is worth buying or selling.
+              Review alerts against your investment thesis. A price trend alone does not establish whether
+              a business is worth buying or selling.
             </p>
             <div id="alerts"></div>
           </section>
@@ -225,36 +260,35 @@
           <section id="method">
             <h2>A transparent starting point</h2>
             <p>
-              Enter your current Nordnet holdings and weighted average purchase price. Use zero
-              shares for a watchlist company. Norwegian provider tickers end in .OL. For NOK
-              holdings you can enter a bare Oslo ticker such as KOG; the suffix is added during
-              lookup.
+              Enter your current Nordnet holdings and weighted average purchase price. Use zero shares for
+              a watchlist company. Norwegian provider tickers end in .OL. For NOK holdings you can enter a
+              bare Oslo ticker such as KOG; the suffix is added during lookup.
             </p>
             <p>
-              Refresh requests five years of daily price history and USD/NOK from an unofficial
-              Yahoo Finance endpoint. Availability is not guaranteed. Prices may be delayed. Every
-              quote shows its provider timestamp; quotes older than four calendar days are excluded
-              from NOK valuation. USD holdings also require a fresh NOK exchange rate.
+              Refresh requests five years of daily price history and USD/NOK from an unofficial Yahoo
+              Finance endpoint. Availability is not guaranteed. Prices may be delayed. Every quote shows
+              its provider timestamp; quotes older than four calendar days are excluded from NOK
+              valuation. USD holdings also require a fresh NOK exchange rate.
             </p>
             <p>
               Alerts use your price levels, a 200-session price average, and your chosen position
-              concentration limit, including manually tracked cash, when every holding is priced.
-              These are review prompts, not validated investment recommendations. The
-              Recommendations page adds technical ranking and background analysis. Explore also
-              shows available annual financial figures, sources and dates. Official announcement
-              metadata is shown separately from ranks; Source-linked annual assessments, transaction
-              imports, cash reconciliation and optional open-tab desktop alerts are available.
-              Full-report news interpretation, tax calculations and automatic trades are not
-              implemented.
+              concentration limit, including manually tracked cash, when every holding is priced. These
+              are review prompts, not validated investment recommendations. The Recommendations page adds
+              technical ranking and background analysis. Explore also shows available annual financial
+              figures, sources and dates. Official announcement metadata is shown separately from ranks;
+              Source-linked annual assessments, transaction imports, cash reconciliation and optional
+              open-tab desktop alerts are available. Full-report news interpretation, tax calculations and
+              automatic trades are not implemented.
             </p>
             <p>
-              Keep shares and average cost updated after trades and stock splits. Review corporate
-              actions with your broker. The research worker refreshes holdings and the candidate
-              universe at the configured interval while the server is running.
+              Keep shares and average cost updated after trades and stock splits. Review corporate actions
+              with your broker. The research worker refreshes holdings and the candidate universe at the
+              configured interval while the server is running.
             </p>
             <p>
-              Your records are stored in the Northstar server’s SQLite database. Export a backup
-              below. This application does not connect to your Nordnet account.
+              Your records are stored in the Northstar server’s SQLite database. Export a notebook copy
+              below; it does not include transaction history or the research archive. A complete backup
+              requires the server database. This application does not connect to your Nordnet account.
             </p>
             <button id="export">Export notebook JSON</button>
           </section>
@@ -1190,29 +1224,29 @@
         <button type="submit">Save company</button>
       </form>
     </dialog>
-    <script src="./config.js?v=c164e48e9700"></script>
-    <script src="./ui-common.js?v=a383e4205a2e"></script>
-    <script src="./app.js?v=94a365d02245"></script>
-    <script src="./portfolio.js?v=df3417396d52"></script>
-    <script src="./navigation.js?v=1934af93c565"></script>
-    <script src="./charts.js?v=540b385835d5"></script>
-    <script src="./news.js?v=dc0ed3da919c"></script>
-    <script src="./validation.js?v=1a30fb8a7f00"></script>
-    <script src="./portfolio-fit.js?v=7bb10180c347"></script>
-    <script src="./holdings-import.js?v=ff5e53af103a"></script>
-    <script src="./trade-plan.js?v=840332af5c55"></script>
-    <script src="./ledger.js?v=8d600a05ae71"></script>
-    <script src="./daily.js?v=611b46c289c3"></script>
-    <script src="./advice.js?v=296dcc117b94"></script>
-    <script src="./explorer.js?v=267c8c47f996"></script>
-    <script src="./financial-view.js?v=2856c6dce4aa"></script>
-    <script src="./portfolio-risk.js?v=5038b4f3881a"></script>
-    <script src="./stock-summary.js?v=9f8e720795e1"></script>
-    <script src="./validation-view.js?v=54bf6067f20c"></script>
-    <script src="./system-status.js?v=a12e1049a887"></script>
-    <script src="./chart-tools.js?v=837395634dcd"></script>
-    <script src="./account-performance.js?v=6b9e443db403"></script>
-    <script src="./archive-view.js?v=0b37ca5c26ad"></script>
-    <script src="./bootstrap.js?v=83615c908282"></script>
+      <script src="./config.js?v=c164e48e9700"></script>
+      <script src="./ui-common.js?v=a383e4205a2e"></script>
+      <script src="./app.js?v=6827b192653d"></script>
+      <script src="./portfolio.js?v=7eae70f0ed50"></script>
+      <script src="./navigation.js?v=1934af93c565"></script>
+      <script src="./charts.js?v=540b385835d5"></script>
+      <script src="./news.js?v=dc0ed3da919c"></script>
+      <script src="./validation.js?v=689dd730b7a6"></script>
+      <script src="./portfolio-fit.js?v=7bb10180c347"></script>
+      <script src="./holdings-import.js?v=ff5e53af103a"></script>
+      <script src="./trade-plan.js?v=840332af5c55"></script>
+      <script src="./ledger.js?v=8d600a05ae71"></script>
+      <script src="./daily.js?v=611b46c289c3"></script>
+      <script src="./advice.js?v=296dcc117b94"></script>
+      <script src="./explorer.js?v=267c8c47f996"></script>
+      <script src="./financial-view.js?v=2856c6dce4aa"></script>
+      <script src="./portfolio-risk.js?v=5038b4f3881a"></script>
+      <script src="./stock-summary.js?v=9f8e720795e1"></script>
+      <script src="./validation-view.js?v=54bf6067f20c"></script>
+      <script src="./system-status.js?v=a12e1049a887"></script>
+      <script src="./chart-tools.js?v=837395634dcd"></script>
+      <script src="./account-performance.js?v=6b9e443db403"></script>
+      <script src="./archive-view.js?v=0b37ca5c26ad"></script>
+      <script src="./bootstrap.js?v=07106c398fe6"></script>
   </body>
 </html>

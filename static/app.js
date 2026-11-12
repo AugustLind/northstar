@@ -29,7 +29,7 @@ async function api(path, data) {
     r = await fetch(apiBase + '/api/' + path, options);
   } catch (e) {
     throw Error(
-      'Cannot reach Oracle. Check its HTTPS address, server status and allowed Pages origin.'
+      'Cannot reach your Northstar server. Check your connection and server address, then try again. If the problem continues, ask the server owner to check HTTPS and the allowed dashboard origin.'
     );
   }
   const body = await r.json();
@@ -78,7 +78,7 @@ $('#connectionForm').onsubmit = async (e) => {
     } catch (e) {}
     $('#accessKey').value = '';
     $('#connectionPanel').hidden = true;
-    $('#message').textContent = 'Connected to Oracle.';
+    $('#message').textContent = 'Connected to Northstar.';
     await load();
     if (typeof loadResearch === 'function') await loadResearch();
   } catch (e) {

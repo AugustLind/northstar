@@ -1,3 +1,6 @@
 static/index.html
 pages-dist/
 data/
+
+# Shell placeholders must each occupy a standalone line.
+web/templates/index.html

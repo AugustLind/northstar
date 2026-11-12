@@ -50,7 +50,9 @@ git commit -m "Describe your changes"
 git push origin main
 ```
 
-Watch the Actions tab for success or failure. No manual scp, remote pull or restart is needed. The workflow updates application source, not OS packages, nginx configuration or Ollama models. A failed Oracle deployment prevents the new Pages UI from publishing. GitHub-hosted deployment has not been verified until the first workflow succeeds.
+Watch the Actions tab for success or failure. No manual scp, remote pull or restart is needed. The workflow updates application source, not OS packages, nginx configuration or Ollama models. A failed Oracle deployment prevents the new Pages UI from publishing. A release is verified only when all workflow jobs, including the final `verify` job,
+succeed. A failure after Pages publication marks the release failed but does not
+automatically roll back both services; inspect the failed job before retrying.
 
 ## GitHub configuration set by the helper
 

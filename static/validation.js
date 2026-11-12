@@ -36,6 +36,8 @@ async function loadValidation() {
               (s.return_pct == null
                 ? 'Cohort pending'
                 : s.return_pct.toFixed(2) + '% after assumed costs') +
+              '</p><p>' +
+              escapeHtml(paperBenchmarkLabel(s.benchmark)) +
               '</p><div class="tablewrap"><table><thead><tr><th>Saved stock</th><th>Saved action</th><th>Later entry close</th><th>Return after costs</th></tr></thead><tbody>' +
               s.symbols
                 .map(
@@ -191,3 +193,21 @@ $('#runValidation').onclick = async () => {
 setInterval(() => {
   if (validationPolling) loadValidation();
 }, 10000);
+
+function paperBenchmarkLabel(b) {
+  if (!b) return 'Benchmark comparison unavailable for this response.';
+  if (b.status !== 'available')
+    return (
+      'OSEBX GR comparison: ' +
+      b.status +
+      '. Stocks and index must have the same entry and end dates.'
+    );
+  return (
+    'OSEBX GR: ' +
+    b.return_pct.toFixed(2) +
+    '% · Cohort minus index: ' +
+    b.excess_percentage_points.toFixed(2) +
+    ' percentage points. ' +
+    b.method
+  );
+}

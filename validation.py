@@ -183,6 +183,29 @@ def capture(db, report, now=None):
     db.execute('INSERT OR IGNORE INTO paper_snapshots VALUES (?,?,?)', (report['generated'],now,json.dumps(payload,allow_nan=False)))
 
 
+
+def paper_benchmark(results, quotes):
+    """Compare only identical entry/end sessions; never fill missing index values."""
+    out={'status':'pending','return_pct':None,'excess_percentage_points':None,
+         'method':'OSEBX GR gross-return index on the exact cohort entry/end sessions. No index trading costs; excess is a percentage-point difference, not risk-adjusted alpha.'}
+    if not results or any(x['return_pct'] is None for x in results):return out
+    starts={int(x['entry_time']//86400) for x in results};ends={int(x['asof']//86400) for x in results}
+    if len(starts)!=1 or len(ends)!=1:
+        out['status']='unavailable: cohort stocks have different entry/end dates';return out
+    q=quotes.get('OSEBX.OL',{})
+    if q.get('currency')!='NOK':
+        out['status']='unavailable: NOK benchmark data is missing';return out
+    index={int(p['time']//86400):p['close'] for p in history(q)}
+    start=next(iter(starts));end=next(iter(ends))
+    if start not in index or end not in index:
+        out['status']='unavailable: exact benchmark dates are missing';return out
+    gain=(index[end]/index[start]-1)*100
+    out.update(status='available',return_pct=gain,
+               excess_percentage_points=sum(x['return_pct'] for x in results)/len(results)-gain,
+               from_day=start,to_day=end)
+    return out
+
+
 def paper_view(db, quotes, now=None):
     import json
     now = time.time() if now is None else now
@@ -208,7 +231,7 @@ def paper_view(db, quotes, now=None):
                             'return_pct':gain})
         measured=[r['return_pct'] for r in results if r['return_pct'] is not None]
         out.append({'captured':row['captured'],'generated':row['generated'],'symbols':results,
-                    'policy_version':payload.get('policy_version'),
+                    'policy_version':payload.get('policy_version'),'benchmark':paper_benchmark(results,quotes),
                     'fee_model':payload.get('fee_model','legacy-percentage'),
                     'cost_note':('79 NOK per purchase; selling fees unmodelled; budget '+str(payload['order_budget_nok'])+' NOK per stock, including fees; whole shares and residual cash.' if payload.get('fee_model')==FEE_MODEL else 'Legacy cohort: original 20 bps each way; preserved without retroactive changes.'),
                     'measured':len(measured),'return_pct':sum(measured)/len(measured) if measured and len(measured)==len(results) else None})
