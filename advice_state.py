@@ -2,6 +2,7 @@
 import datetime as dt
 import time
 import trade_plan
+import decision_policy as policy
 
 
 def observe(report,previous,now=None):
@@ -9,6 +10,8 @@ def observe(report,previous,now=None):
     result=dict(previous or {})
     for card in report.get('cards',[]):
         symbol=trade_plan.pf.canonical(card['symbol']);old=result.get(symbol,{})
+        if old.get('policy_version') != policy.VERSION:
+            old={}
         if card.get('action') in trade_plan.SELL_SIGNALS:
             intent='sell'
         elif trade_plan.buy_signal(card):intent='buy'
@@ -19,14 +22,15 @@ def observe(report,previous,now=None):
         sessions=list(old.get('sessions',[])) if same else []
         if session not in sessions:sessions.append(session)
         result[symbol]={'intent':intent,'since':old.get('since',now) if same else now,'sessions':sessions[-30:],
-                        'last_seen':now,'action':card.get('action')}
+                        'last_seen':now,'action':card.get('action'),'policy_version':policy.VERSION}
     return result
 
 
 def gate(symbol,direction,snapshot,profile,now):
     if 'signal_state' not in snapshot:return None
     record=snapshot.get('signal_state',{}).get(symbol,{})
-    if record.get('intent')!=direction:return 'Waiting for a matching dated signal observation.'
+    if record.get('policy_version')!=policy.VERSION or record.get('intent')!=direction:
+        return 'Waiting for a matching dated signal observation under the current policy.'
     count=len(record.get('sessions',[]));required=int(profile['confirm_sessions'])
     if count<required:return 'Waiting for signal confirmation: '+str(count)+' / '+str(required)+' market sessions.'
     if now-record.get('since',now)<profile['signal_wait_hours']*3600:

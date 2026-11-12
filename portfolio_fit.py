@@ -210,13 +210,14 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
 
 def view(snapshot, report, profile, now=None):
     import trade_plan
+    import decision_policy as policy
     now=time.time() if now is None else now
     profile=preferences(profile)
     ctx=context(snapshot,profile,now)
     cards=(report or {}).get('cards',[])
-    old=not report or not isinstance(report.get('generated'),(int,float)) or now-report['generated']>86400 or report['generated']>now+300
+    old=not trade_plan.current_report(report,now)
     candidates=[]
-    for card in sorted((c for c in cards if c.get('rank_eligible')),key=lambda c:(-c.get('composite',0),c['symbol']))[:20]:
+    for card in policy.entries(cards):
         symbol=canonical(card['symbol'])
         simulation=preview(symbol,profile['purchase_nok'],snapshot,profile,ctx,now)
         actionable=not old and trade_plan.buy_signal(card) and fresh({'price':card.get('price'),'asof':card.get('asof')},now)

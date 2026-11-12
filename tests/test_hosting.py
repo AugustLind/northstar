@@ -65,6 +65,31 @@ class HostingTests(unittest.TestCase):
         response=self.request('GET','/api/health')
         self.assertEqual(response['body'],{'ok':True})
 
+    def test_email_status_and_controls_are_private_and_never_expose_secrets(self):
+        from test_email_alerts import environment
+        with patch.dict(os.environ, environment()):
+            self.assertEqual(self.request('GET','/api/email')['status'],401)
+            headers={'Authorization':'Bearer test-key','Content-Type':'application/json','Origin':'https://owner.github.io'}
+            status=self.request('GET','/api/email',headers)
+            self.assertEqual(status['status'],200)
+            self.assertTrue(status['body']['configured'])
+            self.assertNotIn('private-password',json.dumps(status['body']))
+            self.assertEqual(self.request('POST','/api/email/settings',{'Content-Type':'application/json'},{'enabled':False})['status'],401)
+            self.assertEqual(self.request('POST','/api/email/settings',{**headers,'Origin':'https://attacker.example'},{'enabled':False})['status'],403)
+            self.assertEqual(self.request('POST','/api/email/settings',headers,{'enabled':'yes'})['status'],400)
+            paused=self.request('POST','/api/email/settings',headers,{'enabled':False})
+            self.assertEqual(paused['status'],200)
+            self.assertFalse(paused['body']['enabled'])
+            self.assertEqual(app.read_meta('email_enabled'),False)
+            self.assertEqual(self.request('POST','/api/email/test',{'Content-Type':'application/json'})['status'],401)
+            worker=app.email_worker()
+            with patch.object(app,'EMAIL_WORKER',worker):
+                self.assertEqual(self.request('POST','/api/email/test',headers)['status'],400)
+                self.request('POST','/api/email/settings',headers,{'enabled':True})
+                self.assertTrue(self.request('POST','/api/email/test',headers)['body']['queued'])
+                self.assertEqual(self.request('POST','/api/email/test',headers)['status'],400)
+            self.assertEqual(self.request('POST','/api/email/test',headers)['status'],503)
+
     def test_authentication_fails_closed_if_pages_is_enabled_without_key(self):
         with patch.dict(os.environ,{'NORTHSTAR_ACCESS_KEY_HASH':''}):
             self.assertFalse(app.api_authorized(None))

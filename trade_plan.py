@@ -4,10 +4,11 @@ import math
 import time
 import portfolio_fit as pf
 import company_data
+import decision_policy as policy
 from broker_costs import BUY_FEE_NOK
 
 VERSION='share-count-scenarios-v1'
-SELL_SIGNALS={'Consider reducing / selling','Review sell threshold','Consider taking profits'}
+SELL_SIGNALS=policy.SELL_SIGNALS
 
 
 def quote_for(snapshot,symbol):
@@ -18,23 +19,15 @@ def quote_for(snapshot,symbol):
 
 def current_report(report,now):
     t=(report or {}).get('generated')
-    return isinstance(t,(int,float)) and math.isfinite(t) and -300<=now-t<=86400
+    return ((report or {}).get('policy_version') == policy.VERSION
+            and isinstance(t,(int,float)) and math.isfinite(t) and -300<=now-t<=86400)
 
 
 def signal_current(card,now):
     return bool(card and pf.fresh({'price':card.get('price'),'asof':card.get('asof')},now))
 
 
-def buy_signal(card):
-    if not card.get('rank_eligible'):
-        return False
-    if card.get('action')=='Consider buying':
-        return True
-    # Holdings have a Hold / monitor label even when they meet the new-stock buy screen.
-    m=card.get('metrics',{})
-    return (card.get('action')=='Hold / monitor' and card.get('score')==100
-            and isinstance(m.get('volatility'),(float,int)) and math.isfinite(m['volatility']) and m['volatility']<50
-            and isinstance(m.get('extension50'),(float,int)) and math.isfinite(m['extension50']) and m['extension50']<15)
+buy_signal = policy.buy_signal
 
 
 def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
@@ -129,8 +122,7 @@ def build(snapshot,report,profile,now=None):
     cards={pf.canonical(c['symbol']):c for c in (report or {}).get('cards',[])}
     sells=sell_scenario(snapshot,cards,ctx,profile,report_ok,now)
     blocked_sales={r['symbol'] for r in sells if r['sell_shares']}
-    ranked=sorted((c for c in cards.values() if c.get('rank_eligible')),
-                  key=lambda c:(-c.get('composite',0),c['symbol']))[:20]
+    ranked=policy.entries(cards.values())
     buys=[];blocked=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
     left=profile['purchase_nok'];spent=0.;fees=0.;warnings=list(ctx['warnings'])
     minimum_order=BUY_FEE_NOK*(1+100/profile['max_buy_fee_pct'])
@@ -197,7 +189,7 @@ def build(snapshot,report,profile,now=None):
             blocked.append({'symbol':symbol,'buy_shares':0,'reason':reason})
     result_ctx=pf.context(working,working_profile,now)
     sale_proceeds=sum(r['gross_proceeds_nok'] or 0 for r in sells)
-    return {'version':VERSION,'generated':now,'report_generated':(report or {}).get('generated'),
+    return {'version':VERSION,'policy_version':policy.VERSION,'generated':now,'report_generated':(report or {}).get('generated'),
             'buy_budget_nok':profile['purchase_nok'],'spent_nok':spent,'unallocated_budget_nok':left,
             'buy_fees_nok':fees,'cash_after_buys_nok':working_profile['cash_nok'],
             'cash_after_sell_scenario_nok':profile['cash_nok']+sale_proceeds,

@@ -142,14 +142,17 @@ class PortfolioFitTests(unittest.TestCase):
 
     def test_rank_never_changes_and_stale_report_cannot_clear(self):
         card={'symbol':'B.OL','price':100,'asof':NOW,'action':'Consider buying','rank_eligible':True,'rank':1,'composite':90}
-        report={'generated':NOW,'cards':[card]};saved=copy.deepcopy(report)
+        import decision_policy
+        report={'generated':NOW,'policy_version':decision_policy.VERSION,'cards':[card]};saved=copy.deepcopy(report)
         v=pf.view(snapshot(),report,profile(),NOW)
         self.assertTrue(v['candidates'][0]['buy_candidate'])
         self.assertEqual(report,saved)
         for change in ({'generated':NOW-2*86400},{'generated':NOW+1000},
-                       {'cards':[{**card,'action':'Wait / watch'}]}, {'cards':[{**card,'asof':NOW-5*86400}]}):
+                       {'policy_version':'old'}, {'cards':[{**card,'asof':NOW-5*86400}]}):
             v=pf.view(snapshot(),{**report,**change},profile(),NOW)
             self.assertFalse(v['candidates'][0]['buy_candidate'])
+        v=pf.view(snapshot(),{**report,'cards':[{**card,'action':'Wait / watch'}]},profile(),NOW)
+        self.assertEqual(v['candidates'],[])
 
     def test_correlation_exact_alignment_and_missing_history(self):
         def series(sign):

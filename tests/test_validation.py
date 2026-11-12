@@ -15,7 +15,7 @@ class ValidationTests(unittest.TestCase):
             self.assertLessEqual(q['history'][-1]['time'],kw['as_of'])
             self.assertEqual(q['turnover20'],sum(p['close']*p['volume'] for p in q['history'][-20:])/20)
             seen.append(len(q['history']))
-            return {'symbol':s,'composite':80,'rank_eligible':True}
+            return {'symbol':s,'composite':80,'rank_eligible':True,'action':'Consider buying'}
         with patch('research.screen',side_effect=screen):
             v=validation.evaluate(quotes(),['A.OL'])
         self.assertTrue(seen)
@@ -55,7 +55,7 @@ class ValidationTests(unittest.TestCase):
         q=quotes()
         for bar in q['A.OL']['history']:
             bar['close']=100
-        with patch('research.screen',return_value={'symbol':'A.OL','composite':50,'rank_eligible':True}):
+        with patch('research.screen',return_value={'symbol':'A.OL','composite':50,'rank_eligible':True,'action':'Consider buying'}):
             v=validation.evaluate(q,['A.OL'])
         self.assertAlmostEqual(v['return_pct'],-.079)
         self.assertAlmostEqual(v['benchmark_pct'],-.079)
@@ -81,7 +81,7 @@ class ValidationTests(unittest.TestCase):
         self.assertAlmostEqual(old['symbols'][0]['return_pct'],(100.2/100.1*.998/1.002-1)*100)
 
     def test_no_eligible_stocks_stay_cash(self):
-        with patch('research.screen',return_value={'rank_eligible':False}):
+        with patch('research.screen',return_value={'symbol':'A.OL','rank_eligible':False,'action':'Wait / watch'}):
             v=validation.evaluate(quotes(),['A.OL'])
         self.assertEqual(v['return_pct'],0)
         self.assertEqual(v['trades'],0)

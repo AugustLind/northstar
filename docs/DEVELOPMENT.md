@@ -7,11 +7,12 @@ Return to the [README](../README.md). Run commands from the repository root.
 | Area | Files |
 |---|---|
 | HTTP API, workers, SQLite orchestration | `app.py` |
-| Screening and indicators | `research.py`, `indicators.py`, `universe.py` |
+| Screening and indicators | `research.py`, `decision_policy.py`, `indicators.py`, `universe.py` |
 | Financial, announcement, and company data | `fundamentals.py`, `announcements.py`, `company_data.py` |
 | Historical experiments and forward cohorts | `validation.py` |
 | Portfolio sizing, plans, imports, and ledger | `portfolio_fit.py`, `trade_plan.py`, `holdings_import.py`, `transactions.py` |
 | Dashboard summaries and shared state | `daily_board.py`, `advice_state.py`, `broker_costs.py` |
+| Persistent email delivery | `email_alerts.py` |
 | Browser UI | `static/` |
 | Deployment and diagnostic helpers | `scripts/` |
 | Python and JavaScript regression checks | `tests/` |

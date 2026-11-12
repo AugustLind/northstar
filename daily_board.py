@@ -65,7 +65,7 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
     return {'generated':now,'top3':ordered[:3],'reviews':ordered,'changes':changes,
             'plan':plan,'announcement_status':notices.get('status'),'ledger':ledger,
             'coverage':(report or {}).get('coverage',{}),
-            'method':'Priorities are review rules, not probabilities. No message is sent to any external service. Browser notifications require opt-in and an open dashboard.'}
+            'method':'Priorities are review rules, not probabilities. Browser notifications require opt-in and an open dashboard. Optional server-side email sends confirmed share-plan changes when SMTP is configured and enabled.'}
 
 
 def merge_alerts(old,reviews,now=None):

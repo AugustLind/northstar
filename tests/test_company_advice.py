@@ -38,7 +38,7 @@ class CompanyTests(unittest.TestCase):
         s={'positions':[{'symbol':'WWI.OL','currency':'NOK','shares':10},{'symbol':'WWIB.OL','currency':'NOK','shares':10}],
            'quotes':{'WWI.OL':{'price':100,'currency':'NOK','asof':NOW},'WWIB.OL':{'price':100,'currency':'NOK','asof':NOW}}}
         p=profile(cash_nok=0,max_stock_pct=20,reserve_pct=0,sectors={'WWI.OL':'Industrials','WWIB.OL':'Industrials'})
-        v=tp.build(s,{'generated':NOW,'cards':[]},p,NOW)
+        v=tp.build(s,{'generated':NOW,'policy_version':tp.policy.VERSION,'cards':[]},p,NOW)
         self.assertEqual(sum(r['sell_shares'] for r in v['holdings']),16)
         self.assertEqual(len(pf.context(s,p,NOW)['issuer_exposure']),1)
 
@@ -65,11 +65,11 @@ class AdviceTests(unittest.TestCase):
         s=snapshot();s['signal_state']={}
         p=profile(confirm_sessions=2,signal_wait_hours=24,trade_cooldown_days=7)
         self.assertIn('Waiting',ads.gate('B.OL','buy',s,p,NOW))
-        s['signal_state']={'B.OL':{'intent':'buy','since':NOW-2*86400,'sessions':['a','b']}}
+        s['signal_state']={'B.OL':{'intent':'buy','since':NOW-2*86400,'sessions':['a','b'],'policy_version':tp.policy.VERSION}}
         self.assertIsNone(ads.gate('B.OL','buy',s,p,NOW))
         s['last_trades']={'B.OL':NOW-86400}
         self.assertIn('cooldown',ads.gate('B.OL','buy',s,p,NOW))
-        self.assertEqual(tp.build(s,{'generated':NOW,'cards':[card()]},p,NOW)['buys'],[])
+        self.assertEqual(tp.build(s,{'generated':NOW,'policy_version':tp.policy.VERSION,'cards':[card()]},p,NOW)['buys'],[])
 
     def test_small_changes_keep_alert_id_until_cumulative_change_is_large(self):
         def plan(n):return {'buys':[{'symbol':'A.OL','buy_shares':n}], 'holdings':[]}
@@ -91,5 +91,5 @@ class AdviceTests(unittest.TestCase):
 
     def test_ledger_mismatch_withholds_counts(self):
         s=snapshot(10);s['ledger_reconciled']=False
-        v=tp.build(s,{'generated':NOW,'cards':[card()]},profile(),NOW)
+        v=tp.build(s,{'generated':NOW,'policy_version':tp.policy.VERSION,'cards':[card()]},profile(),NOW)
         self.assertEqual(v['buys'],[]);self.assertIsNone(v['holdings'][0]['sell_shares'])

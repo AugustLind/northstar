@@ -8,6 +8,7 @@ import math
 import threading
 import re
 import indicators
+import decision_policy as policy
 import fundamentals
 import portfolio_fit
 import trade_plan
@@ -65,7 +66,8 @@ def screen(symbol, q, position=None, min_turnover_nok=250000, as_of=None):
               'reasons': [], 'asof': q.get('asof') if q else None,
               'source': q.get('source') if q else None, 'metrics': {}, 'history': [],
               'thesis': (position or {}).get('thesis', ''),
-              'review': (position or {}).get('review', '')}
+              'review': (position or {}).get('review', ''), 'policy_version': policy.VERSION,
+              'rank_eligible': False}
     if not is_fresh(q, as_of):
         result['reasons'] = ['No fresh quote. No actionable signal generated.']
         return result
@@ -94,42 +96,20 @@ def screen(symbol, q, position=None, min_turnover_nok=250000, as_of=None):
     daily = [closes[i] / closes[i-1] - 1 for i in range(1, len(closes))]
     mean = sum(daily) / len(daily)
     volatility = math.sqrt(sum((r-mean)**2 for r in daily)/(len(daily)-1)*252)*100
-    # Four independent readable conditions, not statistical confidence.
-    score = 25 * sum([last > ma200, last > ma50, ma50 > ma200, momentum > 0])
-    result['metrics'] = {'ma50': ma50, 'ma200': ma200, 'momentum3m': momentum,
+    result['metrics'] = {'close': last, 'ma50': ma50, 'ma200': ma200, 'momentum3m': momentum,
                          'drawdown': drawdown, 'volatility': volatility,
                          'history_end': history[-1]['time'],
                          'turnover20': q.get('turnover20'), 'turnover_days': q.get('turnover_days', 0)}
+    # Overlapping trend conditions, not statistical confidence.
+    score = policy.trend_score(result['metrics'])
     result['score'] = score
     result.update(indicators.analyse(history, result['metrics'], score, q.get('turnover20'), q.get('turnover_days',0), min_turnover_nok))
     reasons = [f'Latest daily close is {"above" if last > ma200 else "below"} the 200-session average.',
                f'Three-month price change: {momentum:+.1f}%.',
                f'Annualised daily-price volatility: {volatility:.1f}%.']
-    if held:
-        if last < ma200 and momentum < 0:
-            action = 'Consider reducing / selling'
-            reasons.insert(0, 'Both the long-term price trend and three-month momentum are negative.')
-        else:
-            action = 'Hold / monitor'
-        if position.get('below') is not None and q['price'] <= position['below']:
-            action = 'Review sell threshold'
-            reasons.insert(0, 'Your lower review price has been reached.')
-        elif position.get('above') is not None and q['price'] >= position['above']:
-            action = 'Consider taking profits'
-            reasons.insert(0, 'Your upper review price has been reached.')
-    elif (q.get('turnover_days', 0) < 15 or q.get('turnover20') is None):
-        action = 'Wait / liquidity unknown'
-        reasons.insert(0, 'Too little turnover data to assess whether this stock can be traded readily.')
-    elif q['turnover20'] < min_turnover_nok:
-        action = 'Wait / low liquidity'
-        reasons.insert(0, f'Average daily traded value is below the NOK {min_turnover_nok:,.0f} liquidity floor. A small trade may move the price.')
-    elif score == 100 and volatility < 50 and last / ma50 < 1.15:
-        action = 'Consider buying'
-        reasons.insert(0, 'All four trend conditions pass; volatility and price-extension filters pass.')
-    else:
-        action = 'Wait / watch'
-        reasons.insert(0, 'The complete buy-screen criteria are not met.')
-    result.update(action=action, reasons=reasons)
+    decision = policy.decide(result['metrics'], q['price'], position, min_turnover_nok)
+    result.update(decision)
+    result['reasons'] = result.pop('policy_reasons') + reasons
     return result
 
 
@@ -154,9 +134,8 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
         holding=next((h for h in portfolio['holdings'] if h['symbol']==portfolio_fit.canonical(card['symbol'])),None)
         if holding and holding['weight_pct'] is not None and holding['weight_pct']>profile['max_stock_pct']:
             card['reasons'].append(f"{holding['weight_pct']:.1f}% of tracked holdings plus cash; concentration exceeds your {profile['max_stock_pct']:g}% position limit.")
-    def rank(c):
-        return (-c.get('composite', -1), c['symbol'])
-    ranked = sorted([c for c in cards if c.get('rank_eligible')],key=rank)
+    rank = policy.rank_key
+    ranked = policy.entries(cards, limit=None)
     for number, card in enumerate(ranked,1):
         card['rank'] = number
     coverage = {'requested':len(cards), 'analysed':sum(c['score'] is not None for c in cards),
@@ -180,10 +159,11 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
         card['sparkline'] = card['history'][-60::3]
         card['history'] = []
     report={'generated': time.time(), 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
-            'top20':[c['symbol'] for c in ranked[:20]], 'coverage':coverage,
+            'top20':[c['symbol'] for c in ranked[:policy.MAX_CANDIDATES]], 'coverage':coverage,
+            'policy_version':policy.VERSION,
             'portfolio_context':portfolio, 'portfolio_limits':{k:v for k,v in profile.items() if k!='sectors'},
             'universe_source': UNIVERSE_SOURCE, 'universe_snapshot': oslo_universe.ASOF,
-            'method': 'Technical ranking v2; financial snapshots and NewsWeb headline metadata are supplementary and do not change ranks. No full-report news interpretation or backtest.',
+            'method': 'Shared technical entry/exit policy. Only stocks passing every entry rule receive entry ranks; component scores order them. Portfolio sizing and confirmation are additional gates. Financial snapshots and NewsWeb headlines do not change signals.',
             'universe': universe, 'commentary': None, 'llm_status': 'disabled'}
     report['trade_plan']=trade_plan.build(snapshot,report,profile)
     return report
@@ -358,7 +338,7 @@ class ResearchWorker:
         with self.status_lock:
             status = dict(self.status)
         report = self.read('report', None)
-        if report and report.get('market_scope') != SCOPE:
+        if report and (report.get('market_scope') != SCOPE or report.get('policy_version') != policy.VERSION):
             report = None
         return {'report': report, 'worker': status, 'settings': self.settings(), 'model_busy': MODEL_LOCK.locked(),
                 'progress': self.read('refresh_progress', None), 'default_universe':DEFAULT_UNIVERSE,

@@ -16,6 +16,7 @@ if system:
     service_options = f'''User={getpass.getuser()}
 Group={grp.getgrgid(os.getgid()).gr_name}
 EnvironmentFile=-/etc/northstar.env
+EnvironmentFile=-/etc/northstar-email.env
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

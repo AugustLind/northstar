@@ -44,7 +44,6 @@ def analyse(history, metrics, trend_score, turnover, turnover_days, floor):
     risk_score=clamp(100-.8*volatility+.5*worst)
     timing_score=(90 if 40<=strength<=65 else 65 if 30<=strength<70 else 35)
     timing_score=clamp(timing_score+(10 if macd[-1]>signal[-1] else -10)-(20 if extension>=15 else 0))
-    liquid=turnover is not None and turnover_days>=15 and turnover>=floor
     liquidity_score=clamp(50+25*math.log10(max(turnover or 1,1)/max(floor,1))) if turnover_days>=15 else 0
     parts=[('Trend',trend_score,30,'Price versus 50/200-session averages and the direction of those averages.'),
            ('Momentum',momentum_score,25,f'3-month {metrics["momentum3m"]:+.1f}%; 6-month {return6m:+.1f}%, scaled by volatility.'),
@@ -55,7 +54,7 @@ def analyse(history, metrics, trend_score, turnover, turnover_days, floor):
     metrics.update(rsi14=strength,macd=macd[-1],macd_signal=signal[-1],macd_histogram=macd[-1]-signal[-1],
                    bollinger_upper=upper,bollinger_lower=lower,bollinger_mid=mid,momentum6m=return6m,
                    max_drawdown=worst,extension50=extension)
-    return {'composite':composite,'rank_eligible':liquid and volatility<80,
+    return {'composite':composite,
             'analyses':[{'name':name,'score':round(score,1),'weight':weight,'explanation':why} for name,score,weight,why in parts],
             'observations':[
                 f'RSI(14) is {strength:.1f}: '+('overbought momentum; not an automatic sell' if strength>=70 else 'oversold momentum; not evidence of cheap valuation' if strength<=30 else 'between oversold and overbought thresholds'),

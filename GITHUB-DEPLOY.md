@@ -73,3 +73,9 @@ The workflow publishes only an allowlist of static assets. No holdings database,
 - **401:** enter the access key from Oracle; it is separate from your SSH key and Ubuntu account.
 
 After enabling access-key authentication, legacy local/tunnel clients also need to connect using the key. The older Basic Auth HTTPS setup is superseded by `setup-pages-oracle.sh` when using Pages.
+
+## Optional email alerts
+
+After deploying the email-enabled version, run `python3 scripts/setup-email.py` in the Oracle checkout. It prompts privately for your SMTP settings, stores them in `/etc/northstar-email.env` with mode 600, installs a service drop-in and restarts Northstar. Existing API credentials and portfolio data are preserved. These settings stay on Oracle and are never part of the Pages build or GitHub Actions variables. Deployments preserve both service environment files.
+
+Open **Daily overview → Email alerts**, enable delivery if paused, and select **Send test email**. Alerts require a valid confirmed share-count plan; the server sends them with the browser closed. An authentication/connectivity error appears in delivery status. Follow your provider's SMTP settings and verify Oracle can reach its submission port. Acceptance by the mail server is not proof of inbox delivery. Full behavior and manual environment settings are documented in [the email reference](docs/REFERENCE.md#email-alerts).

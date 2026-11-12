@@ -3,9 +3,10 @@ import bisect
 import math
 import time
 import research
+import decision_policy as policy
 from broker_costs import BUY_FEE_NOK, FEE_MODEL
 
-VERSION = 'technical-monthly-fixed-buy-v2'
+VERSION = 'technical-policy-monthly-v3'
 LIMITS = ('Exploratory, not an unbiased market backtest: today’s configured universe excludes '
           'unknown delisted stocks. Adjusted prices may be revised. Financials and news are excluded. '
           'Benchmark is the same complete-history basket bought and held, not an Oslo index. '
@@ -87,7 +88,7 @@ def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000,
         curve.append({'time': day*86400, 'close':equity, 'benchmark':benchmark})
         this_month = time.strftime('%Y-%m', time.gmtime(day*86400))
         if this_month != month and day != common[-1]:
-            ranked = []
+            measured = []
             for s,h in series.items():
                 past = h[:bisect.bisect_right([int(p['time']//86400) for p in h],day)]
                 # Turnover from available daily bars only; never use latest cached turnover.
@@ -95,10 +96,16 @@ def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000,
                 tv = [p['close']*p['volume'] for p in bars if isinstance(p.get('volume'),(float,int)) and math.isfinite(p['volume']) and p['volume']>=0]
                 q = {'price':past[-1]['close'],'asof':past[-1]['time'],'currency':'NOK','history':past,
                      'turnover20':sum(tv)/len(tv) if tv else None,'turnover_days':len(tv)}
-                c = research.screen(s,q,min_turnover_nok=floor,as_of=day*86400+86399)
-                if c.get('rank_eligible'):
-                    ranked.append(c)
-            pending = [c['symbol'] for c in sorted(ranked,key=lambda c:(-c['composite'],c['symbol']))[:20]]
+                position = {'shares': 1, 'currency': 'NOK'} if s in holdings else None
+                c = research.screen(s,q,position=position,min_turnover_nok=floor,as_of=day*86400+86399)
+                measured.append(c)
+            # Falling out of the entry screen is not an exit signal. Keep existing
+            # positions until the shared exit policy fires; fill vacant slots only.
+            retained = sorted(c['symbol'] for c in measured if c['symbol'] in holdings
+                              and c.get('action') not in policy.SELL_SIGNALS)
+            available = (c for c in measured if c['symbol'] not in holdings)
+            additions = policy.entries(available, limit=policy.MAX_CANDIDATES-len(retained))
+            pending = retained + [c['symbol'] for c in additions]
             decisions += 1
             if progress:progress({'decisions':decisions,'session':day*86400})
             month = this_month
@@ -123,8 +130,8 @@ def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000,
            'status':'available' if comparable else 'unavailable / incomplete date coverage',
            'return_pct':(index_curve[-1]['close']-1)*100 if index_curve else None,'curve':index_curve,
            'method':'Provider series for the OSEBX gross-return benchmark. Index is not investable; no fund fees or transaction costs applied. Never forward-filled.'}
-    return {'generated':time.time(),'version':VERSION,'cost_bps':cost_bps,'limits':LIMITS,'fee_model':FEE_MODEL,
-            'folds':folds,'oslo_index':index,'test_protocol':'Technical-ranking experiment, not the personalized quantity/stability policy. Fixed rules, 200-session warm-up, monthly forward decisions and next-common-close execution; chronological calendar-year holdout slices, no parameter fitting. Point-in-time delisted coverage unavailable.',
+    return {'generated':time.time(),'version':VERSION,'policy_version':policy.VERSION,'cost_bps':cost_bps,'limits':LIMITS,'fee_model':FEE_MODEL,
+            'folds':folds,'oslo_index':index,'test_protocol':'Shared technical entry/exit signals, 200-session warm-up, monthly decisions and next-common-close execution. Retain holdings until a technical exit; fill vacant slots with qualifying entries in score order, up to 20 positions. Monthly equal-weight sizing is an experiment overlay and can trim retained positions. Personal review prices, confirmation periods, cooldowns, sector/position limits and personalized quantities are not simulated. Chronological calendar-year slices, no parameter fitting. Point-in-time delisted coverage unavailable.',
             'initial_capital':initial_capital,'buy_fee_nok':BUY_FEE_NOK,'buy_orders':buy_orders,
             'fixed_fees_nok':fixed_fees*initial_capital,'total_costs_nok':fees*initial_capital,
             'stocks':len(series),'requested':len(set(universe)),'sessions':len(common),'decisions':decisions,
@@ -138,7 +145,7 @@ def capture(db, report, now=None):
     db.execute('CREATE TABLE IF NOT EXISTS paper_snapshots (generated REAL PRIMARY KEY, captured REAL NOT NULL, payload TEXT NOT NULL)')
     import json
     cards = {c['symbol']:c for c in report.get('cards',[])}
-    payload = {'version':VERSION,'symbols':[{'symbol':s,'rank':cards[s].get('rank'),'action':cards[s].get('action'),
+    payload = {'version':VERSION,'policy_version':report.get('policy_version'),'symbols':[{'symbol':s,'rank':cards[s].get('rank'),'action':cards[s].get('action'),
                'composite':cards[s].get('composite'),'quote_asof':cards[s].get('asof')} for s in report.get('top20',[]) if s in cards]}
     budget=(report.get('portfolio_limits') or {}).get('purchase_nok',0)
     payload['share_plan_audit']={'buys':(report.get('trade_plan') or {}).get('buys',[]),'sales':(report.get('trade_plan') or {}).get('holdings',[])}
@@ -172,6 +179,7 @@ def paper_view(db, quotes, now=None):
                             'return_pct':gain})
         measured=[r['return_pct'] for r in results if r['return_pct'] is not None]
         out.append({'captured':row['captured'],'generated':row['generated'],'symbols':results,
+                    'policy_version':payload.get('policy_version'),
                     'fee_model':payload.get('fee_model','legacy-percentage'),
                     'cost_note':('79 NOK per purchase; selling fees unmodelled; budget '+str(payload['order_budget_nok'])+' NOK per stock, including fees; whole shares and residual cash.' if payload.get('fee_model')==FEE_MODEL else 'Legacy cohort: original 20 bps each way; preserved without retroactive changes.'),
                     'measured':len(measured),'return_pct':sum(measured)/len(measured) if measured and len(measured)==len(results) else None})

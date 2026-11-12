@@ -22,6 +22,7 @@ import transactions
 import company_data
 import advice_state
 import daily_board
+import email_alerts
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -37,6 +38,7 @@ WORKER = None
 FUNDAMENTALS_WORKER = None
 ANNOUNCEMENTS_WORKER = None
 COMPANY_WORKER = None
+EMAIL_WORKER = None
 MODEL_LOCK = threading.Lock()
 
 def request_origin_allowed(origin, host):
@@ -453,7 +455,18 @@ def daily_view():
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
+    result['email']=email_worker().status()
     return result
+
+
+def email_plan():
+    snapshot=state()
+    report=read_meta('report')
+    return report,trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
+
+
+def email_worker():
+    return EMAIL_WORKER or email_alerts.Worker(connect,read_meta,write_meta,email_plan)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -499,6 +512,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'error':'History is not downloaded yet. Wait for the scan to finish.'},404)
             return self.send_json(json.loads(row['payload']))
         if self.path == '/api/daily':return self.send_json(daily_view())
+        if self.path == '/api/email':return self.send_json(email_worker().status())
         if self.path == '/api/ledger':return self.send_json(ledger_view())
         if self.path == '/api/trade-plan':
             snapshot=state()
@@ -556,7 +570,13 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError('JSON object required.')
-            if self.path == '/api/ledger/reconcile':return self.send_json(broker_cash_check(data))
+            if self.path == '/api/email/settings':
+                return self.send_json(email_worker().set_enabled(data.get('enabled')))
+            elif self.path == '/api/email/test':
+                if not EMAIL_WORKER:
+                    return self.send_json({'error':'Email worker is not started.'},503)
+                return self.send_json(EMAIL_WORKER.queue_test())
+            elif self.path == '/api/ledger/reconcile':return self.send_json(broker_cash_check(data))
             elif self.path == '/api/ledger/initialize':return self.send_json(ledger_initialize(data))
             elif self.path == '/api/ledger/inspect':return self.send_json(ledger_inspect(data))
             elif self.path == '/api/ledger/preview':return self.send_json(ledger_preview(data))
@@ -655,15 +675,19 @@ def report_ready():
             validation.capture(db,report)
     if ANNOUNCEMENTS_WORKER:
         ANNOUNCEMENTS_WORKER.trigger()
+    if EMAIL_WORKER:
+        EMAIL_WORKER.wake.set()
 
 if __name__ == '__main__':
     connect().close()
     ANNOUNCEMENTS_WORKER = announcements.Worker(read_meta,write_meta,announcement_focus)
     COMPANY_WORKER=company_data.Worker(read_meta,write_meta,financial_symbols)
     WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, report_ready)
+    EMAIL_WORKER = email_alerts.Worker(connect,read_meta,write_meta,email_plan)
     FUNDAMENTALS_WORKER = fundamentals.Worker(read_meta, write_meta, financial_symbols)
     # Bind first so a second process cannot start a competing background worker.
     server = ThreadingHTTPServer(('127.0.0.1', 8000), Handler)
+    EMAIL_WORKER.start()
     COMPANY_WORKER.start()
     WORKER.start()
     FUNDAMENTALS_WORKER.start()
@@ -672,6 +696,8 @@ if __name__ == '__main__':
     try:
         server.serve_forever()
     except KeyboardInterrupt:
+        EMAIL_WORKER.stop.set()
+        EMAIL_WORKER.wake.set()
         COMPANY_WORKER.stop.set()
         COMPANY_WORKER.wake.set()
         WORKER.stop.set()

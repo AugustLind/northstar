@@ -24,7 +24,7 @@ def snapshot(shares=0):
 
 class TradePlanTests(unittest.TestCase):
     def plan(self,s=None,cards=None,p=None):
-        return tp.build(s or snapshot(),{'generated':NOW,'cards':cards if cards is not None else [card()]},p or profile(),NOW)
+        return tp.build(s or snapshot(),{'generated':NOW,'policy_version':tp.policy.VERSION,'cards':cards if cards is not None else [card()]},p or profile(),NOW)
 
     def test_explicit_whole_shares_one_fixed_fee_and_shared_budget(self):
         v=self.plan(cards=[card(),card('C.OL',2)])
@@ -111,7 +111,7 @@ class TradePlanTests(unittest.TestCase):
         self.assertEqual(v['buys'],[])
 
     def test_inputs_unchanged(self):
-        s=snapshot(5);r={'generated':NOW,'cards':[card(),card('A.OL',action='Consider taking profits')]};p=profile()
+        s=snapshot(5);r={'generated':NOW,'policy_version':tp.policy.VERSION,'cards':[card(),card('A.OL',action='Consider taking profits')]};p=profile()
         before=copy.deepcopy((s,r,p))
         tp.build(s,r,p,NOW)
         self.assertEqual((s,r,p),before)

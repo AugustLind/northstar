@@ -23,7 +23,7 @@ The background worker starts with the app, refreshes quotes, builds recommendati
 
 - The default scan covers **180 Oslo tickers**, from a dated 26 October 2026 listing snapshot, rather than the earlier 34-name sample. It is a broad subset, not a complete/live exchange directory. [Snapshot source](https://stockanalysis.com/list/oslo-bors/). Settings accept up to 500 tickers. Older settings migrate to the broader default while retaining custom Oslo symbols and portfolio records.
 - Every stock with sufficient fresh history gets five technical analyses: Trend, Momentum, Risk, Timing and Liquidity. The default view shows up to 20 eligible stocks by weighted overall score. If fewer qualify, it shows fewer; it never fills missing places with illiquid or unpriced stocks.
-- Rank any view by an individual component, search names/tickers, switch to all stocks or holdings, and open **Explore** for the full breakdown and reasons. A stock can rank in the top 20 and still say Wait / watch. Ranking is separate from passing the stricter buy screen.
+- Sort any view by an individual component, search names/tickers, switch to all stocks or holdings, and open **Explore** for the full breakdown and reasons. The top 20 contains only stocks passing the complete entry policy. Sorting by another component reorders that same selection. Other analysed stocks retain diagnostic component scores without entry ranks.
 
 | Component | Weight | Calculation |
 |---|---:|---|
@@ -35,9 +35,9 @@ The background worker starts with the app, refreshes quotes, builds recommendati
 
 All percentage inputs above are percentage points. Overall is the weighted sum, rounded to one decimal. Ties break by ticker. Components overlap; they are neither independent evidence nor a probability of profit.
 
-Top-20 eligibility requires at least 200 fresh daily observations, a matching currency, annualised volatility below 80%, at least 15 valid turnover observations out of 20, and average daily turnover at or above the configurable NOK 250,000 floor. Market capitalisation does not determine the score.
+Top-20 eligibility and buy eligibility use one policy in `decision_policy.py`: at least 200 fresh daily observations, a matching currency, all four trend conditions, annualised volatility below 50%, daily close less than 15% above MA50, at least 15 valid turnover observations out of 20, and average daily turnover at or above the configurable NOK 250,000 floor. Component scores order passing stocks; they do not bypass these gates. Market capitalisation does not determine the score.
 
-The **Consider buying** action retains stricter conditions: all four trend rules pass, volatility below 50%, close less than 15% above MA50, and sufficient turnover. Held stock sell reviews use the existing lower/upper review prices and the combination of negative three-month momentum plus close below MA200. Concentration above 25% remains context rather than a mechanical sell instruction.
+Unowned passing stocks show **Consider buying**. Owned passing stocks show **Hold / monitor** and can qualify for additions. Held stock sell reviews use lower/upper review prices and the combination of negative three-month momentum plus close below MA200. Sell-review overrides exclude a stock from entry ranks and additions. Losing entry eligibility alone does not create a sell signal. Personal confirmation, cooldown, cash, fee and allocation constraints additionally gate quantity plans. Policy versions are saved with reports, plans and new paper cohorts; old reports cannot authorize technical quantities, and old signal-confirmation evidence resets on the first new-policy observation. Saved historical results without a policy version are labelled legacy until rerun.
 
 The explorer downloads up to five years of history (preset buttons cover up to two years; custom dates and zoom can show the full series); line/candlestick views; 1/3/6/12/24-month presets; custom dates; wheel zoom; drag pan; keyboard +/− and arrows; MA50/MA200 and Bollinger overlays; volume/RSI/MACD lower panels; and comparison against another stock normalised to the visible period. Hover/tap shows the daily observations. Candles use OHLC scaled to the adjusted close basis. If OHLC is missing, the chart falls back to a line. Volume remains the provider's share count.
 
@@ -131,7 +131,7 @@ Tests use temporary databases and mocked providers. They cover indicator actions
 
 ### Historical experiments and forward tracking
 
-The Validation & paper tracking tab runs a monthly, equal-weight top-20 technical-ranking experiment on cached Oslo histories. Decisions use only bars available through each decision date and execute at the next common session close. Empty selections remain cash. Each buy order incurs the user-stated fixed 79 NOK fee, regardless of share count. Starting capital defaults to 100,000 NOK and is configurable because fixed costs depend on account size. Optional extra slippage defaults to zero and applies in both directions; selling commissions are not modelled. Results include return, drawdown, simulated weight changes, cost drag and daily strategy/benchmark values. The benchmark buys and holds the same complete-history stock basket. Neither side assumes terminal liquidation.
+The Validation & paper tracking tab uses the shared technical entry/exit signals on cached Oslo histories. Monthly decisions use only bars available through each decision date and execute at the next common session close. Holdings remain until the technical exit signal; vacant slots are filled by qualifying entries in score order, up to 20 positions. The experiment uses monthly equal-weight sizing, which can also trim retained holdings. Personal review prices, signal confirmation periods, cooldowns, portfolio allocation limits and personalized quantities are not simulated. Empty selections remain cash. Each buy order incurs the user-stated fixed 79 NOK fee, regardless of share count. Starting capital defaults to 100,000 NOK and is configurable because fixed costs depend on account size. Optional extra slippage defaults to zero and applies in both directions; selling commissions are not modelled. Results include return, drawdown, simulated weight changes, cost drag and daily strategy/benchmark values. The benchmark buys and holds the same complete-history stock basket. Neither side assumes terminal liquidation.
 
 This is a survivor-biased, complete-case experiment on today's universe, not validated market performance or a point-in-time fundamental/news backtest. Adjusted historical prices can change; adjusted close times raw volume approximates historical turnover. Incomplete histories and missing common sessions are excluded. Taxes, cash interest, selling commissions and market impact are omitted. The experiment uses fractional stock allocations; actual purchase previews use whole shares. Both strategy and benchmark enter at the next common close; the benchmark pays 79 NOK for each constituent. Rebalancing reserves fees for potential buys, only charges actual positive-value buy orders and leaves unused fee reserves as cash. Histories now request five years with a 200-observation warm-up and up to 756 dated test sessions. Stocks without complete reference-calendar coverage are explicitly excluded; recent IPOs do not shorten the entire test.
 
@@ -177,6 +177,37 @@ Each row shows shares owned, shares to consider buying/selling, shares remaining
 
 5. **Sourced identity/sector metadata.** A low-rate daily public exact-symbol Yahoo search attempts company names/sectors/industries; a public Stock Analysis company-profile fallback verifies the exact Oslo ticker/exchange and reads sector, industry and ISIN where available. Sources, dates and errors are retained. Each provider backs off when blocked or rate-limited; no login or access-control bypass is used. User sector overrides win; provider classifications expire after 30 days and unknown coverage is never guessed. Known WWI/WWIB and ODF/ODFB issuer mappings combine exposure for company limits across share classes. Other issuer relationships remain explicitly unverified. Public-provider failures leave the manual fallback available.
 
-6. **Daily overview and alerts.** The default hosted landing page shows three priority reviews, source-linked issuer notices/earnings dates, share-count changes, data problems and reconciliation issues. Alerts are deduplicated, can be marked read and retain up to 200 entries / 30 days. Optional desktop notifications require a user gesture and browser permission, are limited to three new reviews per refresh, and require an open signed-in dashboard tab. They are disabled by default. No email/SMS/Telegram service is configured or contacted.
+6. **Daily overview and alerts.** The default hosted landing page shows three priority reviews, source-linked issuer notices/earnings dates, share-count changes, data problems and reconciliation issues. Alerts are deduplicated, can be marked read and retain up to 200 entries / 30 days. Optional desktop notifications require a user gesture and browser permission, are limited to three new reviews per refresh, and require an open signed-in dashboard tab. They are disabled by default. Optional server-side email sends confirmed share-count plan changes and withdrawals through your configured SMTP provider, without an open browser. See the setup below. SMS/Telegram delivery is not implemented.
 
 Private ledger, classifications, previews and alerts live in Oracle SQLite and survive deployment; no broker files, account credentials or filenames are published. All new APIs use the existing access-key/origin protection.
+
+### Email alerts
+
+Deploy the updated backend and dashboard, then run this **in your Oracle SSH terminal**, from the Northstar checkout:
+
+```bash
+python3 scripts/setup-email.py
+```
+
+The helper asks for your provider's SMTP hostname, port, TLS mode, username, sending address, recipient and password/app password. Password entry is hidden. It installs a root-readable `/etc/northstar-email.env`, adds a systemd drop-in and restarts Northstar. It preserves `/etc/northstar.env` and the portfolio database. Never paste SMTP passwords into chat, GitHub variables, source files or the dashboard. Provider credentials and outbound SMTP connectivity are required; Northstar does not create an email account or choose a provider for you. SMTP authentication must be supported by your account; OAuth-only SMTP is not implemented.
+
+In **Daily overview → Email alerts**, select **Enable email alerts** if paused, then **Send test email**. Check the status, inbox and spam folder. Settings, pause and test controls require the existing Northstar access key. Pause persists across restarts; a message already in flight may still arrive. Status reports acceptance by the SMTP server, which does not guarantee inbox delivery.
+
+The email worker checks once per minute and wakes after completed scans. It uses confirmed, nonzero quantities from the current shared-budget plan, including configured confirmation/cooldown rules, cash, allocation, reconciliation and fee constraints. Set those portfolio inputs before expecting stock alerts. A scan is still scheduled at your configured research interval; email polling does not create new market data. Notifications include ticker, direction, shares, quote/report dates and the sizing reason. They exclude your access key, SMTP credentials, full portfolio and AI commentary. Up to 50 updates are grouped into one email; tests are separate. Identical change IDs and small sizing drift are deduplicated across scans and restarts. Important updates receive new IDs. Withdrawals are emailed only when the original suggestion was accepted by the mail server.
+
+An SQLite outbox preserves failed deliveries and retries with backoff from one minute up to one hour. Each retry rechecks the live plan; outdated, stale, withdrawn, conflicting or newly blocked suggestions are cancelled. Pending withdrawal notices survive subsequent scans while the original suggestion remains absent. A pause cancels pending deliveries; resuming may email still-current suggestions that were never sent. Sent event IDs remain in the private database for deduplication, and changing the provider/sender/recipient starts a separate delivery history. A crash or ambiguous SMTP timeout after acceptance can cause a duplicate; SMTP does not provide exactly-once delivery. TLS certificate checks are mandatory; only STARTTLS and implicit TLS are supported. No new Python package is needed.
+
+For manual configuration, the service loads these variables from `/etc/northstar-email.env`:
+
+| Variable | Value |
+|---|---|
+| `NORTHSTAR_EMAIL_ENABLED` | `1` to allow delivery; absent/`0` disables it |
+| `NORTHSTAR_SMTP_HOST` | Provider SMTP hostname, without a URL scheme |
+| `NORTHSTAR_SMTP_PORT` | Usually `587` for STARTTLS or `465` for implicit TLS; follow your provider |
+| `NORTHSTAR_SMTP_SECURITY` | `starttls` or `ssl` |
+| `NORTHSTAR_SMTP_USERNAME` | SMTP account username |
+| `NORTHSTAR_SMTP_PASSWORD` | Provider-issued SMTP password or app password |
+| `NORTHSTAR_EMAIL_FROM` | One authorized sending address |
+| `NORTHSTAR_EMAIL_TO` | One recipient address |
+
+After manual edits, restart the service. `GET /api/email` exposes only configuration readiness, safe delivery errors, queue counts and timestamps; it never returns SMTP credentials or email addresses. `POST /api/email/settings` accepts `{ "enabled": true }` or `{ "enabled": false }`. `POST /api/email/test` queues a test, limited to once per minute. No public email-sending endpoint exists.

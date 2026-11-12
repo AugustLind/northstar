@@ -7,19 +7,20 @@ nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rank
 const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct','confirm_sessions','signal_wait_hours','trade_cooldown_days','min_change_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
 const now=Date.now()/1000;
 const history=Array.from({length:250},(_,i)=>({time:now-(249-i)*86400,close:100+i/10}));
-const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV.OL',name:'Bouvet',currency:'NOK',price:125,asof:now,source:'test',held:false,action:'Consider buying',score:100,reasons:['Test measured evidence'],history,history_basis:'Adjusted close',metrics:{ma200:110,momentum3m:5,drawdown:-2,volatility:20,turnover20:1000000}}]};
+const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV.OL',name:'Bouvet',currency:'NOK',price:125,asof:now,source:'test',held:false,rank_eligible:true,rank:1,action:'Consider buying',score:100,reasons:['Test measured evidence'],history,history_basis:'Adjusted close',metrics:{ma200:110,momentum3m:5,drawdown:-2,volatility:20,turnover20:1000000}}]};
 const fitFixture={generated:now,report_generated:now,report_stale:false,profile:{cash_nok:10000,purchase_nok:1000,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,max_buy_fee_pct:2,review_sell_pct:25,confirm_sessions:2,signal_wait_hours:24,trade_cooldown_days:7,min_change_pct:20,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
 const importFixture={token:'preview-token',expires:now+900,valid:1,rows:[{id:2,name:'Example <untrusted> ASA',currency:'NOK',shares:5,cost:306,symbol:'EXA.OL',selected:true,error:null,match:'Name match; confirm',existing:null}],companies:[{symbol:'EXA.OL',name:'Example <untrusted> ASA'}],existing_holdings:[{symbol:'EXA',currency:'NOK',shares:1,cost:100}],method:'Preview only. Preserve notes.'};
 const importSelections=[];
 const planFixture={generated:now,report_generated:now,buy_budget_nok:1000,spent_nok:979,buy_fees_nok:79,unallocated_budget_nok:21,buys:[{symbol:'EXA.OL',name:'<untrusted>',buy_shares:9,price:100,quote_asof:now,total_nok:979,fee_nok:79,fee_pct:79/900*100,reason:'Shared budget'}],holdings:[{symbol:'HELD.OL',owned:10,sell_shares:4,remaining_shares:6,gross_proceeds_nok:400,reasons:['Position limit'],price:100,quote_asof:now}],blocked_buys:[],warnings:[],method:'Rule-based scenario; selling fees and tax unmodelled'};
-const dailyFixture={generated:now,coverage:{analysed:1,requested:2},announcement_status:'available',top3:[{id:'review',kind:'holding',title:'Review <untrusted>',detail:'Inspect cash and size',symbol:'BOUV.OL',url:'javascript:alert(1)'}],changes:[{symbol:'BOUV.OL',change:'New',direction:'buy',shares:9}],alerts:[{id:'a',title:'Review',detail:'Test',first_seen:now,read:false}],method:'Dated review rules only'};
+const emailFixture={configured:true,enabled:true,active:true,pending:0,sent:1,last_sent:now,error:null};
+const dailyFixture={generated:now,email:emailFixture,coverage:{analysed:1,requested:2},announcement_status:'available',top3:[{id:'review',kind:'holding',title:'Review <untrusted>',detail:'Inspect cash and size',symbol:'BOUV.OL',url:'javascript:alert(1)'}],changes:[{symbol:'BOUV.OL',change:'New',direction:'buy',shares:9}],alerts:[{id:'a',title:'Review',detail:'Test',first_seen:now,read:false}],method:'Dated review rules only'};
 let notificationRequests=0,notificationCount=0;
 class FakeNotification{constructor(){notificationCount++;}static async requestPermission(){notificationRequests++;FakeNotification.permission='granted';return 'granted';}}FakeNotification.permission='default';
 const browserStorage=new Map([['northstar-key','test-access-key']]);
 const requests=[];
 const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console,Notification:FakeNotification,btoa:s=>Buffer.from(s,'binary').toString('base64'),window:{NORTHSTAR_CONFIG:{apiBase:'https://api.example.com'}},sessionStorage:{getItem(k){return browserStorage.get(k)||null;},setItem(k,v){browserStorage.set(k,v);},removeItem(k){browserStorage.delete(k);}},location:{pathname:'/recommendations',hostname:'owner.github.io',hash:''},history:{replaceState(){}},setInterval(){},setTimeout(){},confirm(){return false;},
  document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-import-select]')return importSelections;if(s==='[data-tab]'){const n=element();n.dataset.tab='recommendations';return [n];}return [];},createElement:element},
- fetch:async (path,options)=>{requests.push({path,options});return {ok:true,json:async()=>path.endsWith('/api/daily')?dailyFixture:path.endsWith('/api/ledger')?{initialized:false,reconciled:false,cash_nok:0,count:0,events:[],method:'Net cash already includes fees'}:path.endsWith('/api/alerts/read')?{saved:true}:path.endsWith('/api/trade-plan')?planFixture:path.endsWith('/api/import/preview')?importFixture:path.endsWith('/api/import/apply')?{updated:1}:path.endsWith('/api/portfolio-fit')?fitFixture:path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',assessment:{label:'Mixed annual conditions',passed:2,covered:3,period:'2025-12-31',checks:[{passes:false,label:'Annual income positive',period:'2025-12-31'}],method:'Annual checks only'},fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
+ fetch:async (path,options)=>{requests.push({path,options});if(path.endsWith('/api/email/settings')){emailFixture.enabled=JSON.parse(options.body).enabled;emailFixture.active=emailFixture.enabled;return {ok:true,json:async()=>emailFixture};}if(path.endsWith('/api/email/test'))return {ok:true,json:async()=>({queued:true,message:'Test queued. Check delivery status and your inbox.'})};return {ok:true,json:async()=>path.endsWith('/api/daily')?dailyFixture:path.endsWith('/api/ledger')?{initialized:false,reconciled:false,cash_nok:0,count:0,events:[],method:'Net cash already includes fees'}:path.endsWith('/api/alerts/read')?{saved:true}:path.endsWith('/api/trade-plan')?planFixture:path.endsWith('/api/import/preview')?importFixture:path.endsWith('/api/import/apply')?{updated:1}:path.endsWith('/api/portfolio-fit')?fitFixture:path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',assessment:{label:'Mixed annual conditions',passed:2,covered:3,period:'2025-12-31',checks:[{passes:false,label:'Annual income positive',period:'2025-12-31'}],method:'Annual checks only'},fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('static/app.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/charts.js','utf8'),context);
@@ -104,6 +105,20 @@ setImmediate(async()=>{
  assert(nodes['#dailyTop'].innerHTML.includes('Review &lt;untrusted&gt;'));
  assert(!nodes['#dailyTop'].innerHTML.includes('javascript:'));
  assert(nodes['#dailyChanges'].innerHTML.includes('New'));
+ assert(nodes['#emailStatus'].textContent.includes('enabled'));
+ assert(!nodes['#testEmail'].disabled);
+ await nodes['#pauseEmail'].onclick();
+ assert(nodes['#emailStatus'].textContent.includes('paused'));
+ assert(nodes['#testEmail'].disabled);
+ await nodes['#enableEmail'].onclick();
+ assert(nodes['#emailStatus'].textContent.includes('enabled'));
+ await nodes['#testEmail'].onclick();
+ assert(nodes['#emailActionMessage'].textContent.includes('Test queued'));
+ assert(requests.some(r=>r.path.endsWith('/api/email/test')));
+ vm.runInContext("renderEmailStatus({configured:false,enabled:false,active:false,error:'<untrusted>'})",context);
+ assert(nodes['#emailStatus'].textContent.includes('not configured'));
+ assert(nodes['#enableEmail'].disabled);
+ assert(nodes['#testEmail'].disabled);
  assert.strictEqual(notificationRequests,0);assert.strictEqual(notificationCount,0);
  await nodes['#enableNotifications'].onclick();
  assert.strictEqual(notificationRequests,1);assert.strictEqual(notificationCount,1);
@@ -112,6 +127,17 @@ setImmediate(async()=>{
  await vm.runInContext('loadLedger()',context);
  assert(nodes['#ledgerStatus'].textContent.includes('Initialize a verified opening snapshot'));
  assert(nodes['#ledgerMethod'].textContent.includes('Net cash already includes fees'));
+ // Changing the component sort must not replace the server's top-20 selection.
+ vm.runInContext("researchView.report.cards = Array.from({length:21},(_,i)=>Object.assign({},researchView.report.cards[0],{symbol:'S'+String(i+1).padStart(2,'0')+'.OL',rank:i+1,composite:100-i,analyses:[{name:'Timing',score:i,weight:15}]}));document.querySelector('#adviceFilter').value='top20';document.querySelector('#rankBy').value='Timing';renderAdvice()",context);
+ assert(nodes['#adviceCards'].innerHTML.includes('S20.OL'));
+ assert(!nodes['#adviceCards'].innerHTML.includes('S21.OL'));
+ assert(nodes['#adviceCards'].innerHTML.indexOf('S20.OL')<nodes['#adviceCards'].innerHTML.indexOf('S01.OL'));
+ vm.runInContext("researchView.report.cards=[Object.assign({},researchView.report.cards[0],{held:true,action:'Hold / monitor',rank:1})];document.querySelector('#adviceFilter').value='buy';renderAdvice()",context);
+ assert(nodes['#adviceCards'].innerHTML.includes('Hold / monitor'));
+ assert(nodes['#adviceSummary'].textContent.includes('1 buy candidate'));
+ vm.runInContext("researchView.report.generated=Date.now()/1000-2*86400;renderAdvice()",context);
+ assert(!nodes['#adviceCards'].innerHTML.includes('Hold / monitor'));
+ assert(nodes['#adviceSummary'].textContent.includes('0 buy candidates'));
  console.log('UI contract and chart rendering smoke checks passed (not browser QA).');
  }catch(error){console.error(error);process.exitCode=1;}
 });

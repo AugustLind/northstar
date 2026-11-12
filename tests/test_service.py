@@ -13,3 +13,5 @@ class ServiceUnitTests(unittest.TestCase):
             working = next(line for line in unit.splitlines() if line.startswith('WorkingDirectory='))
             self.assertEqual(working, 'WorkingDirectory=' + str(root).replace('%', '%%'))
             self.assertTrue(working.split('=', 1)[1].startswith('/'))
+            if mode:
+                self.assertIn('EnvironmentFile=-/etc/northstar-email.env',unit)
