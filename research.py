@@ -116,7 +116,8 @@ def screen(symbol, q, position=None, min_turnover_nok=250000, as_of=None):
     return result
 
 
-def build_report(snapshot, universe, min_turnover_nok=250000):
+def build_report(snapshot, universe, min_turnover_nok=250000, as_of=None):
+    now=time.time() if as_of is None else as_of
     positions = [p for p in snapshot['positions'] if p['currency'] == 'NOK']
     quotes = snapshot['quotes']
     # Collapse bare Oslo holdings and suffixed universe entries into a single card.
@@ -124,16 +125,16 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
     seen = set()
     cards = []
     for p in positions:
-        cards.append(screen(p['symbol'], quotes.get(p['symbol']), p, min_turnover_nok))
+        cards.append(screen(p['symbol'], quotes.get(p['symbol']), p, min_turnover_nok, as_of=now))
         seen.add(canonical(p))
     for symbol in universe:
         if symbol.endswith('.OL') and symbol not in seen:
-            cards.append(screen(symbol, quotes.get(symbol), min_turnover_nok=min_turnover_nok))
+            cards.append(screen(symbol, quotes.get(symbol), min_turnover_nok=min_turnover_nok, as_of=now))
             seen.add(symbol)
     profile=portfolio_fit.preferences(snapshot.get('portfolio_preferences',{}))
-    portfolio=portfolio_fit.context(snapshot,profile)
+    portfolio=portfolio_fit.context(snapshot,profile,now)
     for card in cards:
-        card['portfolio_fit']=portfolio_fit.preview(card['symbol'],profile['purchase_nok'],snapshot,profile,portfolio)
+        card['portfolio_fit']=portfolio_fit.preview(card['symbol'],profile['purchase_nok'],snapshot,profile,portfolio,now)
         holding=next((h for h in portfolio['holdings'] if h['symbol']==portfolio_fit.canonical(card['symbol'])),None)
         if holding and holding['weight_pct'] is not None and holding['weight_pct']>profile['max_stock_pct']:
             card['reasons'].append(f"{holding['weight_pct']:.1f}% of tracked holdings plus cash; concentration exceeds your {profile['max_stock_pct']:g}% position limit.")
@@ -148,27 +149,27 @@ def build_report(snapshot, universe, min_turnover_nok=250000):
         canonical_symbol = card['symbol'] if card['symbol'].endswith('.OL') else card['symbol'] + '.OL'
         record = snapshot.get('fundamentals', {}).get(canonical_symbol)
         if record:
-            financial = fundamentals.analyse(record, quotes.get(card['symbol']))
+            financial = fundamentals.analyse(record, quotes.get(card['symbol']),now)
             card['quality']=company_data.assessment(financial,profile['sectors'].get(canonical_symbol))
             card['fundamentals'] = {'status': financial['status'], 'period': financial['period'],
                 'signals': financial['signals'][:3], 'metrics': {k: financial['metrics'][k] for k in
                     ('revenue_growth','operating_margin','net_cash','annual_pe_proxy') if k in financial['metrics']}}
         news_record=snapshot.get('announcements',{})
-        notices=announcements.view(news_record,[canonical_symbol])
+        notices=announcements.view(news_record,[canonical_symbol],now)
         if notices['items'] or notices['fetched']:
             card['announcements']={'status':notices['status'],'fetched':notices['fetched'],
                 'headlines':[{'title':item['title'],'published':item['published'],'url':item['url'],
                     'label':item['classification']['label']} for item in notices['items'] if not item.get('corrected_by')][:2]}
         card['sparkline'] = card['history'][-60::3]
         card['history'] = []
-    report={'generated': time.time(), 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
+    report={'generated': now, 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
             'top20':[c['symbol'] for c in ranked[:policy.MAX_CANDIDATES]], 'coverage':coverage,
             'policy_version':policy.VERSION,'min_turnover_nok':min_turnover_nok,
             'portfolio_context':portfolio, 'portfolio_limits':{k:v for k,v in profile.items() if k!='sectors'},
             'universe_source': UNIVERSE_SOURCE, 'universe_snapshot': oslo_universe.ASOF,
             'method': 'Shared technical entry/exit policy. Only stocks passing every entry rule receive entry ranks; component scores order them. Portfolio sizing and confirmation are additional gates. Financial snapshots and NewsWeb headlines do not change signals.',
             'universe': universe, 'commentary': None, 'llm_status': 'disabled'}
-    report['trade_plan']=trade_plan.build(snapshot,report,profile)
+    report['trade_plan']=trade_plan.build(snapshot,report,profile,now)
     return report
 
 
@@ -275,9 +276,10 @@ def local_answer(model, report, question):
 
 
 class ResearchWorker:
-    def __init__(self, refresh, snapshot, read, write, settings, on_report=None):
+    def __init__(self, refresh, snapshot, read, write, settings, on_report=None, on_archive=None):
         self.refresh, self.snapshot, self.read, self.write, self.settings = refresh, snapshot, read, write, settings
         self.on_report=on_report
+        self.on_archive=on_archive
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.wake = threading.Event()
@@ -300,6 +302,9 @@ class ResearchWorker:
             quantities,changes=advice_state.differences(report['trade_plan'],self.read('advice_quantities',{}),snapshot.get('portfolio_preferences',{}).get('min_change_pct',20),report['generated'])
             self.write('advice_quantities',quantities);report['recommendation_changes']=changes
             report['errors'] = errors
+            if self.on_archive:
+                try:report['archive_run_id']=self.on_archive(report,snapshot,settings)
+                except Exception:report['archive_error']='Research input archiving failed; current results retained. Check storage.'
             self.write('report',report)
             if self.on_report:
                 self.on_report()

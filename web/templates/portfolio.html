@@ -1,0 +1,421 @@
+<section id="portfolio" class="tab" hidden>
+  <div class="sectionhead">
+    <div>
+      <h2>Your companies</h2>
+      <p>Prices and cost basis use each stock’s currency.</p>
+    </div>
+    <div>
+      <button type="button" data-view-plan>Buy / sell share counts</button>
+      <button id="importNordnet">Import Nordnet CSV</button>
+      <button id="add">+ Add company</button>
+    </div>
+  </div>
+  <section id="nordnetImportPanel" class="card" hidden>
+    <div class="sectionhead">
+      <h2>Import current Nordnet holdings</h2>
+      <button id="closeNordnetImport" type="button">Close import</button>
+    </div>
+    <p>
+      Choose your current holdings export with Navn, Valuta, Antall and GAV. Norwegian UTF-16
+      tab-separated exports are supported, even when the filename ends in .csv. This is a file
+      import; Nordnet is not connected for automatic synchronisation.
+    </p>
+    <label
+      >Holdings export · up to 256 KiB<input
+        id="nordnetFile"
+        type="file"
+        accept=".csv,.tsv,.txt" /></label
+    ><button id="nordnetPreview" type="button">Preview holdings</button>
+    <p id="nordnetImportStatus" role="status"></p>
+    <p>
+      Company names without ticker symbols need a confirmed Oslo ticker. Cached name matches
+      are suggestions; select the correct share class. Your confirmed name matches are
+      remembered for future uploads.
+    </p>
+    <datalist id="nordnetTickerOptions"></datalist>
+    <div id="nordnetImportRows"></div>
+    <p id="nordnetImportMethod" class="muted"></p>
+    <label class="check"
+      ><input type="checkbox" id="nordnetImportConfirmed" /> I checked the selected tickers
+      and want to replace their quantities and GAV with this export.</label
+    ><button id="nordnetImportApply" type="button" disabled>Apply selected holdings</button>
+  </section>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Shares / avg. cost</th>
+          <th>Latest price</th>
+          <th>Unrealised return*</th>
+          <th>Data timestamp</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="holdings"></tbody>
+    </table>
+  </div>
+  <p class="muted">
+    *Price return in the stock’s currency. Excludes dividends, fees, tax and currency effects.
+    Cost basis is entered manually.
+  </p>
+  <section class="card" id="accountPerformance">
+    <div class="sectionhead">
+      <div>
+        <p class="eyebrow">YOUR RECONCILED ACCOUNT</p>
+        <h2>Account performance</h2>
+      </div>
+      <button type="button" id="refreshAccountPerformance">Refresh performance</button>
+    </div>
+    <p id="accountPerformanceStatus" role="status">Loading ledger and price coverage…</p>
+    <p id="accountOpeningBasis" class="muted"></p>
+    <div id="accountPerformanceMetrics" class="diagnosticgrid"></div>
+    <label class="check"
+      ><input type="checkbox" id="allowPriorClose" /> Allow explicitly flagged prior closes,
+      at most four calendar days old</label
+    >
+    <p class="muted">
+      Strict mode requires exact-date prices. Prior closes can cover closures or missing
+      observations, but make the result an estimate. Research-adjusted prices are never
+      substituted for account valuations.
+    </p>
+    <div id="accountPerformanceChart" class="chartplot"></div>
+    <p id="accountLaterEvents" class="muted"></p>
+    <details>
+      <summary>Daily values, flows &amp; methodology</summary>
+      <div id="accountPerformanceValues" class="tablewrap"></div>
+      <p id="accountPerformanceMethod" class="muted"></p>
+    </details>
+  </section>
+  <section class="card" id="portfolioRisk">
+    <div class="sectionhead">
+      <div>
+        <p class="eyebrow">YOUR HOLDINGS TOGETHER</p>
+        <h2>Portfolio risk &amp; scenarios</h2>
+      </div>
+      <button id="refreshPortfolioRisk" type="button">Refresh risk</button>
+    </div>
+    <p id="portfolioRiskStatus" role="status">Loading historical risk coverage…</p>
+    <div id="portfolioRiskMetrics" class="diagnosticgrid"></div>
+    <div id="riskContributions" class="tablewrap"></div>
+    <details>
+      <summary>Holding correlations</summary>
+      <p id="correlationNote" class="muted"></p>
+      <div id="correlationMatrix" class="tablewrap"></div>
+    </details>
+    <details>
+      <summary>Historical proxy using current weights</summary>
+      <div id="portfolioRiskChart" class="chartplot"></div>
+      <p>
+        Illustrative daily rebalanced current holdings with NOK cash, without fees. This is
+        not your historical account return.
+      </p>
+    </details>
+    <h3>Hypothetical shocks</h3>
+    <p>
+      These assumptions apply to current holdings. They are not predictions or estimated
+      probabilities.
+    </p>
+    <form id="riskScenarioForm" class="researchtools">
+      <label
+        >All stock prices · % change<input
+          id="stockShock"
+          type="number"
+          min="-100"
+          max="100"
+          value="-20"
+          step="any"
+          required /></label
+      ><label
+        >USD/NOK · % change<input
+          id="fxShock"
+          type="number"
+          min="-100"
+          max="100"
+          value="-10"
+          step="any"
+          required /></label
+      ><button type="submit">Calculate scenarios</button>
+    </form>
+    <div id="riskScenarios" class="tablewrap"></div>
+    <p id="riskMethod" class="muted"></p>
+  </section>
+  <details class="workspacefold" id="fitGroup">
+    <summary>Allocation, risk limits &amp; share-count plan</summary>
+    <section id="fit">
+      <div class="sectionhead">
+        <div>
+          <h2>What fits your portfolio?</h2>
+          <p>
+            Check the current top 20 against your holdings, available cash and chosen
+            allocation limits.
+          </p>
+        </div>
+        <button id="refreshFit">Refresh portfolio check</button>
+      </div>
+      <p id="fitStatus" role="status">Open this page to load your portfolio check.</p>
+      <p id="fitScope" class="muted"></p>
+      <div class="metrics">
+        <article>
+          <small>Holdings + cash · NOK</small><strong id="fitTotal">—</strong>
+        </article>
+        <article>
+          <small>Manually tracked cash</small><strong id="fitCash">—</strong
+          ><small id="fitCashShare"></small>
+        </article>
+        <article>
+          <small>Technical buy candidates within chosen limits</small
+          ><strong id="fitCandidateCount">—</strong>
+        </article>
+      </div>
+      <div id="fitWarnings" role="status"></div>
+      <section class="card quantityplan">
+        <h2>Share-count plan</h2>
+        <div id="quantityPlanFit" aria-live="polite">Loading share-count scenarios…</div>
+      </section>
+      <section class="card">
+        <h2>Your allocation settings</h2>
+        <p>
+          Enter cash available in the account you track here and one total budget shared
+          across the buy plan. The fee limit defaults to 2% of stock value. A technical sale
+          review defaults to 25% of a holding, rounded up; set it to 0 to disable that rule.
+          Starting limits are illustrative settings, not recommended allocations. Update cash
+          manually after real trades.
+        </p>
+        <form id="fitPreferences">
+          <div class="grid">
+            <label
+              >Available cash · NOK<input
+                name="cash_nok"
+                type="number"
+                min="0"
+                max="1000000000"
+                step="any"
+                required /></label
+            ><label
+              >Total buy-plan budget incl. fees · NOK<input
+                name="purchase_nok"
+                type="number"
+                min="0"
+                max="1000000000"
+                step="any"
+                required /></label
+            ><label
+              >Maximum per company · % incl. known share classes<input
+                name="max_stock_pct"
+                type="number"
+                min="0.01"
+                max="100"
+                step="any"
+                required /></label
+            ><label
+              >Maximum per sector · %<input
+                name="max_sector_pct"
+                type="number"
+                min="0.01"
+                max="100"
+                step="any"
+                required /></label
+            ><label
+              >Minimum cash reserve · %<input
+                name="reserve_pct"
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                required /></label
+            ><label
+              >Maximum purchase fee / stock value · %<input
+                name="max_buy_fee_pct"
+                type="number"
+                min="0.01"
+                max="100"
+                step="any"
+                required /></label
+            ><label
+              >Technical sale-review size · % of holding<input
+                name="review_sell_pct"
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                required /></label
+            ><label
+              >Signal confirmation · distinct market sessions<input
+                name="confirm_sessions"
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                required /></label
+            ><label
+              >Signal must persist · hours<input
+                name="signal_wait_hours"
+                type="number"
+                min="0"
+                max="720"
+                step="any"
+                required /></label
+            ><label
+              >Cooldown after a recorded trade · days<input
+                name="trade_cooldown_days"
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                required /></label
+            ><label
+              >Minimum size change for a new alert · %<input
+                name="min_change_pct"
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                required
+            /></label>
+            <p>
+              Purchase fee: <b>79 kr per order</b>, regardless of share count, using your
+              stated Nordnet fee. Budgets include this fee. Selling fees are not yet modelled.
+            </p>
+          </div>
+          <details>
+            <summary>Classify sectors</summary>
+            <p>
+              Company metadata is looked up automatically using exact Oslo tickers. Available
+              sourced sector labels are used unless you override them here. Unknown or expired
+              classifications remain unclassified; no sector is guessed from a company name.
+              Unclassified holdings prevent confirming sector capacity. Diversified businesses
+              may not fit one sector well.
+            </p>
+            <div id="fitClassifications" class="grid"></div>
+            <div class="grid">
+              <label
+                >Additional Oslo ticker<input
+                  id="fitExtraSymbol"
+                  placeholder="BOUV.OL"
+                  maxlength="20" /></label
+              ><label>Sector<select id="fitExtraSector"></select></label>
+            </div>
+          </details>
+          <button id="saveFit">Save portfolio settings</button>
+          <p id="fitSaveStatus" role="status"></p>
+        </form>
+      </section>
+      <div class="card">
+        <h2>Current exposure</h2>
+        <div id="fitExposure"></div>
+        <h3>Sector exposure</h3>
+        <div id="fitSectors"></div>
+      </div>
+      <h2>Top 20: individual stock checks</h2>
+      <p>
+        These are independent previews, not additional orders. Use the shared-budget
+        share-count plan above for quantities. Market ranks stay unchanged. The fixed purchase
+        fee is included in sizing and fee drag. A stock must have a current technical buy
+        signal and pass the allocation preview for the saved purchase budget to appear within
+        your chosen limits.
+      </p>
+      <div id="fitCandidates"></div>
+      <p class="muted">
+        *Maximum purchase value is stock value before costs, bounded by position, sector and
+        cash-reserve limits. It is a ceiling, not an amount you should invest. Missing
+        classifications leave it unavailable. Correlation ranges from −1 to +1; a high value
+        indicates similar past moves, not a forecast.
+      </p>
+      <section class="card">
+        <h2>Preview a purchase</h2>
+        <form id="fitPreviewForm">
+          <div class="grid">
+            <label
+              >Oslo ticker<input
+                id="fitPreviewSymbol"
+                required
+                placeholder="BOUV.OL"
+                maxlength="20" /></label
+            ><label
+              >Total budget including costs · NOK<input
+                id="fitPreviewAmount"
+                type="number"
+                min="0"
+                max="1000000000"
+                step="any"
+                required
+            /></label>
+          </div>
+          <button id="fitPreviewButton">Calculate preview</button>
+        </form>
+        <div id="fitPreviewResult" aria-live="polite"></div>
+      </section>
+      <p id="fitMethod" class="muted"></p>
+    </section>
+  </details>
+  <details class="workspacefold" id="activityGroup">
+    <summary>Transactions, imports &amp; cash reconciliation</summary>
+    <section id="activity">
+      <h2>Transaction history &amp; cash reconciliation</h2>
+      <p id="ledgerStatus" role="status"></p>
+      <section class="card">
+        <h3>1. Verify an opening snapshot</h3>
+        <p>
+          First import your current holdings CSV and verify available cash in Portfolio fit.
+          Choose the date those holdings and cash represent, after all activity that day.
+          Earlier and same-day transactions are history only; later new transactions change
+          holdings and cash. Reinitializing keeps transaction history.
+        </p>
+        <label>Verified snapshot date<input type="date" id="ledgerDate" /></label
+        ><button type="button" id="ledgerInitialize">
+          Use current holdings and cash as opening snapshot
+        </button>
+      </section>
+      <section class="card">
+        <h3>2. Import a transaction-history CSV</h3>
+        <p>
+          This is a different file from the holdings export. Map the columns once. Net cash
+          must be signed and include actual broker charges; the estimated 79 kr purchase fee
+          is never added again. Only NOK cash and Oslo stock transactions are supported.
+          Transfers and unsupported events require reconciliation. A split needs a separate
+          mapped split-ratio column (for example 2:1), zero net cash, and a confirmed ticker;
+          quantities are never guessed from broker share deltas.
+        </p>
+        <label
+          >Account label for duplicate detection<input
+            id="ledgerScope"
+            value="default"
+            maxlength="80" /></label
+        ><label
+          >Transaction export<input
+            id="ledgerFile"
+            type="file"
+            accept=".csv,.tsv,.txt" /></label
+        ><button type="button" id="ledgerInspect">Read columns</button>
+        <div id="ledgerColumns" class="grid"></div>
+        <button type="button" id="ledgerPreview">Preview transactions</button>
+        <div id="ledgerRows"></div>
+        <label class="check"
+          ><input id="ledgerConfirm" type="checkbox" /> I checked event types, signed net cash
+          and ticker matches.</label
+        ><button type="button" id="ledgerApply" disabled>Apply selected transactions</button>
+        <p id="ledgerMessage" role="status"></p>
+      </section>
+      <section class="card">
+        <h3>Check against your Nordnet cash balance</h3>
+        <label
+          >Reported available cash · NOK<input
+            id="brokerCash"
+            type="number"
+            min="0"
+            max="1000000000"
+            step="any" /></label
+        ><button type="button" id="checkBrokerCash">Compare cash balances</button>
+        <p id="brokerCashStatus" role="status"></p>
+        <p>
+          A mismatch withholds share-count plans until resolved. Import missing transactions
+          or correct the verified opening snapshot; this check does not overwrite cash.
+        </p>
+      </section>
+      <h3>Recent imported activity</h3>
+      <div id="ledgerEvents"></div>
+      <p id="ledgerMethod" class="muted"></p>
+    </section>
+  </details>
+</section>

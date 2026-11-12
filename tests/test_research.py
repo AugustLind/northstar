@@ -192,7 +192,8 @@ class PersistenceTests(unittest.TestCase):
           'timestamp': [1,2,3], 'indicators': {'quote': [{'close': [10,None,12]}], 'adjclose': [{'adjclose': [9,None,12]}]}}]}}
         with patch.object(app, 'urlopen', return_value=io.BytesIO(json.dumps(fixture).encode())):
             q = app.fetch_quote('MSFT')
-        self.assertEqual(q['history'], [{'time': 1, 'close': 9}, {'time': 3, 'close': 12}])
+        self.assertEqual([(p['time'],p['close']) for p in q['history']],[(1,9),(3,12)])
+        self.assertEqual([(p['raw_close'],p['account_close']) for p in q['history']],[(10,10),(12,12)])
         self.assertEqual(q['history_basis'], 'Dividend/split adjusted close')
 
 

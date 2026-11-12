@@ -1,0 +1,198 @@
+<section id="daily" class="tab">
+  <div class="sectionhead">
+    <div>
+      <p class="eyebrow">YOUR THREE PRIORITY REVIEWS</p>
+      <h2>Today in your portfolio</h2>
+    </div>
+    <button id="refreshDaily">Refresh overview</button>
+  </div>
+  <p id="dailyStatus" role="status">Loading the daily overview…</p>
+  <section class="card" id="systemHealth">
+    <div class="sectionhead">
+      <div>
+        <p class="eyebrow">DATA &amp; DELIVERY</p>
+        <h2>System health</h2>
+      </div>
+      <button id="refreshSystemStatus" type="button">Refresh status</button>
+    </div>
+    <p id="systemStatus" role="status">
+      Checking research, data providers and background workers…
+    </p>
+    <details>
+      <summary>Data sources, workers &amp; delivery details</summary>
+      <div id="systemComponents" class="healthgrid"></div>
+      <details>
+        <summary>Workers &amp; recent email delivery</summary>
+        <div id="workerStatus"></div>
+        <p>
+          Accepted means the SMTP server accepted the message; it does not confirm inbox
+          delivery.
+        </p>
+        <div id="emailHistory" class="tablewrap"></div>
+      </details>
+    </details>
+  </section>
+  <div id="dailyTop"></div>
+  <section class="card">
+    <h2>What changed since the previous scan?</h2>
+    <div id="dailyChanges"></div>
+    <p class="muted">
+      New, updated, unchanged and withdrawn suggestions use recorded scans. Small sizing drift
+      below your change threshold keeps the alert unchanged. No suggestion guarantees a
+      profitable trade.
+    </p>
+  </section>
+  <section class="card">
+    <div class="sectionhead">
+      <h2>Alerts</h2>
+      <button id="markAlertsRead">Mark retained alerts read</button>
+    </div>
+    <p id="notificationStatus"></p>
+    <button id="enableNotifications">Enable desktop notifications</button>
+    <button id="disableNotifications">Disable desktop notifications</button>
+    <div id="dailyAlerts"></div>
+  </section>
+  <section class="card">
+    <h2>Email alerts</h2>
+    <p>
+      Receive confirmed buy/sell plan changes and withdrawals by email, even when this page is
+      closed. Suggestions still require review before trading.
+    </p>
+    <p id="emailStatus" role="status">Loading email delivery status…</p>
+    <button id="enableEmail" disabled>Enable email alerts</button>
+    <button id="pauseEmail" disabled>Pause email alerts</button>
+    <button id="testEmail" disabled>Send test email</button>
+    <p id="emailActionMessage" role="status"></p>
+  </section>
+  <p id="dailyMethod" class="muted"></p>
+  <details class="workspacefold" id="announcementsGroup">
+    <summary>Company announcements &amp; earnings calendar</summary>
+    <section id="announcements">
+      <div class="sectionhead">
+        <div>
+          <p class="eyebrow">SOURCE-LINKED COMPANY UPDATES</p>
+          <h2>Announcements &amp; earnings</h2>
+          <p>Official exchange-hosted issuer notices for your holdings and current top 20.</p>
+        </div>
+        <button id="refreshNews">Refresh announcements</button>
+      </div>
+      <p id="newsStatus" role="status">Loading the announcement feed…</p>
+      <div class="researchtools">
+        <label
+          >Companies<select id="newsScope">
+            <option value="focus">My holdings + top 20</option>
+            <option value="held">My holdings only</option>
+            <option value="universe">Configured Oslo universe</option>
+          </select></label
+        ><button id="reviewedNews">Mark current notices reviewed</button>
+      </div>
+      <div class="metrics">
+        <article>
+          <small>Notices · last 24 hours</small><strong id="newsCount">—</strong>
+        </article>
+        <article>
+          <small>Headline review flags</small><strong id="newsPriority">—</strong>
+        </article>
+        <article>
+          <small>Earnings / business updates</small><strong id="newsEarnings">—</strong>
+        </article>
+      </div>
+      <div class="card">
+        <h2>What changed in the last 24 hours</h2>
+        <p id="newsSummary"></p>
+        <div id="newsDigest"></div>
+      </div>
+      <div class="card">
+        <h2>Confirmed dates found in issuer notices</h2>
+        <div id="newsCalendar"></div>
+        <p class="muted">
+          Only explicit full dates associated with results or financial reports are extracted.
+          Dates are as stated in the issuer notice; event times are not extracted. New notices
+          can revise a calendar.
+        </p>
+      </div>
+      <div class="sectionhead"><h2>Recent notices</h2></div>
+      <div class="researchtools">
+        <label
+          >Topic<select id="newsCategory">
+            <option value="all">All notices</option>
+            <option value="earnings">Earnings / business updates</option>
+            <option value="calendar">Reporting calendar / invitations</option>
+            <option value="risk">Guidance / financial risk</option>
+            <option value="capital">Capital / financing</option>
+            <option value="corporate">Acquisitions / corporate actions</option>
+            <option value="contract">Contracts / operations</option>
+            <option value="insider">Insiders / ownership</option>
+            <option value="distribution">Dividends / buybacks</option>
+            <option value="governance">Governance / meetings</option>
+          </select></label
+        ><label
+          >Published within<select id="newsPeriod">
+            <option value="7">7 days</option>
+            <option value="1">24 hours</option>
+            <option value="30">30 days of retained data</option>
+          </select></label
+        >
+      </div>
+      <div id="newsItems"></div>
+      <p id="newsCoverage" class="muted"></p>
+      <p class="muted">
+        Source:
+        <a href="https://newsweb.oslobors.no/" target="_blank" rel="noopener noreferrer"
+          >Oslo Børs NewsWeb ↗</a
+        >. This feed does not include general publisher news. Topic and review labels are
+        headline rules, not sentiment analysis or recommendations to trade.
+      </p>
+    </section>
+  </details>
+  <details class="workspacefold" id="briefingGroup">
+    <summary>Holding alerts &amp; thesis reviews</summary>
+    <section id="briefing">
+      <h2>What deserves attention</h2>
+      <p>
+        Review alerts against your investment thesis. A price trend alone does not establish
+        whether a business is worth buying or selling.
+      </p>
+      <div id="alerts"></div>
+    </section>
+  </details>
+  <details class="workspacefold" id="methodGroup">
+    <summary>Methodology, data sources &amp; export</summary>
+    <section id="method">
+      <h2>A transparent starting point</h2>
+      <p>
+        Enter your current Nordnet holdings and weighted average purchase price. Use zero
+        shares for a watchlist company. Norwegian provider tickers end in .OL. For NOK
+        holdings you can enter a bare Oslo ticker such as KOG; the suffix is added during
+        lookup.
+      </p>
+      <p>
+        Refresh requests five years of daily price history and USD/NOK from an unofficial
+        Yahoo Finance endpoint. Availability is not guaranteed. Prices may be delayed. Every
+        quote shows its provider timestamp; quotes older than four calendar days are excluded
+        from NOK valuation. USD holdings also require a fresh NOK exchange rate.
+      </p>
+      <p>
+        Alerts use your price levels, a 200-session price average, and your chosen position
+        concentration limit, including manually tracked cash, when every holding is priced.
+        These are review prompts, not validated investment recommendations. The
+        Recommendations page adds technical ranking and background analysis. Explore also
+        shows available annual financial figures, sources and dates. Official announcement
+        metadata is shown separately from ranks; Source-linked annual assessments, transaction
+        imports, cash reconciliation and optional open-tab desktop alerts are available.
+        Full-report news interpretation, tax calculations and automatic trades are not
+        implemented.
+      </p>
+      <p>
+        Keep shares and average cost updated after trades and stock splits. Review corporate
+        actions with your broker. The research worker refreshes holdings and the candidate
+        universe at the configured interval while the server is running.
+      </p>
+      <p>
+        Your records are stored in the Northstar server’s SQLite database. Export a backup
+        below. This application does not connect to your Nordnet account.
+      </p>
+      <button id="export">Export notebook JSON</button>
+    </section>
+  </details>
+</section>

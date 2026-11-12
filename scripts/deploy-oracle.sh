@@ -38,8 +38,11 @@ fi
 sudo -n systemctl start northstar
 for task_attempt in {1..30}; do
   if curl --silent --fail http://127.0.0.1:8000/api/health >/dev/null; then
-    echo 'Oracle deployment healthy. Portfolio database preserved.'
-    exit 0
+    if python3 "$task_root/scripts/smoke-deployment.py" --attempts 3; then
+      echo 'Oracle health and authenticated checks passed. Portfolio database preserved.'
+      exit 0
+    fi
+    break
   fi
   sleep 1
  done

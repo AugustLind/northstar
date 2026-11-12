@@ -17,7 +17,11 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s tests -v
-      - run: node --check static/app.js && node --check static/advice.js && node --check static/charts.js && node --check static/ledger.js && node --check static/daily.js && node --check static/trade-plan.js && node --check static/holdings-import.js && node --check static/portfolio-fit.js && node --check static/validation.js && node --check static/news.js && node --check static/research-tools.js && node tests/test_charts.js && node tests/test_ui.js
+      - run: python scripts/build-ui.py --check
+      - run: for file in static/*.js; do node --check "$file"; done
+      - run: node tests/test_charts.js && node tests/test_ui.js
+      - name: Authenticated synthetic browser workflow
+        run: python scripts/smoke-browser.py
       - run: for script in scripts/*.sh; do bash -n "$script"; done
   oracle:
     needs: check
@@ -91,3 +95,24 @@ jobs:
         id: deployment
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
+  verify:
+    needs: [oracle, pages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify private API and every public dashboard asset
+        env:
+          DEPLOY_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+          ORACLE_HOST: ${{ vars.ORACLE_HOST }}
+          API_ORIGIN: ${{ vars.NORTHSTAR_API_URL }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/northstar_verify
+          chmod 600 ~/.ssh/northstar_verify
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$API_ORIGIN" | ssh -i ~/.ssh/northstar_verify -o StrictHostKeyChecking=yes "ubuntu@$ORACLE_HOST" 'cd ~/northstar && python3 scripts/smoke-deployment.py --origin-stdin --page-url https://augustlind.github.io/northstar/ --attempts 10'
+      - name: Remove temporary SSH key
+        if: always()
+        run: rm -f ~/.ssh/northstar_verify

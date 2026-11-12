@@ -8,14 +8,14 @@ import math
 import re
 import holdings_import as hi
 
-FIELDS=['date','type','name','symbol','quantity','net_cash','currency','trade_id','fee']
+FIELDS=['date','type','name','symbol','quantity','net_cash','currency','trade_id','fee','split_ratio']
 HEADERS={'date':['bokforingsdag','bokføringsdag','handelsdag','dato','date'],'type':['transaksjonstype','type','transaction type'],
          'name':['verdipapir','navn','name'],'symbol':['ticker','symbol'],'quantity':['antall','quantity'],
          'net_cash':['belop','beløp','netto','net cash','amount'],'currency':['valuta','currency'],
-         'trade_id':['id','transaksjons id','transaction id','bilagsnummer'],'fee':['kurtasje','gebyr','fee']}
+         'trade_id':['id','transaksjons id','transaction id','bilagsnummer'],'fee':['kurtasje','gebyr','fee'],'split_ratio':['split ratio','split_ratio','splittforhold']}
 TYPES={'kjop':'buy','kjøp':'buy','buy':'buy','salg':'sell','sell':'sell','utbytte':'dividend','dividend':'dividend',
        'innskudd':'deposit','deposit':'deposit','uttak':'withdrawal','withdrawal':'withdrawal','rente':'interest',
-       'interest':'interest','kurtasje':'fee','gebyr':'fee','fee':'fee','avgift':'fee'}
+       'interest':'interest','kurtasje':'fee','gebyr':'fee','fee':'fee','avgift':'fee','split':'split','splitt':'split','aksjesplitt':'split','reverse split':'split'}
 
 
 def schema(db):
@@ -77,14 +77,19 @@ def events(parsed,mapping,scope,aliases=None,companies=None):
             if kind in ('buy','withdrawal','fee') and e['net_cash']>0:raise ValueError('This event needs a negative signed net cash amount.')
             if kind in ('sell','dividend','deposit') and e['net_cash']<0:raise ValueError('This event needs a positive signed net cash amount.')
             e['name']=cell('name')[:200]
-            if kind in ('buy','sell'):
-                e['quantity']=hi.amount(cell('quantity'),'Quantity')
-                if e['quantity']<=0:raise ValueError('Trade quantity must be positive.')
+            if kind in ('buy','sell','split'):
+                if kind=='split':
+                    if e['net_cash']!=0:raise ValueError('Split events must have zero cash; record cash-in-lieu separately.')
+                    e['split_ratio']=split_ratio(cell('split_ratio'))
+                else:
+                    e['quantity']=hi.amount(cell('quantity'),'Quantity')
+                    if e['quantity']<=0:raise ValueError('Trade quantity must be positive.')
                 hint=hi.oslo_symbol(cell('symbol')) if cell('symbol') else None
                 matched=hi.suggest([{'id':index,'name':e['name'],'currency':'NOK','shares':e['quantity'],'cost':0,'symbol_hint':hint,'error':None}],companies or [],aliases or {})[0]
                 e['symbol']=matched['symbol']
             if cell('fee'):e['fee']=abs(signed(cell('fee'),'Reported fee'))
             identity={k:e[k] for k in ('date','type','quantity','net_cash','currency','name')}
+            if kind=='split':identity['split_ratio']=e['split_ratio']
             if cell('symbol'):identity['source_symbol']=cell('symbol').upper()
             broker_id=cell('trade_id')
             key=json.dumps(identity,sort_keys=True)
@@ -95,6 +100,19 @@ def events(parsed,mapping,scope,aliases=None,companies=None):
         except (ValueError,TypeError) as error:e['error']=str(error)
         out.append(e)
     return out
+
+
+def split_ratio(value):
+    text=str(value).strip()
+    if ':' in text or '/' in text:
+        parts=re.split('[:/]',text)
+        if len(parts)!=2:raise ValueError('Use a positive split ratio, for example 2:1 or 0.5.')
+        denominator=hi.amount(parts[1],'Split denominator')
+        if denominator<=0:raise ValueError('Split denominator must be positive.')
+        ratio=hi.amount(parts[0],'Split numerator')/denominator
+    else:ratio=hi.amount(text,'Split ratio')
+    if not math.isfinite(ratio) or ratio<=0:raise ValueError('Split ratio must be positive.')
+    return ratio
 
 
 def fingerprint(positions,cash):
@@ -112,37 +130,41 @@ def apply(db,items,selections,ledger,profile,positions):
         row=by_id.get(pick.get('id')) if isinstance(pick,dict) else None
         if not row or row['error'] or row['id'] in seen:raise ValueError('Invalid or duplicate selected transaction.')
         seen.add(row['id']);row=dict(row)
-        if row['type'] in ('buy','sell'):row['symbol']=hi.oslo_symbol(pick.get('symbol') or row['symbol'])
+        if row['type'] in ('buy','sell','split'):row['symbol']=hi.oslo_symbol(pick.get('symbol') or row['symbol'])
         existing=db.execute('SELECT payload FROM ledger_events WHERE uid=?',(row['uid'],)).fetchone()
         if existing:
             old=json.loads(existing['payload'])
-            if any(old.get(k)!=row.get(k) for k in ('date','type','quantity','net_cash','currency','symbol')):
+            if any(old.get(k)!=row.get(k) for k in ('date','type','quantity','net_cash','currency','symbol','split_ratio')):
                 raise ValueError('A broker transaction ID conflicts with an imported event. Resolve the correction explicitly.')
             continue
         if row['uid'] in seen_uids:
             old=seen_uids[row['uid']]
-            if any(old.get(k)!=row.get(k) for k in ('date','type','quantity','net_cash','currency','symbol')):raise ValueError('Conflicting broker IDs inside this export.')
+            if any(old.get(k)!=row.get(k) for k in ('date','type','quantity','net_cash','currency','symbol','split_ratio')):raise ValueError('Conflicting broker IDs inside this export.')
             continue
         seen_uids[row['uid']]=row
         selected.append(row)
     working={p['symbol']:dict(p) for p in positions};cash=profile['cash_nok'];last_trades={}
     # Daily weighted-average book keeping; actual broker GAV remains authoritative on reconciliation.
-    for row in sorted(selected,key=lambda e:(e['date'],e['type']!='buy',e['id'])):
+    for row in sorted(selected,key=lambda e:(e['date'],0 if e['type']=='split' else 1 if e['type']=='buy' else 2,e['id'])):
         if row['type'] in ('buy','sell'):
             last_trades[row['symbol']]=max(last_trades.get(row['symbol'],0),dt.datetime.fromisoformat(row['date']).replace(tzinfo=dt.timezone.utc).timestamp())
         if row['date']<=ledger['cutoff_date']:continue
         cash+=row['net_cash']
-        if row['type'] not in ('buy','sell'):continue
+        if row['type'] not in ('buy','sell','split'):continue
         matches=[p for p in working.values() if p['currency']=='NOK' and hi.oslo_symbol(p['symbol'])==row['symbol']]
         if len(matches)>1:raise ValueError('Resolve duplicate bare/.OL holdings before applying transactions.')
         p=matches[0] if matches else {'symbol':row['symbol'],'currency':'NOK','shares':0.,'cost':0.,'thesis':'','review':'','below':None,'above':None}
-        if row['type']=='buy':
+        if row['type']=='split':
+            ratio=row.get('split_ratio')
+            if not isinstance(ratio,(int,float)) or not math.isfinite(ratio) or ratio<=0:raise ValueError('Verified split ratio required.')
+            p['shares']*=ratio;p['cost']/=ratio
+        elif row['type']=='buy':
             cost=p['shares']*p['cost']+abs(row['net_cash']);p['shares']+=row['quantity'];p['cost']=cost/p['shares']
         else:
             if p['shares']+1e-8<row['quantity']:raise ValueError('Sale exceeds tracked shares. Verify the opening snapshot and full transaction history.')
             p['shares']=max(0,p['shares']-row['quantity'])
         working[p['symbol']]=p
-        last_trades[row['symbol']]=dt.datetime.fromisoformat(row['date']).replace(tzinfo=dt.timezone.utc).timestamp()
+        if row['type'] in ('buy','sell'):last_trades[row['symbol']]=dt.datetime.fromisoformat(row['date']).replace(tzinfo=dt.timezone.utc).timestamp()
     if cash < -1e-8:raise ValueError('These transactions produce negative tracked cash. Verify the opening cash and missing deposits.')
     for row in selected:
         db.execute('INSERT INTO ledger_events VALUES (?,?,?)',(row['uid'],row['date'],json.dumps(row,allow_nan=False)))

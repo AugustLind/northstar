@@ -389,3 +389,93 @@ and raw provider exceptions. A generic historical failure message accompanies th
 safe current SMTP diagnosis. `GET /api/email/history`, `/api/portfolio-risk` and
 `/api/stock-summary?symbol=...` also require the existing access key. A sent outbox
 state means SMTP accepted the message; inbox delivery cannot be established from it.
+
+
+## Ledger-derived account performance
+
+Portfolio distinguishes **Account performance** from the existing current-weight
+historical proxy. Account P&L uses opening holdings, imported dated events, actual
+net broker cash and dated prices. The proxy remains a hypothetical daily rebalanced
+portfolio and is never substituted when account data is incomplete.
+
+- The ledger must reconcile to current quantities and manually tracked NOK cash,
+  including any broker-cash mismatch check. Unknown transfers, missing trades,
+  unsupported cash currencies or a conflicting opening snapshot block account returns.
+- New verified openings save quantities and weighted-average cost bases, plus an
+  append-only opening checkpoint. Existing openings can reconstruct quantities by
+  reversing accepted post-cutoff events from reconciled current holdings. They cannot
+  reliably recover historical average costs across closed/reopened positions; realised
+  book P&L stays unavailable rather than inventing a basis.
+- Valuation uses a separate account-close field. Yahoo's split-adjusted-only close is
+  restored to historical share units using sourced split ratios that have taken effect
+  by the quote's own date. Dividend-adjusted research closes are never used to value
+  ledger share quantities or add cash dividends a second time. This provider-derived
+  basis still depends on correct corporate-action coverage and can be revised.
+- A broker split needs a confirmed Oslo ticker, zero net cash and a separately mapped
+  **split ratio** column, e.g. `2:1` or `0.5`. It changes shares and inverse cost/share,
+  not cash, and does not start a trade cooldown. Ratios are not inferred from broker
+  share deltas. Matching provider/ledger split ratios are required across held periods.
+  Transfers and cash-in-lieu require separately supported, verified accounting records.
+- The ledger is NOK-settled. USD opening holdings can be valued with dated USD/NOK
+  observations. USD trades or multi-currency cash balances are not inferred. Unsupported
+  activity requires reconciliation/a supported ledger, not an assumed exchange rate.
+- Fees and withholding are already in recorded net cash; informational fee columns
+  are not subtracted again. Dividends/interest are recognised on recorded cash dates,
+  with no invented accrued receivable or reinvestment.
+- Investment P&L is `ending value − opening value − net external contributions`.
+  Deposits/withdrawals are external flows; trades, dividends, fees and interest are
+  internal account activity. Realised trade P&L uses the verified NOK weighted-average
+  book basis and net sale proceeds. Those cost-basis gains may predate the measurement
+  window and are not added to the period investment P&L or treated as tax-lot gains.
+- Daily-linked returns remove external flows assuming they occur at each day's end.
+  Exports contain dates, not exact flow times, so this is a timing-dependent estimate,
+  not certified true TWR. Zero prior capital or incompatible flow timing suppresses
+  the linked return while leaving measurable NOK P&L available.
+- Modified Dietz divides period P&L by starting capital plus date-weighted external
+  flows. Weights use remaining calendar days under the same end-of-day convention.
+  Nonpositive weighted capital or incompatible estimates suppress the percentage.
+- The measurement ends at the last completed, priced UTC day. Later transactions
+  remain in the ledger but are excluded from that window. Strict mode requires exact
+  dated prices; explicitly enabling prior closes allows at most four calendar days
+  and marks those valuations and the result as estimated. Missing values do not become
+  zero or disappear through a silent intersection of calendars.
+
+The limitations of cash-flow timing are described in the [GIPS calculation
+handbook](https://www.gipsstandards.org/standards/gips-standards-for-firms/gips-standards-handbook-for-firms/).
+Northstar is not claiming GIPS compliance or broker-certified returns. See Yahoo's
+[adjustment explanation](https://help.yahoo.com/kb/SLN28256.html) and
+[historical price column descriptions](https://finance.yahoo.com/quote/AAPL/history/)
+for why adjusted research series must remain separate from account bookkeeping.
+
+## Dated evidence and recorded-input replay
+
+New collections preserve universe definitions, quote frames, annual financials,
+company metadata and completed research-run inputs in the private SQLite archive.
+Every snapshot has a wall-clock capture time, provider/source date when available,
+content checksum and immutable ID. A source date or fiscal year earlier than capture
+is **not** a claim that the application knew the data at that earlier time. Existing
+cache is first archived when observed after this feature is installed.
+
+Price-bar versions store only changed/new bars; quote frames retain their exact
+included timestamps and version boundary. Later revisions cannot change an older
+frame, even if a provider removes a bar. Payloads are compressed and content-addressed;
+unchanged data can share storage. Archive evidence rejects UPDATE/DELETE, but this
+is not an external tamper-proof or independently certified filing store. Storage is
+append-only without automatic purging; current compressed size is visible.
+
+Completed-run manifests identify the exact quote/financial/universe records, relevant
+private context, report time and analysis-source fingerprint. Strategy lab can replay
+those recorded inputs under the **current** analysis code at the original report clock
+and compare saved ranks/actions/scores. A changed code fingerprint is explicit.
+Replay is read-only and never updates holdings, cash, confirmation state, live alerts
+or emails. It is not a reconstruction of unrecorded historical universes or delisted
+companies. New evidence improves reproducibility from its capture date forward; the
+old retrospective backtest's survivor/revision limitations are not erased.
+
+Authenticated `GET /api/archive` lists capture coverage and run IDs. `before=<epoch>`
+filters capture-dated lists; storage totals describe current storage.
+`GET /api/archive/replay?id=<run-id>` compares a selected recorded run.
+`GET /api/account-performance?allow_prior_close=0|1` reads ledger-based performance.
+`GET /api/release` is also authenticated and returns only source fingerprint,
+process start time and configured public origin. No access key or database content
+is included in public HTML, assets or release strings.

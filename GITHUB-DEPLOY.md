@@ -2,9 +2,9 @@
 
 After a one-time setup, pushing to `main` performs:
 
-1. Python tests and UI checks.
-2. Source-only upload to Oracle, restart, and health check. On failure it restores previous source. The portfolio database, Ollama models and server credentials remain on Oracle.
-3. Dashboard deployment to GitHub Pages. The site calls the protected Oracle HTTPS API; Python and Ollama keep running on Oracle.
+1. Python tests, generated-UI consistency, JS checks and an authenticated synthetic Chrome workflow.
+2. Source-only upload to Oracle, restart, health and authenticated private-API checks. On failure it restores previous source. The portfolio database, Ollama models and server credentials remain on Oracle.
+3. Dashboard deployment to GitHub Pages, followed by authenticated API/source and public-asset verification. The site calls the protected Oracle HTTPS API; Python and Ollama keep running on Oracle.
 
 No local app process or SSH tunnel is needed to use the site. The expected UI address is `https://augustlind.github.io/northstar/`.
 
@@ -79,3 +79,26 @@ After enabling access-key authentication, legacy local/tunnel clients also need 
 After deploying the email-enabled version, run `python3 scripts/setup-email.py` in the Oracle checkout. It prompts privately for your SMTP settings, stores them in `/etc/northstar-email.env` with mode 600, installs a service drop-in and restarts Northstar. Existing API credentials and portfolio data are preserved. These settings stay on Oracle and are never part of the Pages build or GitHub Actions variables. Deployments preserve both service environment files.
 
 Open **Daily overview → Email alerts**, enable delivery if paused, and select **Send test email**. Alerts require a valid confirmed share-count plan; the server sends them with the browser closed. An authentication/connectivity error appears in delivery status. Follow your provider's SMTP settings and verify Oracle can reach its submission port. Acceptance by the mail server is not proof of inbox delivery. Full behavior and manual environment settings are documented in [the email reference](docs/REFERENCE.md#email-alerts).
+
+
+## Authenticated release verification
+
+No additional access-key secret is required in GitHub. The private server key stays
+in `~/.config/northstar/access-key` on Oracle. The rollback gate runs
+`python3 scripts/smoke-deployment.py --attempts 3` locally after health succeeds.
+A missing/invalid key or failed private contract/source check fails closed and
+restores the previous source. The checker prints operation labels, never the key
+or portfolio response bodies. It does not send a test email or run a real experiment.
+
+After Pages publication the verification job checks the configured TLS virtual host
+and all public scripts/styles against the deployed manifest, including the browser preflight and bearer CORS contract. TLS routes locally on
+Oracle with normal certificate/SNI verification, avoiding a dependency on reaching
+the instance's own public IP. The configured origin is obtained from the trusted
+local process before any remote-origin check can use the key. Credentialed redirects
+and proxy environment variables are disabled for these private checks.
+
+The Chrome sign-in/portfolio/research/experiment/sign-out flow runs in CI against a
+temporary synthetic account using the real code. This exercises write-heavy flows
+without replacing your production experiment or mutating your actual portfolio.
+The default public `/api/health` stays a boolean and is not sufficient evidence of
+an authenticated deployment by itself.

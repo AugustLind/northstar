@@ -41,6 +41,9 @@ not guaranteed; offline operation depends on previously cached data.
   with coverage and freshness information.
 - Tracks manually entered holdings, cash, review notes, and transaction records,
   with previewed CSV imports and hypothetical allocation/share-count plans.
+- Measures ledger-derived account P&L and cash-flow-adjusted return estimates, with
+  explicit coverage, fee, dividend, split and FX treatment.
+- Preserves append-only dated research inputs and supports read-only recorded-input replay.
 - Adds portfolio risk attribution, correlations and hypothetical equity/FX shocks,
   multi-year financial charts, same-sector comparisons and a current stock decision summary.
 - Shows private service/data health and email acceptance history, with chart preferences
@@ -109,9 +112,14 @@ for JavaScript checks, and Bash for deployment-script checks:
 python3 -m unittest discover -s tests -v
 node tests/test_charts.js
 node tests/test_ui.js
+python3 scripts/build-ui.py --check
 for file in static/*.js; do node --check "$file"; done
 for file in scripts/*.sh; do bash -n "$file"; done
 ```
+
+Run `python3 scripts/smoke-browser.py` for an authenticated desktop/mobile workflow
+using an isolated synthetic account (requires Chrome). It does not run an experiment
+on your live account.
 
 Tests use synthetic data, temporary databases, and mocked providers. Passing
 checks do not establish live provider availability, deployment success, or

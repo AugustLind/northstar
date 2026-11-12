@@ -10,7 +10,7 @@ from pathlib import Path
 class DeployTests(unittest.TestCase):
     def test_deploy_and_rollback_preserve_database(self):
         script=Path(__file__).resolve().parent.parent/'scripts/deploy-oracle.sh'
-        for healthy in [True,False]:
+        for healthy,authenticated in [(True,True),(False,True),(True,False)]:
             with self.subTest(healthy=healthy),tempfile.TemporaryDirectory() as tmp:
                 home=Path(tmp);root=home/'northstar';root.mkdir()
                 (root/'data').mkdir();(root/'data/portfolio.db').write_bytes(b'PRIVATE DATA')
@@ -21,13 +21,13 @@ class DeployTests(unittest.TestCase):
                 archive=home/'deploy.tar.gz'
                 with tarfile.open(archive,'w:gz') as tar:
                     fixture_test = 'import unittest\n\nclass SmokeTest(unittest.TestCase):\n    def test_smoke(self):\n        self.assertTrue(True)\n'
-                    for name,text in [('app.py','new_version=True\n'),('research.py',''),('tests/test_ok.py',fixture_test)]:
+                    for name,text in [('app.py','new_version=True\n'),('research.py',''),('tests/test_ok.py',fixture_test),('scripts/smoke-deployment.py','raise SystemExit('+('0' if authenticated else '1')+')\n')]:
                         data=text.encode();info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
                 result=subprocess.run(['bash',str(script),str(archive)],capture_output=True,text=True,
                     env={**os.environ,'HOME':str(home),'PATH':str(fakebin)+':'+os.environ['PATH']})
-                self.assertEqual(result.returncode,0 if healthy else 1,result.stderr)
+                self.assertEqual(result.returncode,0 if healthy and authenticated else 1,result.stderr)
                 self.assertEqual((root/'data/portfolio.db').read_bytes(),b'PRIVATE DATA')
-                self.assertIn('new_version' if healthy else 'old_version',(root/'app.py').read_text())
+                self.assertIn('new_version' if healthy and authenticated else 'old_version',(root/'app.py').read_text())
 
     def test_archive_traversal_is_rejected_before_service_stop(self):
         script=Path(__file__).resolve().parent.parent/'scripts/deploy-oracle.sh'

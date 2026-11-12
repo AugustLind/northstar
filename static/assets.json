@@ -1,0 +1,34 @@
+{
+  "scripts": [
+    "config.js",
+    "ui-common.js",
+    "app.js",
+    "portfolio.js",
+    "navigation.js",
+    "charts.js",
+    "news.js",
+    "validation.js",
+    "portfolio-fit.js",
+    "holdings-import.js",
+    "trade-plan.js",
+    "ledger.js",
+    "daily.js",
+    "advice.js",
+    "explorer.js",
+    "financial-view.js",
+    "portfolio-risk.js",
+    "stock-summary.js",
+    "validation-view.js",
+    "system-status.js",
+    "chart-tools.js",
+    "account-performance.js",
+    "archive-view.js",
+    "bootstrap.js"
+  ],
+  "styles": [
+    "style.css"
+  ],
+  "images": [
+    "favicon.svg"
+  ]
+}

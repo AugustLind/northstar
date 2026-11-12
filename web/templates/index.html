@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Northstar · Investment notebook</title>
+    {{styles}}
+  </head>
+  <body>
+    <header>
+      <a href="./" class="brand">✳ NORTHSTAR</a><span>OSLO / LONG-TERM INVESTING</span
+      ><button id="connectionButton">Connection</button
+      ><button id="refresh">Refresh market data</button>
+    </header>
+    <main>
+      <section id="connectionPanel" class="card" hidden>
+        <h2>Connect to Northstar</h2>
+        <p>
+          Connect this dashboard to your Northstar server. Your portfolio and analysis stay on that
+          server.
+        </p>
+        <form id="connectionForm">
+          <label
+            >Server address<input
+              id="backendAddress"
+              type="url"
+              placeholder="https://your-server.example.com" /></label
+          ><label
+            >Northstar access key<input
+              id="accessKey"
+              type="password"
+              autocomplete="off"
+              placeholder="Paste your website access key" /></label
+          ><button>Connect</button> <button type="button" id="disconnect">Sign out</button>
+          <p id="connectionMessage" role="status"></p>
+        </form>
+      </section>
+      <p class="eyebrow">YOUR DAILY INVESTMENT NOTEBOOK</p>
+      <h1>Your investment workspace.</h1>
+      <p class="intro">
+        Research Oslo companies, understand risk, and keep your portfolio decisions in one place.
+      </p>
+      <div id="message" role="status"></div>
+      <section class="metrics">
+        <article>
+          <small>Priced holdings · NOK</small><strong id="value">—</strong
+          ><small id="coverage">Add holdings to begin</small>
+        </article>
+        <article>
+          <small>Companies held</small><strong id="count">0</strong
+          ><small>Watchlist positions have zero shares</small>
+        </article>
+        <article>
+          <small>Items to review</small><strong id="alertsCount">0</strong
+          ><small>Rule-based prompts, not trade instructions</small>
+        </article>
+      </section>
+      <nav class="workspace-nav" aria-label="Main workspace">
+        <button data-tab="daily" class="active" aria-current="page">Overview</button
+        ><button data-tab="recommendations">Research</button
+        ><button data-tab="portfolio">Portfolio</button
+        ><button data-tab="validation">Strategy lab</button>
+      </nav>
+      {{include:overview.html}}
+      {{include:research.html}}
+      {{include:portfolio.html}}
+      {{include:strategy-lab.html}}
+      <footer>
+        Built for patient ownership · Private portfolio storage · No broker credentials required
+      </footer>
+    </main>
+    {{include:position-editor.html}}
+    {{scripts}}
+  </body>
+</html>

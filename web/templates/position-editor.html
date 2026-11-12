@@ -1,0 +1,52 @@
+<dialog id="editor">
+  <form id="positionForm">
+    <div class="sectionhead">
+      <h2>Company notebook</h2>
+      <button type="button" id="close">Close</button>
+    </div>
+    <div class="grid">
+      <label
+        >Ticker<input
+          name="symbol"
+          required
+          placeholder="NORBT or BOUV.OL"
+          maxlength="20" /></label
+      ><label
+        >Trading currency<select name="currency">
+          <option>NOK</option>
+          <option>USD</option>
+        </select></label
+      ><label
+        >Shares (0 = watchlist)<input
+          name="shares"
+          type="number"
+          min="0"
+          step="any"
+          value="0"
+          required /></label
+      ><label
+        >Average cost per share<input
+          name="cost"
+          type="number"
+          min="0"
+          step="any"
+          value="0"
+          required /></label
+      ><label>Review below price<input name="below" type="number" min="0" step="any" /></label
+      ><label>Review above price<input name="above" type="number" min="0" step="any" /></label>
+    </div>
+    <label
+      >Why I own / follow this company<textarea
+        name="thesis"
+        placeholder="Business strengths, valuation assumptions, expected holding period…"
+      ></textarea></label
+    ><label
+      >What would make me reconsider?<textarea
+        name="review"
+        placeholder="Debt, margins, competition, management, growth…"
+      ></textarea>
+    </label>
+    <p id="formError" role="alert"></p>
+    <button type="submit">Save company</button>
+  </form>
+</dialog>

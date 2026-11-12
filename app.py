@@ -27,6 +27,10 @@ import portfolio_risk
 import financial_analysis
 import stock_summary
 import system_status
+import research_archive
+import account_performance
+import ui_assets
+import release_info
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -36,6 +40,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = Path(__file__).parent
 STARTED_AT=time.time()
+SOURCE_FINGERPRINT=release_info.fingerprint()
 DB = ROOT / 'data' / 'portfolio.db'
 REFRESH_LOCK = threading.Lock()
 VALIDATION_LOCK = threading.Lock()
@@ -64,6 +69,10 @@ def connect():
     DB.parent.mkdir(exist_ok=True)
     db = sqlite3.connect(DB)
     db.row_factory = sqlite3.Row
+    research_archive.schema(db)
+    db.execute('CREATE TABLE IF NOT EXISTS account_baselines (id INTEGER PRIMARY KEY AUTOINCREMENT,created REAL NOT NULL,cutoff_date TEXT NOT NULL,payload TEXT NOT NULL)')
+    for action in ('UPDATE','DELETE'):
+        db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_account_baselines_{action.lower()} BEFORE {action} ON account_baselines BEGIN SELECT RAISE(ABORT,'Opening checkpoints are append-only'); END")
     db.execute('CREATE TABLE IF NOT EXISTS positions (symbol TEXT PRIMARY KEY, currency TEXT, shares REAL, cost REAL, thesis TEXT, review TEXT, below REAL, above REAL)')
     db.execute('CREATE TABLE IF NOT EXISTS quotes (symbol TEXT PRIMARY KEY, payload TEXT)')
     db.execute('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, payload TEXT)')
@@ -77,6 +86,12 @@ def read_meta(key, default=None):
 def write_meta(key, value):
     with connect() as db:
         db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)', (key, json.dumps(value, allow_nan=False)))
+        if key.startswith('fundamentals:') and value.get('series'):
+            research_archive.capture(db,'financial',key.split(':',1)[1],value,source_asof=value.get('fetched'))
+        elif key.startswith('company:') and value.get('fetched'):
+            research_archive.capture(db,'company',key.split(':',1)[1],value,source_asof=value.get('fetched'))
+        elif key=='settings' and value.get('universe'):
+            research_archive.capture(db,'universe','oslo',{'universe':value['universe'],'min_turnover_nok':value.get('min_turnover_nok',250000)})
 
 def settings():
     saved = read_meta('settings', {})
@@ -180,11 +195,19 @@ def fetch_quote(symbol):
                 if not all(isinstance(v,(int,float)) and math.isfinite(v) and v>0 for v in (numerator,denominator)):continue
                 amount=None;label='Provider split: '+str(numerator)+':'+str(denominator)
             events.append({'time':stamp,'kind':kind,'label':label,'amount':amount,'currency':meta.get('currency'),
-                           'source':'Yahoo Finance chart events (unofficial)','source_url':event_source})
+                           'source':'Yahoo Finance chart events (unofficial)','source_url':event_source,**({'ratio':numerator/denominator} if kind=='split' else {})})
+    raw_by_time={t:v for t,v in zip(result.get('timestamp',[]),raw.get('close',[])) if isinstance(t,(int,float)) and isinstance(v,(int,float)) and math.isfinite(v) and v>0}
+    for point in history:
+        raw_close=raw_by_time.get(point['time'])
+        if raw_close is not None:
+            factor=math.prod(e['ratio'] for e in events if e['kind']=='split' and int(e['time']//86400)>int(point['time']//86400) and int(e['time']//86400)<=int(meta['regularMarketTime']//86400))
+            point['raw_close']=raw_close
+            point['account_close']=raw_close*factor
     return {'price': price, 'currency': meta['currency'], 'asof': meta['regularMarketTime'],
             'fetched': time.time(), 'source': 'Yahoo Finance (unofficial)',
             'history': history, 'history_basis': 'Dividend/split adjusted close' if adjusted else 'Provider daily close',
-            'history_version':3,'events_version':1,'events':sorted(events,key=lambda e:e['time']),
+            'history_version':3,'events_version':1,'account_history_version':1,
+            'account_price_basis':'Provider split-only close restored to historical share units using sourced split events; dividends not added.','events':sorted(events,key=lambda e:e['time']),
             'name': meta.get('longName') or meta.get('shortName') or symbol,
             'turnover20': sum(turnover)/len(turnover) if turnover else None, 'turnover_days': len(turnover),
             'ma200': sum(close[-200:])/200 if len(close) >= 200 else None,
@@ -212,7 +235,7 @@ def _refresh(extra_symbols=None):
         failed=False
         try:
             old = cached.get(symbol)
-            if extra_symbols is not None and old and old.get('history_version')==3 and old.get('events_version')==1 and time.time()-old.get('fetched',0)<1200:
+            if extra_symbols is not None and old and old.get('history_version')==3 and old.get('events_version')==1 and old.get('account_history_version')==1 and time.time()-old.get('fetched',0)<1200:
                 payload=old
             else:
                 for attempt in range(2):
@@ -224,6 +247,7 @@ def _refresh(extra_symbols=None):
                             raise
                         time.sleep(5)
             with connect() as db:
+                research_archive.capture(db,'quote',symbol,payload,source_asof=payload.get('asof'))
                 for key, lookup in lookups.items():
                     if lookup == symbol:
                         db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)', (key, json.dumps(payload)))
@@ -413,7 +437,10 @@ def ledger_initialize(data):
         row=db.execute("SELECT payload FROM metadata WHERE key='portfolio_preferences'").fetchone()
         profile=portfolio_fit.preferences(json.loads(row['payload']) if row else {})
         baseline={'cutoff_date':cutoff,'created':time.time(),'opening_cash_nok':profile['cash_nok'],
-                  'fingerprint':transactions.fingerprint(positions,profile['cash_nok'])}
+                  'fingerprint':transactions.fingerprint(positions,profile['cash_nok']),
+                  'opening_positions':[{k:p[k] for k in ('symbol','currency','shares','cost')} for p in positions]}
+        cursor=db.execute('INSERT INTO account_baselines(created,cutoff_date,payload) VALUES (?,?,?)',(baseline['created'],cutoff,json.dumps(baseline,allow_nan=False)))
+        baseline['baseline_id']=cursor.lastrowid
         db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('ledger_state',json.dumps(baseline)))
         db.execute("DELETE FROM metadata WHERE key='pending_ledger_import'")
         db.execute("DELETE FROM metadata WHERE key='broker_cash_check'")
@@ -506,6 +533,21 @@ def operational_view():
         {t.name for t in threading.enumerate() if t.is_alive()},email.status(),email.history(),STARTED_AT)
 
 
+def archive_run(report,snapshot,config):
+    with connect() as db:
+        identifier=research_archive.capture_run(db,report,snapshot,config,research_archive.analysis_fingerprint(ROOT))
+        db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('archive_status',json.dumps({'last_success':time.time(),'run_id':identifier})))
+    return identifier
+
+
+def account_view(allow_prior_close=False):
+    snapshot=state()
+    with connect() as db:
+        transactions.schema(db)
+        events=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM ledger_events ORDER BY date,uid')]
+    return account_performance.view(snapshot,read_meta('ledger_state'),events,allow_prior_close=allow_prior_close)
+
+
 class Handler(BaseHTTPRequestHandler):
     def cors_headers(self):
         origin = self.headers.get('Origin')
@@ -527,6 +569,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True})
         if self.path.startswith('/api/') and not api_authorized(self.headers.get('Authorization')):
             return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
+        if self.path == '/api/release':return self.send_json({'source_fingerprint':SOURCE_FINGERPRINT,'started':STARTED_AT,'public_origin':os.environ.get('NORTHSTAR_PUBLIC_ORIGIN')})
+        if urlsplit(self.path).path == '/api/account-performance':
+            return self.send_json(account_view(parse_qs(urlsplit(self.path).query).get('allow_prior_close',['0'])[0]=='1'))
+        if urlsplit(self.path).path == '/api/archive':
+            try:
+                raw=parse_qs(urlsplit(self.path).query).get('before',[None])[0]
+                before=float(raw) if raw is not None else None
+                if before is not None and not math.isfinite(before):raise ValueError('Finite capture cutoff required.')
+                with connect() as db:result=research_archive.stats(db,before)
+                return self.send_json({**result,'last_scan':read_meta('archive_status'), 'error':(read_meta('report',{}) or {}).get('archive_error')})
+            except ValueError as error:return self.send_json({'error':str(error)},400)
+        if urlsplit(self.path).path == '/api/archive/replay':
+            try:
+                identifier=int(parse_qs(urlsplit(self.path).query).get('id',['0'])[0])
+                with connect() as db:result=research_archive.replay(db,identifier,ROOT)
+                return self.send_json(result)
+            except (ValueError,KeyError) as error:return self.send_json({'error':str(error)},400)
         if self.path == '/api/system-status':return self.send_json(operational_view())
         if self.path == '/api/email/history':return self.send_json({'items':email_worker().history()})
         if urlsplit(self.path).path in ('/api/portfolio-risk','/api/stock-summary'):
@@ -581,12 +640,16 @@ class Handler(BaseHTTPRequestHandler):
             wanted={p['symbol'] for p in snapshot['positions']}|{'NOK=X'}
             snapshot['quotes']={s:{k:v for k,v in q.items() if k!='history'} for s,q in snapshot['quotes'].items() if s in wanted}
             return self.send_json(snapshot)
-        files = {'/research-tools.js': ('research-tools.js','text/javascript'), '/': ('index.html', 'text/html'), '/recommendations': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/advice.js': ('advice.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript'), '/news.js': ('news.js', 'text/javascript'), '/validation.js': ('validation.js', 'text/javascript'), '/portfolio-fit.js': ('portfolio-fit.js', 'text/javascript'), '/holdings-import.js': ('holdings-import.js', 'text/javascript'), '/trade-plan.js': ('trade-plan.js', 'text/javascript'), '/ledger.js': ('ledger.js','text/javascript'), '/daily.js': ('daily.js','text/javascript'), '/config.js': ('config.js', 'text/javascript'), '/favicon.ico': ('favicon.svg', 'image/svg+xml')}
-        if self.path not in files:
+        mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.json':'application/json','.html':'text/html'}
+        files={'/'+name:(name,mime[Path(name).suffix]) for name in ui_assets.public_files()}
+        files.update({'/':('index.html','text/html'),'/recommendations':('index.html','text/html'),'/favicon.ico':('favicon.svg','image/svg+xml')})
+        asset_path=urlsplit(self.path).path
+        if asset_path not in files:
             return self.send_error(404)
-        name, mime = files[self.path]
+        name, mime = files[asset_path]
         self.send_response(200)
         self.send_header('Content-Type', mime + '; charset=utf-8')
+        self.send_header('Cache-Control','no-cache')
         self.end_headers()
         self.wfile.write((ROOT / 'static' / name).read_bytes())
 
@@ -729,7 +792,7 @@ if __name__ == '__main__':
     connect().close()
     ANNOUNCEMENTS_WORKER = announcements.Worker(read_meta,write_meta,announcement_focus)
     COMPANY_WORKER=company_data.Worker(read_meta,write_meta,financial_symbols)
-    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, report_ready)
+    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, report_ready, archive_run)
     EMAIL_WORKER = email_alerts.Worker(connect,read_meta,write_meta,email_plan)
     FUNDAMENTALS_WORKER = fundamentals.Worker(read_meta, write_meta, financial_symbols)
     # Bind first so a second process cannot start a competing background worker.

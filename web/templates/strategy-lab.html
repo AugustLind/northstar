@@ -1,0 +1,102 @@
+<section id="validation" class="tab" hidden>
+  <h2>Strategy lab</h2>
+  <p>
+    Test the shared technical entry/exit policy with monthly decisions and equal-weight
+    sizing. Holdings remain until an exit signal; vacant slots use the highest-scoring
+    qualifying entries. Personal confirmation periods, review prices and portfolio limits are
+    not simulated. Signals use only observations through the decision close; simulated changes
+    execute at the next common session’s close. Empty selections stay in cash. This is
+    research, not a prediction.
+  </p>
+  <p>
+    Your fixed purchase fee is <b>79 kr per buy order</b>. The purchase fee is not charged per
+    share. Selling commission is configured below; additional slippage applies in both
+    directions.
+  </p>
+  <label
+    >Starting capital · NOK<input
+      id="validationCapital"
+      type="number"
+      value="100000"
+      min="1000"
+      max="1000000000"
+      step="any"
+      required /></label
+  ><label
+    >Optional additional slippage · basis points (both directions)<input
+      id="validationCost"
+      type="number"
+      value="0"
+      min="0"
+      max="200"
+      step="1" /></label
+  ><label
+    >Selling fee · NOK per sell order<input
+      id="validationSellFee"
+      type="number"
+      value="0"
+      min="0"
+      max="10000"
+      step="any"
+      required /></label
+  ><label class="check"
+    ><input id="validationRobustness" type="checkbox" checked /> Include chronological
+    holdout, parameter sensitivity and extra-cost tests</label
+  ><button id="runValidation">Run historical experiment</button>
+  <p id="validationStatus" role="status"></p>
+  <p id="validationSummary"></p>
+  <div id="validationMetrics" class="diagnosticgrid"></div>
+  <section id="robustnessPanel" class="card" hidden>
+    <h3>Chronological training &amp; holdout</h3>
+    <p id="robustnessStatus"></p>
+    <div id="holdoutMetrics" class="diagnosticgrid"></div>
+    <div id="holdoutChart" class="chartplot"></div>
+    <details>
+      <summary>Parameter &amp; execution-cost sensitivity</summary>
+      <div id="parameterSensitivity" class="tablewrap"></div>
+      <div id="costSensitivity" class="tablewrap"></div>
+    </details>
+    <p id="robustnessMethod" class="muted"></p>
+  </section>
+  <div id="validationChart" class="chartplot"></div>
+  <details id="validationPoints"></details>
+  <section class="card">
+    <h3>Chronological test periods (partial years possible)</h3>
+    <p id="validationProtocol"></p>
+    <div id="validationFolds"></div>
+    <h3>Oslo market benchmark</h3>
+    <p id="validationIndex"></p>
+    <div id="validationIndexChart" class="chartplot"></div>
+    <p class="muted">
+      OSEBX GR is a gross-return index, not an investable fund. Index costs are not modelled;
+      missing benchmark dates are never filled with invented values.
+    </p>
+  </section>
+  <p id="validationLimits" class="muted"></p>
+  <details class="card" id="researchArchive">
+    <summary>Dated research evidence &amp; replay</summary>
+    <p id="archiveStatus" role="status">Open Strategy lab to load captured inputs.</p>
+    <div class="researchtools">
+      <label>Captured by · local time<input type="datetime-local" id="archiveBefore" /></label
+      ><button type="button" id="refreshArchive">Refresh archive</button>
+    </div>
+    <div id="archiveSummary" class="diagnosticgrid"></div>
+    <div class="researchtools">
+      <label
+        >Recorded run<select id="archiveRun">
+          <option value="">Choose a captured research run</option>
+        </select></label
+      ><button type="button" id="replayArchive" disabled>Compare recorded inputs</button>
+    </div>
+    <p id="archiveReplayStatus" role="status"></p>
+    <div id="archiveReplayRows" class="tablewrap"></div>
+    <p id="archiveMethod" class="muted"></p>
+  </details>
+  <h2>Forward paper tracking</h2>
+  <p>
+    Every completed scan saves its top 20 with a capture timestamp on Oracle. Past
+    recommendations are never reconstructed from today’s ranking. Real holdings are separate.
+  </p>
+  <p id="paperMethod"></p>
+  <div id="paperResults"></div>
+</section>

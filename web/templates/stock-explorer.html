@@ -1,0 +1,173 @@
+<section id="explorer" class="card" hidden>
+  <div class="sectionhead">
+    <div>
+      <p class="eyebrow">STOCK EXPLORER</p>
+      <h2 id="explorerTitle"></h2>
+    </div>
+    <span id="explorerAction" class="signal"></span>
+  </div>
+  <section id="stockDecision" class="decisionbox">
+    <h3>Decision summary</h3>
+    <p id="decisionStatus" role="status">Loading current signal and portfolio gates…</p>
+    <div id="decisionSummary" class="decisiongrid"></div>
+    <details>
+      <summary>Entry checks &amp; calculation basis</summary>
+      <div id="decisionChecks"></div>
+      <p id="decisionMethod" class="muted"></p>
+    </details>
+  </section>
+  <div id="componentScores" class="componentgrid"></div>
+  <h3>Trend &amp; risk diagnostics</h3>
+  <div id="advancedMetrics" class="diagnosticgrid"></div>
+  <p id="diagnosticNote" class="muted"></p>
+  <div id="returnHorizons" class="horizongrid"></div>
+  <div id="stockObservations"></div>
+  <p id="stockFeeImpact" class="muted"></p>
+  <button id="checkStockFit" type="button">Check this stock against my portfolio</button>
+  <div class="explorertools">
+    <div id="explorerRanges" class="chartcontrols">
+      <button data-days="31">1M</button><button data-days="93">3M</button
+      ><button data-days="186">6M</button><button data-days="370">1Y</button
+      ><button data-days="740">2Y</button><button data-days="100000">All</button>
+    </div>
+    <label
+      >Chart<select id="chartType">
+        <option value="line">Price line</option>
+        <option value="candles">Candlesticks</option>
+      </select></label
+    ><label
+      >Lower panel<select id="chartPanel">
+        <option value="volume">Volume</option>
+        <option value="rsi">RSI (14)</option>
+        <option value="macd">MACD</option>
+        <option value="drawdown">Drawdown</option>
+        <option value="volatility">Rolling volatility</option>
+        <option value="relative">Relative performance</option>
+      </select></label
+    ><label
+      >Compare<select id="compareStock">
+        <option value="">No comparison</option>
+        <option value="OSEBX.OL">Oslo benchmark · OSEBX GR</option>
+      </select></label
+    >
+  </div>
+  <div class="overlaytools">
+    <label><input type="checkbox" id="show20" /> EMA20</label
+    ><label><input type="checkbox" id="show50" checked /> MA50</label
+    ><label><input type="checkbox" id="show200" checked /> MA200</label
+    ><label><input type="checkbox" id="showBands" /> Bollinger bands</label
+    ><label><input type="checkbox" id="showPercent" /> Percentage change</label
+    ><label><input type="checkbox" id="showLog" /> Log price scale</label
+    ><label><input type="checkbox" id="showEvents" checked /> Sourced event markers</label>
+  </div>
+  <div class="datecontrols">
+    <label>From<input type="date" id="chartFrom" /></label
+    ><label>To<input type="date" id="chartTo" /></label><button id="zoomIn">Zoom +</button
+    ><button id="zoomOut">Zoom −</button><button id="resetChart">Reset view</button
+    ><button id="exportChartCSV" type="button">Export CSV</button
+    ><button id="exportChartSVG" type="button">Export SVG</button>
+  </div>
+  <p id="chartTooltip" class="charttooltip" role="status">Hover or tap for daily values.</p>
+  <div
+    id="chartPlot"
+    class="chartplot"
+    tabindex="0"
+    aria-label="Interactive price chart. Use plus and minus to zoom, arrow keys to pan."
+  ></div>
+  <div id="chartNavigator" class="chartnavigator"></div>
+  <label class="navigatorlabel"
+    >Move through history<input
+      id="chartPosition"
+      type="range"
+      min="0"
+      max="0"
+      value="0"
+      step="1"
+  /></label>
+  <p id="chartNote" class="muted"></p>
+  <details class="calculationnotes">
+    <summary>Event sources &amp; upcoming dates</summary>
+    <div id="chartEventSources"></div>
+    <p>
+      Dividend amounts use the provider’s reported currency and historical basis. Markers
+      annotate the existing series; dividends are not added to already adjusted prices.
+      Missing earnings dates are not inferred from fiscal year ends. Issuer event history is
+      limited to retained source notices; this is not a complete earnings archive.
+    </p>
+  </details>
+  <h3>Selected period</h3>
+  <div id="windowStats" class="diagnosticgrid"></div>
+  <p id="comparisonStats" class="muted"></p>
+  <details class="calculationnotes">
+    <summary>How these statistics are measured</summary>
+    <p>
+      Selected-window returns use the first and last displayed closes. Volatility uses the
+      sample standard deviation of daily simple returns, annualised with 252 sessions.
+      Historical 95% VaR is the interpolated 5th-percentile daily loss; expected shortfall
+      averages the worst 5% probability mass. Both are sample descriptions, not maximum
+      possible losses or forecasts. Risk ratios assume a zero risk-free rate. Comparison
+      returns, correlation and beta use shared UTC dates; at least 20 shared-date return
+      intervals are required for correlation and beta. Missing dates are not filled.
+      Drawdown in the lower chart uses the peak of all loaded history; selected-period
+      drawdown starts at the visible window.
+    </p>
+  </details>
+  <p class="muted">
+    Scroll to zoom · drag to pan · keyboard +/− and arrows · EMA20: teal · MA50: gold ·
+    MA200: blue · bands: purple · comparison: orange, aligned at the first shared date in
+    the visible period.
+  </p>
+  <details class="workspacefold">
+    <summary>Financial statements, valuation &amp; issuer notices</summary>
+    <section class="fundamentalsbox">
+      <div class="sectionhead">
+        <div>
+          <h2>Company financials</h2>
+          <p>
+            Annual reported figures with their own fiscal periods. These do not yet change
+            the technical rank.
+          </p>
+        </div>
+        <button id="refreshFinancials">Refresh financials</button>
+      </div>
+      <p id="financialStatus" role="status">Loading financial coverage…</p>
+      <section class="card">
+        <h3>Company quality &amp; valuation</h3>
+        <p id="qualitySummary"></p>
+        <div id="qualityChecks"></div>
+        <p id="valuationSummary"></p>
+        <p id="qualityMethod" class="muted"></p>
+      </section>
+      <div id="financialSignals"></div>
+      <div id="financialMetrics" class="financialgrid"></div>
+      <h3>Multi-year financial trends</h3>
+      <p id="financialTrendStatus"></p>
+      <div id="financialTrendCharts" class="annualgrid"></div>
+      <h3>Same-sector annual comparisons</h3>
+      <div id="financialPeers" class="tablewrap"></div>
+      <p id="financialPeerMethod" class="muted"></p>
+      <details>
+        <summary>Annual history &amp; calculation notes</summary>
+        <div id="financialHistory" class="tablewrap"></div>
+        <p>
+          Revenue growth compares consecutive annual periods only. Margins and debt ratios
+          require matching fiscal dates and known matching currencies. The P/E proxy uses
+          the latest quote and annual diluted EPS; it is not a trailing-twelve-month ratio.
+          Share-count changes can reflect splits or acquisitions, as well as new issuance.
+          Debt ratios require sector context, especially for banks and insurers.
+        </p>
+      </details>
+      <p id="financialSource" class="muted"></p>
+    </section>
+    <section class="stocknewsbox">
+      <h2>Company announcements &amp; earnings dates</h2>
+      <p id="stockNewsStatus" role="status">Loading official notices…</p>
+      <div id="stockNewsCalendar"></div>
+      <div id="stockNewsItems"></div>
+      <p class="muted">
+        Open the source for full details and attachments. Review labels do not change the
+        technical rank.
+      </p>
+    </section>
+  </details>
+</section>
