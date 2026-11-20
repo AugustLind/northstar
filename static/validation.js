@@ -86,9 +86,7 @@ function renderValidation(v) {
   $('#validationSummary').textContent =
     'Strategy ' +
     v.return_pct.toFixed(2) +
-    '% · Same-basket buy and hold ' +
-    v.benchmark_pct.toFixed(2) +
-    '% · Maximum drawdown ' +
+    '% after simulated costs · Maximum drawdown ' +
     v.max_drawdown_pct.toFixed(2) +
     '% · Costs ' +
     v.cost_pct_initial.toFixed(2) +
@@ -129,6 +127,21 @@ function renderValidation(v) {
       '</tbody></table></div>'
     : '';
   const index = v.oslo_index || {};
+  const indexComparison =
+    index.return_pct == null
+      ? 'OSEBX GR comparison unavailable: ' + (index.status || 'rerun experiment')
+      : 'OSEBX GR ' + index.return_pct.toFixed(2) +
+        '% gross return · ' +
+        (Number.isFinite(index.strategy_return_pct) && Number.isFinite(index.excess_percentage_points)
+          ? 'Strategy ' + index.strategy_return_pct.toFixed(2) +
+            '% after simulated costs · Excess ' + index.excess_percentage_points.toFixed(2) +
+            ' percentage points · '
+          : 'Matched strategy result unavailable for this saved report · ') +
+        (Number.isFinite(index.from) && Number.isFinite(index.to)
+          ? new Date(index.from * 1000).toISOString().slice(0, 10) +
+            ' to ' + new Date(index.to * 1000).toISOString().slice(0, 10)
+          : 'saved period');
+  $('#validationSummary').textContent += ' · ' + indexComparison;
   $('#validationIndex').textContent =
     (index.name || 'OSEBX GR') +
     ' · ' +

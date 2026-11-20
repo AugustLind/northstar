@@ -97,7 +97,9 @@ setImmediate(async()=>{
  assert.strictEqual(nodes['#askButton'].disabled,true);
  assert(nodes['#commentary'].textContent.includes('Ollama is writing'));
  assert(!nodes['#commentary'].textContent.includes('Install Ollama'));
- vm.runInContext("renderValidation({generated:1,stocks:1,requested:2,sessions:2,decisions:1,trades:1,return_pct:2,benchmark_pct:3,max_drawdown_pct:-1,cost_pct_initial:.2,limits:'Limited coverage',curve:[{time:1600000000,close:1,benchmark:1},{time:1600086400,close:1.02,benchmark:1.03}]})",context);
+ vm.runInContext("renderValidation({generated:1,stocks:1,requested:2,sessions:2,decisions:1,trades:1,return_pct:2,benchmark_pct:3,max_drawdown_pct:-1,cost_pct_initial:.2,limits:'Limited coverage',curve:[{time:1600000000,close:1,benchmark:1},{time:1600086400,close:1.02,benchmark:1.03}],oslo_index:{status:'available',return_pct:1,strategy_return_pct:.9,excess_percentage_points:-.1,from:1600000000,to:1600086400,curve:[{time:1600000000,close:1},{time:1600086400,close:1.01}]}})",context);
+ assert(nodes['#validationSummary'].textContent.includes('OSEBX GR 1.00% gross return'));
+ assert(nodes['#validationSummary'].textContent.includes('Excess -0.10 percentage points'));
  assert(nodes['#validationChart'].innerHTML.includes('<svg'));
  assert(nodes['#validationLimits'].textContent==='Limited coverage');
  assert(nodes['#validationPoints'].innerHTML.includes('102.00'));
