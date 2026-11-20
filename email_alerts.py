@@ -7,14 +7,17 @@ import smtplib
 import ssl
 import threading
 import time
+from datetime import datetime, time as wall_time, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formatdate
+from zoneinfo import ZoneInfo
 
 import decision_policy as policy
 import trade_plan
 
 TIMEOUT = 20
 LEASE_SECONDS = 600
+OSLO = ZoneInfo('Europe/Oslo')
 
 
 def configuration(env=None):
@@ -63,6 +66,16 @@ def schema(db):
 def event_id(target, symbol, direction, change_id, kind):
     value = json.dumps([policy.VERSION, target, symbol, direction, change_id, kind])
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def weekly_slot(now):
+    """Return the latest Sunday 10:00 Europe/Oslo slot that has arrived."""
+    local = datetime.fromtimestamp(now, timezone.utc).astimezone(OSLO)
+    sunday = local.date() - timedelta(days=(local.weekday()+1) % 7)
+    slot = datetime.combine(sunday, wall_time(10), OSLO)
+    if slot.timestamp() > now:
+        slot = datetime.combine(sunday-timedelta(days=7), wall_time(10), OSLO)
+    return slot.date().isoformat(), slot.timestamp()
 
 
 def dashboard_url(env=None, workspace='recommendations'):
@@ -156,13 +169,15 @@ def sync(db, report, plan, config, now):
                 and trade_plan.current_report(report, now)
                 and (row['symbol'], row['direction']) not in rows):
             active.append(row['id'])
+        if row['kind'] == 'weekly' and row['target'] == config['target']:
+            active.append(row['id'])
         if row['id'] not in active or row['target'] != config['target']:
             db.execute("UPDATE email_outbox SET status='cancelled',updated=? WHERE id=?", (now, row['id']))
     db.execute("UPDATE email_outbox SET status='cancelled',updated=? WHERE status='pending' AND (target!=? OR (kind='test' AND created<?))",
                (now, config['target'], now-3600))
 
 
-def message(config, events, dashboard_url=None):
+def message(config, events, dashboard_url=None, portfolio_url=None):
     msg = EmailMessage()
     msg['From'], msg['To'] = config['EMAIL_FROM'], config['EMAIL_TO']
     msg['Date'] = formatdate(localtime=False)
@@ -171,7 +186,35 @@ def message(config, events, dashboard_url=None):
     test = all(r['kind'] == 'test' for r in events)
     has_reviews=any(r['kind']=='review' for r in events)
     has_plan_changes=any(r['kind']!='review' and r['kind']!='test' for r in events)
-    msg['Subject'] = 'Northstar: email test' if test else 'Northstar: '+str(len(events))+' portfolio review update(s)'
+    weekly = len(events) == 1 and events[0]['kind'] == 'weekly'
+    weekly_payload = json.loads(events[0]['payload']) if weekly else {}
+    msg['Subject'] = ('Northstar: email test' if test else
+                      'Northstar: '+('late weekly catch-up' if weekly_payload.get('late') else 'weekly investor summary') if weekly else
+                      'Northstar: '+str(len(events))+' portfolio review update(s)')
+    if weekly:
+        summary = weekly_payload.get('summary', {})
+        lines = [('Late weekly catch-up for Sunday '+weekly_payload['slot']+' (Europe/Oslo).' if weekly_payload.get('late')
+                  else 'Weekly investor summary for Sunday '+weekly_payload['slot']+' (Europe/Oslo).'), '']
+        close_date = summary.get('last_close_date') or 'unavailable'
+        lines.extend(['Last available close as of Sunday: '+str(close_date)+'.',
+                      'A fresh quote is needed before placing an order.',
+                      'Portfolio risk: '+str(summary.get('risk') or 'Risk data unavailable.')])
+        attention = summary.get('holdings_attention') or []
+        lines.extend(['', 'Holdings needing attention:'])
+        lines.extend(['- '+str(item) for item in attention[:5]] if attention else ['No holdings currently need attention.'])
+        candidates = summary.get('candidates') or []
+        lines.extend(['', 'Noteworthy candidates:'])
+        lines.extend(['- '+str(item) for item in candidates[:5]] if candidates else ['No current candidates are ready for review.'])
+        if not attention and not candidates:
+            lines.extend(['', 'No new holding or candidate changes were detected.'])
+        lines.extend(['', 'Data freshness: '+str(summary.get('data_status') or 'Freshness could not be confirmed.')])
+        if dashboard_url:
+            lines.extend(['', 'Recommendations: '+dashboard_url])
+        if portfolio_url:
+            lines.append('Portfolio: '+portfolio_url)
+        lines.extend(['', 'This summary is for review only. Prices are closing references and may be stale; verify a fresh quote and the current plan before any order.'])
+        msg.set_content('\n'.join(lines))
+        return msg
     opening=('Northstar email delivery is working.' if test else
              'Your share-count plan has changed and new review alerts are available.' if has_reviews and has_plan_changes else
              'New portfolio risk and issuer review alerts are available.' if has_reviews else
@@ -264,7 +307,7 @@ class Worker:
                 'active': bool(config['configured'] and enabled), 'configuration_errors': config['errors'],
                 'pending': counts.get('pending', 0)+counts.get('sending', 0), 'sent': counts.get('sent', 0),
                 **self.read('email_status', {}),
-                'method': 'Server-side email for confirmed share-plan changes. Repeated scans are deduplicated; stale or blocked suggestions are cancelled. No open browser is needed.'}
+                'method': 'Server-side email sends a weekly investor summary on Sunday around 10:00 Europe/Oslo, including no-change updates, plus confirmed share-plan changes and review alerts. Repeated sends are deduplicated; stale or blocked suggestions are cancelled.'}
 
     def history(self,limit=30):
         config=self.config()
@@ -321,6 +364,7 @@ class Worker:
                     (config['target'], now-3600, now, now-LEASE_SECONDS)).fetchone()
             if not test_pending:
                 report, plan = self.current_plan()
+            initialize_weekly = False
             with self.connect() as db:
                 schema(db)
                 db.execute('BEGIN IMMEDIATE')
@@ -330,14 +374,38 @@ class Worker:
                                (now, config['target'], now-3600))
                 else:
                     sync(db, report, plan, config, now)
+                    slot, scheduled = weekly_slot(now)
+                    local = datetime.fromtimestamp(now, timezone.utc).astimezone(OSLO)
+                    this_sunday = local.date()-timedelta(days=(local.weekday()+1) % 7)
+                    due_now = (local.weekday() == 6 and
+                               now >= datetime.combine(this_sunday, wall_time(10), OSLO).timestamp())
+                    start_slot = self.read('weekly_summary_start_slot')
+                    if not start_slot:
+                        start_date=this_sunday if due_now else this_sunday+timedelta(days=7)
+                        start_slot=start_date.isoformat()
+                        initialize_weekly=True
+                    if slot >= start_slot:
+                        weekly_id = event_id(config['target'], '', 'weekly', slot, 'weekly')
+                        summary = (report or {}).get('weekly_summary', {})
+                        db.execute("UPDATE email_outbox SET status='cancelled',updated=? WHERE target=? AND kind='weekly' AND status IN ('pending','sending') AND change_id<?",
+                                   (now, config['target'], slot))
+                        db.execute('''INSERT OR IGNORE INTO email_outbox
+                            (id,target,direction,change_id,kind,payload,status,created,updated)
+                            VALUES (?,?,'weekly',?,'weekly',?,'pending',?,?)''',
+                            (weekly_id, config['target'], slot,
+                             json.dumps({'slot':slot,'late':now-scheduled>300,'summary':summary},allow_nan=False), now, now))
                 selection = " AND kind='test'" if test_pending else ''
                 events = db.execute("SELECT * FROM email_outbox WHERE target=? AND status='pending' AND next_attempt<=?"+selection+" ORDER BY created,id LIMIT 50",
                                     (config['target'], now)).fetchall()
                 if events:
                     is_test = events[0]['kind'] == 'test'
-                    events = [r for r in events if (r['kind'] == 'test') == is_test]
+                    is_weekly = events[0]['kind'] == 'weekly'
+                    events = [r for r in events if (r['kind'] == 'test') == is_test
+                              and (r['kind'] == 'weekly') == is_weekly]
                 for event in events:
                     db.execute("UPDATE email_outbox SET status='sending',updated=?,attempts=attempts+1 WHERE id=?", (now, event['id']))
+            if initialize_weekly:
+                self.write('weekly_summary_start_slot', start_slot)
             if not events:
                 return
             # A pause can race with queueing; check again immediately before SMTP.
@@ -348,7 +416,8 @@ class Worker:
                 return
             try:
                 dashboard = dashboard_url(os.environ if self.env is None else self.env)
-                deliver(config, message(config, events, dashboard))
+                portfolio = dashboard_url(os.environ if self.env is None else self.env, 'portfolio')
+                deliver(config, message(config, events, dashboard, portfolio))
             except Exception as error:
                 failure = error_message(error)
                 with self.connect() as db:

@@ -4,6 +4,7 @@ import math
 import re
 import sqlite3
 import time
+from datetime import datetime, timezone
 import threading
 import os
 import hashlib
@@ -37,6 +38,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote, urlsplit, parse_qs
 from urllib.error import HTTPError, URLError
 from concurrent.futures import ThreadPoolExecutor
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).parent
 STARTED_AT=time.time()
@@ -575,7 +577,65 @@ def email_plan():
                        'source_asof':risk_source,'observed':now})
     long_term_symbols=[portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
                        if p['shares']>0 and p.get('long_term',False)]
-    return {**(report or {}),'review_alerts':alerts,'long_term_symbols':long_term_symbols},plan
+    oslo=ZoneInfo('Europe/Oslo')
+    quote_times=[q['asof'] for symbol,q in snapshot['quotes'].items()
+                 if symbol!='NOK=X' and isinstance(q.get('asof'),(int,float))
+                 and not isinstance(q.get('asof'),bool) and math.isfinite(q['asof'])
+                 and 0<=q['asof']<=now+300]
+    last_close_date=(datetime.fromtimestamp(max(quote_times),timezone.utc).astimezone(oslo).date().isoformat()
+                     if quote_times else None)
+    stale=[]
+    for position in snapshot['positions']:
+        if position['shares']<=0:continue
+        symbol=portfolio_fit.canonical(position['symbol'],position['currency'])
+        quote=trade_plan.quote_for(snapshot,symbol)
+        if not quote:stale.append(symbol+': quote missing')
+        elif not portfolio_fit.fresh(quote,now):stale.append(symbol+': quote stale')
+        if position['currency']=='USD':
+            fx=snapshot['quotes'].get('NOK=X')
+            if not fx:stale.append('NOK/USD conversion quote missing')
+            elif not portfolio_fit.fresh(fx,now):stale.append('NOK/USD conversion quote stale')
+    report_generated=(report or {}).get('generated')
+    if (not isinstance(report_generated,(int,float)) or isinstance(report_generated,bool)
+            or not math.isfinite(report_generated) or not -300<=now-report_generated<4*86400):
+        stale.append('Research report: stale or missing')
+    coverage=(report or {}).get('coverage',{})
+    if coverage.get('unavailable'):
+        stale.append(str(coverage['unavailable'])+' research entries have missing or inadequate data')
+    holdings_attention=[]
+    for holding in plan.get('holdings',[]):
+        if holding.get('sell_shares') or holding.get('technical_action') in trade_plan.SELL_SIGNALS:
+            reasons=' '.join(holding.get('reasons',[]))
+            detail=(holding['symbol']+' — review '+str(holding.get('technical_action') or 'holding risk')+
+                    (('; '+str(holding['sell_shares'])+' shares in the current review scenario') if holding.get('sell_shares') else '')+
+                    ('. '+reasons if reasons else '.'))
+            holdings_attention.append(detail[:700])
+    candidates=[]
+    for card in (report or {}).get('cards',[]):
+        if card.get('action')!='Consider buying' or card.get('held'):continue
+        quote_asof=card.get('asof')
+        quote_date=(datetime.fromtimestamp(quote_asof,timezone.utc).astimezone(oslo).date().isoformat()
+                    if isinstance(quote_asof,(int,float)) and not isinstance(quote_asof,bool)
+                    and math.isfinite(quote_asof) and 0<=quote_asof<=now+300 else 'quote date unavailable')
+        candidates.append((card.get('rank',9999),str(card['symbol'])+' — '+quote_date+' close'))
+    candidates=[text for _,text in sorted(candidates)[:5]]
+    warnings=risk.get('risk_warnings',[])
+    if warnings:
+        warning_text='; '.join(str(w['label'])+' '+str(round(w['loss_pct'],1))+'% loss' for w in warnings[:3])
+        risk_text=('Historical risk available. ' if risk.get('status')=='available' else
+                   'Historical risk unavailable; valuation scenarios show: ')+warning_text
+    elif risk.get('status')=='available':
+        risk_text='No calculated risk warnings at the '+str(risk.get('risk_warning_pct',20))+'% warning level.'
+    elif risk.get('status')=='cash_only':
+        risk_text='Cash only; no invested portfolio risk is currently calculated.'
+    else:
+        risk_text='Historical risk unavailable'+(': '+', '.join(risk.get('missing',[])[:3]) if risk.get('missing') else '.')
+    summary={'last_close_date':last_close_date,'holdings_attention':holdings_attention[:5],
+             'candidates':candidates,'risk':risk_text,
+             'data_status':('Stale or missing: '+ '; '.join(stale[:6])+'.' if stale else
+                            'No stale or missing tracked quote data.')}
+    return {**(report or {}),'review_alerts':alerts,'long_term_symbols':long_term_symbols,
+            'weekly_summary':summary},plan
 
 
 def email_worker():
