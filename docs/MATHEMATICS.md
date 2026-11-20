@@ -49,7 +49,16 @@ date and executes at the next common close. It keeps holdings until an explicit
 technical exit, fills vacant slots in score order, and applies the stated buy
 fee, optional slippage, and configured experiment sale fee. Its matched-date
 OSEBX comparison is gross of index costs; percentage-point excess is not
-risk-adjusted alpha.
+risk-adjusted alpha. Strategy wealth starts before the first execution's costs:
+a flat NOK 100,000 account paying one NOK 79 entry fee returns −0.079%, even
+when the index return is zero.
+
+The DNB OBX ETF comparison uses adjusted NOK market closes on the same sessions.
+For initial capital `C`, entry fee `F`, fractional slippage `s`, and adjusted
+entry/end prices `P0`, `PT`, ending wealth relative to initial capital is
+`(1 − F/C) × (PT/P0) / (1 + s)`. Fund expenses already affect the fund price;
+they are not deducted a second time. The fund tracks OBX rather than OSEBX GR.
+Missing adjusted history or matching dates withholds the comparison.
 
 Parameter selection uses training metrics in a retrospective chronological
 split. Forward recommendation cohorts are a separate paper record: they use

@@ -13,6 +13,7 @@ import base64
 import binascii
 import secrets
 import research
+import decision_policy
 import fundamentals
 import announcements
 import validation
@@ -235,7 +236,9 @@ def _refresh(extra_symbols=None):
     for symbol in extra_symbols or []:
         lookups.setdefault(symbol, symbol)
     lookups['NOK=X'] = 'NOK=X'
-    if extra_symbols is not None:lookups['OSEBX.OL']='OSEBX.OL'
+    if extra_symbols is not None:
+        lookups['OSEBX.OL']='OSEBX.OL'
+        lookups['OBXD.OL']='OBXD.OL'
     symbols = list(dict.fromkeys(lookups.values()))
     progress_lock = threading.Lock()
     progress = {'done':0,'total':len(symbols),'started':time.time(),'failed':0}
@@ -573,6 +576,7 @@ def email_plan():
                                 'Observed or hypothetical loss of '+str(round(warning['loss_pct'],1))+
                                 '% meets your '+str(risk['risk_warning_pct'])+'% warning level. Historical measures describe past data; scenario losses are hypothetical. This is not a guaranteed loss limit or a trade instruction.',
                        'kind':'risk','symbol':None,
+                       'loss_pct':warning['loss_pct'],'warning_pct':risk['risk_warning_pct'],
                        'url':email_alerts.dashboard_url(workspace='portfolio'),
                        'source_asof':risk_source,'observed':now})
     long_term_symbols=[portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
@@ -583,11 +587,13 @@ def email_plan():
                 and math.isfinite(timestamp) and 0<=timestamp<=now+300):
             return datetime.fromtimestamp(timestamp,timezone.utc).astimezone(oslo).date().isoformat()
         return None
-    quote_times=[q['asof'] for symbol,q in snapshot['quotes'].items()
-                 if symbol!='NOK=X' and isinstance(q.get('asof'),(int,float))
-                 and not isinstance(q.get('asof'),bool) and math.isfinite(q['asof'])
-                 and 0<=q['asof']<=now+300]
-    last_close_date=oslo_date(max(quote_times)) if quote_times else None
+    today=oslo_date(now)
+    close_dates=[oslo_date(point.get('time')) for symbol,q in snapshot['quotes'].items()
+                 if symbol!='NOK=X' for point in q.get('history',[])
+                 if isinstance(point.get('close'),(int,float)) and not isinstance(point['close'],bool)
+                 and math.isfinite(point['close']) and point['close']>0]
+    # Today's daily provider bar can still be trading. Use an earlier dated bar.
+    last_close_date=max((date for date in close_dates if date and date<today),default=None)
     stale=[]
     for position in snapshot['positions']:
         if position['shares']<=0:continue
@@ -599,9 +605,8 @@ def email_plan():
             fx=snapshot['quotes'].get('NOK=X')
             if not fx:stale.append('NOK/USD conversion quote missing')
             elif not portfolio_fit.fresh(fx,now):stale.append('NOK/USD conversion quote stale')
-    report_generated=(report or {}).get('generated')
-    if (not isinstance(report_generated,(int,float)) or isinstance(report_generated,bool)
-            or not math.isfinite(report_generated) or not -300<=now-report_generated<4*86400):
+    report_ok=trade_plan.current_report(report,now)
+    if not report_ok:
         stale.append('Research report: stale or missing')
     coverage=(report or {}).get('coverage',{})
     if coverage.get('unavailable'):
@@ -638,11 +643,16 @@ def email_plan():
         holdings_attention.append((priority,detail[:700]))
     holdings_attention=[detail for _,detail in sorted(holdings_attention,key=lambda item:-item[0])[:5]]
     candidates=[]
-    for card in (report or {}).get('cards',[]):
-        if card.get('action')!='Consider buying' or card.get('held'):continue
-        quote_date=oslo_date(card.get('asof')) or 'quote date unavailable'
-        candidates.append((card.get('rank',9999),str(card['symbol'])+' — '+quote_date+' close'))
-    candidates=[text for _,text in sorted(candidates)[:5]]
+    if report_ok:
+        for card in decision_policy.recommendations((report or {}).get('cards',[]),(report or {}).get('promoted_model')):
+            if card.get('held'):continue
+            if not trade_plan.signal_current(card,now):
+                stale.append(str(card['symbol'])+': candidate quote stale or missing; candidate withheld')
+                continue
+            quote_date=oslo_date(card.get('asof'))
+            reasons=' '.join(card.get('reasons',[])[:2]) or 'Passes the shared technical entry screen.'
+            candidates.append(str(card['symbol'])+' — '+quote_date+' quote reference. '+reasons[:500])
+    candidates=candidates[:5]
     warnings=risk.get('risk_warnings',[])
     measures=[]
     for label,key in (('annualized historical volatility','volatility_pct'),('daily 95% VaR','var95_pct')):
@@ -665,6 +675,7 @@ def email_plan():
              'data_status':('Stale or missing: '+ '; '.join(stale[:6])+'.' if stale else
                             'No stale or missing tracked quote data.')}
     return {**(report or {}),'review_alerts':alerts,'long_term_symbols':long_term_symbols,
+            'risk_review_complete':risk.get('status') in ('available','cash_only'),
             'weekly_summary':summary},plan
 
 

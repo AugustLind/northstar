@@ -525,6 +525,48 @@ No candidate is offered until a robustness run provides the candidate list. Forw
 outcomes remain descriptive evidence: the current survivor universe, revised prices,
 and missing point-in-time/delisted coverage prevent unbiased performance claims.
 
+## Investor guidance completion notes
+
+New historical experiments retain the first execution's trading costs in the
+matched OSEBX strategy return. A flat NOK 100,000 strategy paying one NOK 79
+purchase fee returns −0.079% against a flat index, rather than zero. Existing
+saved experiments remain unchanged; rerun them for the corrected comparison.
+
+The additional investable comparator is **DNB OBX ETF**, provider symbol
+`OBXD.OL`, ISIN NO0010257801. [DNB's official description](https://www.dnb.no/en/markets/shares/exchange-traded-products/etf/dnb-obx)
+identifies the 25-stock OBX basket and a 0.2% management fee (checked 2026-11-20).
+OBX differs from the broader OSEBX GR index. The existing free Yahoo endpoint
+supplies NOK dividend/split-adjusted history; availability is checked per run.
+Every execution-period strategy session must exist in that history, with no
+date filling or shifting. Missing data withholds only the fund comparison.
+Fund expenses are embedded in observed fund prices, not charged again. The
+comparison invests fractional units after one NOK 79 entry fee and the entered
+experiment slippage; neither strategy nor fund is terminally liquidated. It
+omits taxes, market spread and premium/discount modelling. The published current
+management fee is not treated as a historical fee schedule. Provider data can
+be revised; these comparisons do not prove outperformance.
+
+Weekly candidates follow the active shared recommendation cap and require the
+same current report and quote checks as share planning. They include the recorded
+entry reasons; stale candidate evidence is disclosed and withheld. Candidates
+remain research prompts, subject to separate cash, fee, concentration and
+confirmation constraints. Pending weekly emails rebuild their summary and late
+label before retrying, while sent weekly slots remain deduplicated.
+The displayed completed-close date comes from historical bars before the current
+Oslo calendar day, conservatively excluding today's potentially unfinished bar.
+Candidate quote references carry their own dates and are not labelled as completed
+closes. A late catch-up retains the scheduled Sunday heading but dates its refreshed
+market references separately.
+
+Risk email episodes persist in SQLite. A loss estimate moving at least five
+percentage points from its last alert, a changed warning level, or a recurrence
+after a complete review found the warning resolved can generate another alert.
+Smaller changes keep the same alert identity, including across restarts. Missing
+risk evidence does not establish resolution. The first review after upgrading
+retains existing sent alert identities and establishes the new comparison baseline.
+Email and dashboard sale reviews state entered fees and net proceeds where known;
+an unknown fee is labelled rather than assumed.
+
 Independent accounting reference cases in `tests/test_account_reference.py` use
 explicit opening/current holdings and hand-calculated expected values, without the
 production event-application helper. They cover end-of-day deposits/withdrawals,

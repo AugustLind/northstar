@@ -218,8 +218,25 @@ fees are reserved before sizing; unused reserves remain cash. Fixed per-order
 fees are normalized by the configured initial capital. The benchmark is a same-stock equal
 weight basket and, when available, the OSEBX gross-return index over exact
 matching dates. Displayed excess is strategy net return minus index gross
-return in percentage points, not risk-adjusted alpha. Index costs are not
-available, and neither side is terminally liquidated.
+return in percentage points, not risk-adjusted alpha. Strategy return uses
+initial capital before the first execution's costs: a flat 100,000 NOK account
+with one 79 NOK purchase fee returns $-0.079\%$, even against a flat index.
+Index costs are not available, and neither side is terminally liquidated.
+
+An investable comparator uses DNB OBX ETF (provider symbol OBXD.OL), which
+tracks the 25-stock OBX basket rather than OSEBX GR. With capital $C$, entry
+fee $F$, slippage fraction $s$, and adjusted entry and end prices $P_0,P_T$,
+its ending wealth relative to initial capital is
+\[
+E_T^{fund}=(1-F/C)\frac{P_T}{P_0(1+s)}.
+\]
+Only dividend/split-adjusted NOK closes covering every matched session are
+accepted. No dates are filled. Fund expenses are embedded in observed prices
+and are not deducted twice. Fractional units, no terminal liquidation, taxes,
+spreads, tracking differences and provider revisions limit comparability.
+DNB's official fund page lists a 0.2\% management fee (checked 20 November
+2026), not a verified historical fee schedule:
+\url{https://www.dnb.no/en/markets/shares/exchange-traded-products/etf/dnb-obx}.
 
 For a return sequence $r_t$, annualized volatility is
 \[

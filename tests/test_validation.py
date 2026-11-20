@@ -9,6 +9,47 @@ def quotes(n=320):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_fund_comparison_uses_adjusted_matched_dates_and_entry_costs(self):
+        data=quotes()
+        for point in data['A.OL']['history']:
+            point['close']=100
+        fund={'currency':'NOK','history_basis':'Dividend/split adjusted close',
+              'history':[dict(point) for point in data['A.OL']['history']]}
+        fund['history'][-1]['close']=200
+        data['OBXD.OL']=fund
+        with patch('research.screen',return_value={
+                'symbol':'A.OL','composite':80,'rank_eligible':True,'action':'Consider buying'}):
+            result=validation.evaluate(data,['A.OL'],initial_capital=100000)
+        comparison=result['oslo_fund']
+        self.assertEqual(comparison['status'],'available')
+        # One 79 NOK entry fee leaves 99,921 invested, doubling to 199,842 NOK.
+        self.assertAlmostEqual(comparison['return_pct'],99.842)
+        self.assertAlmostEqual(comparison['strategy_return_pct'],-0.079)
+        self.assertAlmostEqual(comparison['excess_percentage_points'],-99.921)
+        for changed in ({'currency':'USD'}, {'history_basis':'Provider daily close'},
+                        {'history':fund['history'][:-1]}):
+            with self.subTest(changed=list(changed)):
+                data['OBXD.OL']={**fund,**changed}
+                comparison=validation.evaluate(data,['A.OL'])['oslo_fund']
+                self.assertNotEqual(comparison['status'],'available')
+                self.assertIsNone(comparison['return_pct'])
+                self.assertEqual(comparison['curve'],[])
+
+    def test_flat_market_index_comparison_preserves_entry_fee(self):
+        data=quotes()
+        for point in data['A.OL']['history']:
+            point['close']=100
+        data['OSEBX.OL']={'currency':'NOK','history':data['A.OL']['history']}
+        with patch('research.screen',return_value={
+                'symbol':'A.OL','composite':80,'rank_eligible':True,'action':'Consider buying'}):
+            result=validation.evaluate(data,['A.OL'],initial_capital=100000)
+        self.assertEqual(result['buy_orders'],1)
+        self.assertEqual(result['fixed_fees_nok'],79)
+        self.assertEqual(result['oslo_index']['return_pct'],0)
+        # Unchanged prices leave NOK 99,921 from NOK 100,000 after the entry fee.
+        self.assertAlmostEqual(result['oslo_index']['strategy_return_pct'],-0.079)
+        self.assertAlmostEqual(result['oslo_index']['excess_percentage_points'],-0.079)
+
     def test_future_prices_never_enter_signal(self):
         seen=[]
         def screen(s,q,**kw):
@@ -132,9 +173,8 @@ class ValidationTests(unittest.TestCase):
         self.assertAlmostEqual(v['oslo_index']['return_pct'],(last/first-1)*100)
         self.assertEqual(v['oslo_index']['from'],v['curve'][1]['time'])
         self.assertEqual(v['oslo_index']['to'],v['curve'][-1]['time'])
-        matched_strategy=(v['curve'][-1]['close']/v['curve'][1]['close']-1)*100
-        self.assertAlmostEqual(v['oslo_index']['strategy_return_pct'],matched_strategy)
-        self.assertAlmostEqual(v['oslo_index']['excess_percentage_points'],matched_strategy-(last/first-1)*100)
+        self.assertAlmostEqual(v['oslo_index']['strategy_return_pct'],v['return_pct'])
+        self.assertAlmostEqual(v['oslo_index']['excess_percentage_points'],v['return_pct']-(last/first-1)*100)
         q['OSEBX.OL']={'currency':'NOK','history':q['A.OL']['history'][:-5]}
         v=validation.evaluate(q,['A.OL'])
         self.assertIsNone(v['oslo_index']['return_pct'])

@@ -182,6 +182,15 @@ function renderValidation(v) {
         panel: 'volume',
       })
     : '';
+  const fund = v.oslo_fund || {};
+  $('#validationFund').textContent =
+    (fund.name || 'DNB OBX ETF') + ' · ' + (fund.status || 'Rerun experiment for fund comparison') +
+    (Number.isFinite(fund.return_pct)
+      ? ' · Fund ' + fund.return_pct.toFixed(2) + '% after entry costs · Strategy excess ' +
+        fund.excess_percentage_points.toFixed(2) + ' percentage points · ' +
+        new Date(fund.from * 1000).toISOString().slice(0, 10) + ' to ' +
+        new Date(fund.to * 1000).toISOString().slice(0, 10)
+      : '') + ' ' + (fund.method || '');
   $('#validationChart').innerHTML = ChartKit.svg(v.curve, {
     symbol: 'Strategy equity (green), same-basket benchmark (orange)',
     start: 0,

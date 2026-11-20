@@ -1,6 +1,7 @@
 """Private SMTP delivery of confirmed share-plan changes, with a persistent outbox."""
 import hashlib
 import json
+import math
 import os
 import re
 import smtplib
@@ -61,6 +62,10 @@ def schema(db):
         status TEXT NOT NULL, created REAL NOT NULL, updated REAL NOT NULL,
         attempts INTEGER NOT NULL DEFAULT 0, next_attempt REAL NOT NULL DEFAULT 0,
         last_error TEXT, sent REAL)''')
+    db.execute('''CREATE TABLE IF NOT EXISTS email_risk_state (
+        target TEXT NOT NULL, alert_id TEXT NOT NULL, event_key TEXT NOT NULL,
+        loss_pct REAL NOT NULL, warning_pct REAL NOT NULL, active INTEGER NOT NULL,
+        PRIMARY KEY (target,alert_id))''')
 
 
 def event_id(target, symbol, direction, change_id, kind):
@@ -89,10 +94,34 @@ def dashboard_url(env=None, workspace='recommendations'):
     return None
 
 
+def risk_event_key(db, alert, target, symbol, now):
+    """Persist warning episodes; five percentage points from the last alert is material."""
+    loss,level=alert.get('loss_pct'),alert.get('warning_pct')
+    if not all(isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
+               for v in (loss,level)):
+        return event_id(target,symbol,'review',alert['id'],'review')
+    previous=db.execute('SELECT * FROM email_risk_state WHERE target=? AND alert_id=?',
+                        (target,alert['id'])).fetchone()
+    if (previous and previous['active'] and previous['warning_pct']==level
+            and abs(previous['loss_pct']-loss)<5):
+        return previous['event_key']
+    key=event_id(target,symbol,'review',alert['id']+':'+str(now),'review')
+    if previous is None:
+        legacy=event_id(target,symbol,'review',alert['id'],'review')
+        if db.execute('SELECT 1 FROM email_outbox WHERE id=?',(legacy,)).fetchone():
+            key=legacy
+    db.execute('''INSERT INTO email_risk_state VALUES (?,?,?,?,?,1)
+        ON CONFLICT(target,alert_id) DO UPDATE SET event_key=excluded.event_key,
+        loss_pct=excluded.loss_pct,warning_pct=excluded.warning_pct,active=1''',
+        (target,alert['id'],key,loss,level))
+    return key
+
+
 def sync(db, report, plan, config, now):
     """Recheck the live plan before queuing or retrying an old suggestion."""
     schema(db)
     active = []
+    active_risks=[]
     rows = {}
     if trade_plan.current_report(report, now):
         long_term=set((report or {}).get('long_term_symbols',[]))
@@ -113,6 +142,7 @@ def sync(db, report, plan, config, now):
                            'price': row['price'], 'quote_asof': row['quote_asof'],
                            'report_generated': report['generated'],
                            'long_term': symbol in long_term,
+                           'fee_nok':row.get('fee_nok'),'net_proceeds_nok':row.get('net_proceeds_nok'),
                            'reason': row.get('reason') or ' '.join(row.get('reasons', [])),
                            'change': change['change']}
             else:
@@ -140,7 +170,11 @@ def sync(db, report, plan, config, now):
                 or not 0<=now-source_asof<=7*86400):
             continue
         symbol=alert.get('symbol') or ''
-        key=event_id(config['target'],symbol,'review',alert['id'],'review')
+        if alert['kind']=='risk':
+            active_risks.append(alert['id'])
+            key=risk_event_key(db,alert,config['target'],symbol,now)
+        else:
+            key=event_id(config['target'],symbol,'review',alert['id'],'review')
         source_url=alert.get('url')
         if (not isinstance(source_url,str) or len(source_url)>2000
                 or not source_url.startswith('https://') or any(c in source_url for c in '\r\n\x00')):
@@ -161,6 +195,12 @@ def sync(db, report, plan, config, now):
             status='pending',next_attempt=CASE WHEN email_outbox.status='cancelled' THEN 0 ELSE email_outbox.next_attempt END
             WHERE email_outbox.status IN ('pending','cancelled')''',
                    (key,config['target'],symbol or None,alert['id'],json.dumps(payload,allow_nan=False),now,now))
+    if (report or {}).get('risk_review_complete'):
+        for row in db.execute('SELECT alert_id FROM email_risk_state WHERE target=? AND active=1',
+                              (config['target'],)).fetchall():
+            if row['alert_id'] not in active_risks:
+                db.execute('UPDATE email_risk_state SET active=0 WHERE target=? AND alert_id=?',
+                           (config['target'],row['alert_id']))
     # Withdrawn, superseded, stale or newly blocked suggestions must not be retried.
     for row in db.execute("SELECT * FROM email_outbox WHERE status='pending' AND kind!='test'").fetchall():
         # A withdrawal may disappear from the next scan's change list. Retain its
@@ -196,7 +236,7 @@ def message(config, events, dashboard_url=None, portfolio_url=None):
         lines = [('Late weekly catch-up for Sunday '+weekly_payload['slot']+' (Europe/Oslo).' if weekly_payload.get('late')
                   else 'Weekly investor summary for Sunday '+weekly_payload['slot']+' (Europe/Oslo).'), '']
         close_date = summary.get('last_close_date') or 'unavailable'
-        lines.extend(['Last available close as of Sunday: '+str(close_date)+'.',
+        lines.extend(['Last available close at summary refresh: '+str(close_date)+'.',
                       'A fresh quote is needed before placing an order.',
                       'Portfolio risk: '+str(summary.get('risk') or 'Risk data unavailable.')])
         attention = summary.get('holdings_attention') or []
@@ -242,12 +282,17 @@ def message(config, events, dashboard_url=None, portfolio_url=None):
             if payload.get('long_term'):
                 lines.append('Long-term designation noted; this is a review prompt and does not direct a sale.')
             lines.append(payload['reason'])
+            fee=payload.get('fee_nok')
+            lines.append('Estimated '+payload['direction']+' fee: '+str(fee)+' NOK per order.'
+                         if fee is not None else 'Trading fee unavailable; check the current plan assumptions.')
+            if payload['direction']=='sell' and payload.get('net_proceeds_nok') is not None:
+                lines.append('Estimated net proceeds before tax: '+str(payload['net_proceeds_nok'])+' NOK.')
         lines.append('Analysis: '+time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(payload['report_generated']))+'.')
         lines.append('')
     if dashboard_url:
         lines.extend(['Review the current plan: '+dashboard_url, ''])
     lines.append('Review prompts, not orders or forecasts. Recheck prices and the current plan before trading. '
-                 'Purchase sizing includes 79 NOK per order; sale estimates exclude selling costs and tax. '
+                 'Fees use the current plan assumptions where entered; tax and execution differences are excluded. '
                  'Pause email alerts in the Daily overview.')
     msg.set_content('\n'.join(lines))
     return msg
@@ -389,9 +434,11 @@ class Worker:
                         summary = (report or {}).get('weekly_summary', {})
                         db.execute("UPDATE email_outbox SET status='cancelled',updated=? WHERE target=? AND kind='weekly' AND status IN ('pending','sending') AND change_id<?",
                                    (now, config['target'], slot))
-                        db.execute('''INSERT OR IGNORE INTO email_outbox
+                        db.execute('''INSERT INTO email_outbox
                             (id,target,direction,change_id,kind,payload,status,created,updated)
-                            VALUES (?,?,'weekly',?,'weekly',?,'pending',?,?)''',
+                            VALUES (?,?,'weekly',?,'weekly',?,'pending',?,?)
+                            ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated=excluded.updated
+                            WHERE email_outbox.status='pending' ''',
                             (weekly_id, config['target'], slot,
                              json.dumps({'slot':slot,'late':now-scheduled>300,'summary':summary},allow_nan=False), now, now))
                 selection = " AND kind='test'" if test_pending else ''
