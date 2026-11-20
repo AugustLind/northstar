@@ -620,12 +620,18 @@ def email_plan():
         candidates.append((card.get('rank',9999),str(card['symbol'])+' — '+quote_date+' close'))
     candidates=[text for _,text in sorted(candidates)[:5]]
     warnings=risk.get('risk_warnings',[])
+    measures=[]
+    for label,key in (('annualized historical volatility','volatility_pct'),('daily 95% VaR','var95_pct')):
+        value=risk.get(key)
+        if isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value):
+            measures.append(label+' '+str(round(value,1))+'%')
     if warnings:
         warning_text='; '.join(str(w['label'])+' '+str(round(w['loss_pct'],1))+'% loss' for w in warnings[:3])
-        risk_text=('Historical risk available. ' if risk.get('status')=='available' else
-                   'Historical risk unavailable; valuation scenarios show: ')+warning_text
+        risk_text=(('Historical risk: '+', '.join(measures)+'. ' if measures else 'Historical risk available. ')
+                   if risk.get('status')=='available' else 'Historical risk unavailable; valuation scenarios show: ')+warning_text
     elif risk.get('status')=='available':
-        risk_text='No calculated risk warnings at the '+str(risk.get('risk_warning_pct',20))+'% warning level.'
+        risk_text=(('Historical risk: '+', '.join(measures)+'. ' if measures else 'Historical risk is available. ')+
+                   'No calculated warnings at the '+str(risk.get('risk_warning_pct',20))+'% warning level.')
     elif risk.get('status')=='cash_only':
         risk_text='Cash only; no invested portfolio risk is currently calculated.'
     else:
