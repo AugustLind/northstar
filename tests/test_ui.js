@@ -26,8 +26,10 @@ const riskFixture={generated:now,status:'available',observations:120,missing:[],
 const systemFixture={generated:now,uptime_seconds:120,state:'attention',components:[{label:'<untrusted>',state:'partial',detail:'1 stale quote',action:'Refresh market data'}],workers:[{name:'research',state:'running'}],email_history:[{kind:'test',status:'sent',created:now,attempts:1,sent:now}]};
 const workspaceNames=['daily','recommendations','portfolio','validation'];
 const workspaceSections=workspaceNames.map(id=>{const n=element();n.id=id;nodes['#'+id]=n;return n;});
+nodes['#workspaceTitle']=element();
 const workspaceButtons=workspaceNames.map(tab=>{const n=element();n.dataset.tab=tab;nodes['[data-tab="'+tab+'"]']=n;return n;});
-const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console,Notification:FakeNotification,btoa:s=>Buffer.from(s,'binary').toString('base64'),window:{NORTHSTAR_CONFIG:{apiBase:'https://api.example.com'},localStorage:{getItem(k){return chartStorage.get(k)||null;},setItem(k,v){chartStorage.set(k,v);}}},sessionStorage:{getItem(k){return browserStorage.get(k)||null;},setItem(k,v){browserStorage.set(k,v);},removeItem(k){browserStorage.delete(k);}},location:{pathname:'/recommendations',hostname:'owner.github.io',hash:''},history:{replaceState(){}},setInterval(){},setTimeout(){},confirm(){return false;},
+const workspaceHistory=[];
+const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console,Notification:FakeNotification,btoa:s=>Buffer.from(s,'binary').toString('base64'),window:{NORTHSTAR_CONFIG:{apiBase:'https://api.example.com'},localStorage:{getItem(k){return chartStorage.get(k)||null;},setItem(k,v){chartStorage.set(k,v);}}},sessionStorage:{getItem(k){return browserStorage.get(k)||null;},setItem(k,v){browserStorage.set(k,v);},removeItem(k){browserStorage.delete(k);}},location:{pathname:'/recommendations',search:'',hostname:'owner.github.io',hash:''},history:{pushState(state,title,url){workspaceHistory.push(url);}},setInterval(){},setTimeout(){},confirm(){return false;},
  document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-import-select]')return importSelections;if(s==='[data-tab]')return workspaceButtons;if(s==='.tab')return workspaceSections;return [];},createElement:element},
  fetch:async (path,options)=>{requests.push({path,options});if(path.endsWith('/api/email/settings')){emailFixture.enabled=JSON.parse(options.body).enabled;emailFixture.active=emailFixture.enabled;return {ok:true,json:async()=>emailFixture};}if(path.endsWith('/api/email/test'))return {ok:true,json:async()=>({queued:true,message:'Test queued. Check delivery status and your inbox.'})};return {ok:true,json:async()=>path.includes('/api/account-performance?')?{status:'unavailable',coverage:['Reconciliation required'],curve:[],method:'Ledger-only performance'}:path.startsWith('https://api.example.com/api/archive')?{kinds:[],runs:[],method:'Known since capture'}:path.endsWith('/api/system-status')?systemFixture:path.includes('/api/portfolio-risk?')?riskFixture:path.includes('/api/stock-summary?')?summaryFixture:path.endsWith('/api/validation')?{historical:null,paper:{snapshots:[],method:'Forward samples'},progress:{}}:path.endsWith('/api/daily')?dailyFixture:path.endsWith('/api/ledger')?{initialized:false,reconciled:false,cash_nok:0,count:0,events:[],method:'Net cash already includes fees'}:path.endsWith('/api/alerts/read')?{saved:true}:path.endsWith('/api/trade-plan')?planFixture:path.endsWith('/api/import/preview')?importFixture:path.endsWith('/api/import/apply')?{updated:1}:path.endsWith('/api/portfolio-fit')?fitFixture:path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',assessment:{label:'Mixed annual conditions',passed:2,covered:3,period:'2025-12-31',checks:[{passes:false,label:'Annual income positive',period:'2025-12-31'}],method:'Annual checks only'},fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
 vm.createContext(context);
@@ -57,13 +59,21 @@ setImmediate(async()=>{
  assert(nodes['#financialTrendCharts'].innerHTML.includes('2024'));
  assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
  assert.strictEqual(nodes['#recommendations'].hidden,false);
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'recommendations');
+ context.location.hash='#fit';
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'fit');
+ context.location.hash='';context.location.pathname='/';
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'daily');
+ context.location.pathname='/recommendations';
  for(const [target,page] of [['unrecognised:hash','daily'],['fit','portfolio'],['activity','portfolio'],['announcements','daily'],['method','daily'],['validation','validation']]){
   vm.runInContext("openWorkspace('"+target+"')",context);
   assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
   assert.strictEqual(nodes['#'+page].hidden,false);
   assert.strictEqual(nodes['[data-tab="'+page+'"]'].attributes['aria-current'],'page');
+  assert.strictEqual(nodes['#workspaceTitle'].textContent,{daily:'Overview',recommendations:'Research',portfolio:'Portfolio',validation:'Strategy lab'}[page]);
   if(target!==page&&target!=='unrecognised:hash')assert(nodes['#'+target+'Group'].open);
  }
+ assert(workspaceHistory.includes('/recommendations#fit'));
  vm.runInContext("openWorkspace('recommendations')",context);
  assert(nodes['#windowStats'].innerHTML.includes('Period return'));
  assert(nodes['#advancedMetrics'].innerHTML.includes('ADX'));

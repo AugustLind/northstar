@@ -24,6 +24,10 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(layout.errors,[]);self.assertEqual(layout.stack,[])
         self.assertTrue(all(n==1 for n in Counter(layout.ids).values()))
         self.assertEqual(layout.buttons,['daily','recommendations','portfolio','validation'])
+        self.assertIn('workspaceTitle',layout.nodes)
+        self.assertIn('accountName',layout.nodes)
+        self.assertIn('accountStatus',layout.nodes)
+        self.assertIn('daily',layout.nodes['overviewMetrics']['ancestors'])
         tabs={id for id,node in layout.nodes.items() if 'tab' in node['attrs'].get('class','').split()}
         self.assertEqual(tabs,set(layout.buttons))
         for id in ['systemHealth','portfolioRisk','stockDecision','financialTrendCharts','robustnessPanel','exportChartCSV','exportChartSVG','accountPerformance','researchArchive']:
