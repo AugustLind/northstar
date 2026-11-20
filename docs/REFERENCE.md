@@ -225,6 +225,16 @@ methodology. Portfolio groups holdings, allocation and transaction reconciliatio
 Legacy hashes such as `#fit`, `#activity` and `#announcements` still open the
 appropriate workspace and expand their section.
 
+Overview leads with a NOK valuation of recorded cash and held assets using fresh
+provider quotes, with the reporting date and quote timestamp shown. It is a quote
+valuation, not a live broker balance. A stale or incomplete holding withholds the
+total. Same-session movement shows held-asset price change and the percentage of the
+prior account value; it is withheld when a same-day ledger event has unknown intraday
+timing. Deposits and withdrawals never count as investment return. Ledger-derived
+investment gain/loss is shown only when reconciled account history has complete
+comparable valuations, and its dates end at the last completed priced day. Open
+Portfolio for the detailed curve, coverage and reconciliation workflow.
+
 Research retains the existing five-component ranking and entry/exit policy.
 Additional diagnostics do **not** alter rankings, share quantities or email rules.
 A new completed scan populates them in saved reports; older reports remain readable.

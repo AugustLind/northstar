@@ -29,12 +29,17 @@ class Fixture:
         app.save_position({'symbol':'SYNTH.OL','currency':'NOK','shares':3,'cost':100,'thesis':'Synthetic test only'})
         app.write_meta('portfolio_preferences',{'cash_nok':1000,'purchase_nok':0,'sectors':{'SYNTH.OL':'Industrials'}})
         cutoff=time.strftime('%Y-%m-%d',time.gmtime(now-60*86400));app.ledger_initialize({'date':cutoff})
-        event={'id':1,'uid':'synthetic-income','error':None,'date':time.strftime('%Y-%m-%d',time.gmtime(now-20*86400)),'type':'dividend','symbol':'','name':'Synthetic income','currency':'NOK','quantity':0,'net_cash':10.,'fee':None}
+        events=[
+            {'id':1,'uid':'synthetic-income','error':None,'date':time.strftime('%Y-%m-%d',time.gmtime(now-30*86400)),'type':'dividend','symbol':'','name':'Synthetic income','currency':'NOK','quantity':0,'net_cash':10.,'fee':None},
+            {'id':2,'uid':'synthetic-deposit','error':None,'date':time.strftime('%Y-%m-%d',time.gmtime(now-20*86400)),'type':'deposit','symbol':'','name':'Synthetic contribution','currency':'NOK','quantity':0,'net_cash':100.,'fee':None},
+            {'id':3,'uid':'synthetic-withdrawal','error':None,'date':time.strftime('%Y-%m-%d',time.gmtime(now-10*86400)),'type':'withdrawal','symbol':'','name':'Synthetic withdrawal','currency':'NOK','quantity':0,'net_cash':-40.,'fee':None},
+        ]
         snapshot=app.state()
         with app.connect() as db:
-            result=transactions.apply(db,[event],[{'id':1}],app.read_meta('ledger_state'),snapshot['manual_portfolio_preferences'],snapshot['positions'])
+            result=transactions.apply(db,events,[{'id':row['id']} for row in events],app.read_meta('ledger_state'),snapshot['manual_portfolio_preferences'],snapshot['positions'])
             for key,value in [('ledger_state',result['ledger']),('portfolio_preferences',result['profile'])]:db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',(key,json.dumps(value)))
         snapshot=app.state(True);report=research.build_report(snapshot,['SYNTH.OL']);report['archive_run_id']=app.archive_run(report,snapshot,app.settings());app.write_meta('report',report)
+        self.expected_current_value_nok=3*quote['price']+1070
         self.requests=[];fixture=self
         class Handler(app.Handler):
             def log_message(self,*args):pass

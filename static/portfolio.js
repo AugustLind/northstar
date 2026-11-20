@@ -1,34 +1,7 @@
 /* Holdings notebook, editor and local export. Depends on app.js and ui-common.js. */
 function render() {
-  const { positions, quotes } = state,
-    fx = quotes['NOK=X'];
-  let total = 0,
-    priced = 0;
-  const values = {},
-    alerts = [];
-  const held = positions.filter((p) => p.shares > 0);
-  for (const p of positions) {
-    const q = quotes[p.symbol];
-    if (
-      p.shares > 0 &&
-      fresh(q) &&
-      q.currency === p.currency &&
-      (p.currency === 'NOK' || (fresh(fx) && fx.currency === 'NOK'))
-    ) {
-      values[p.symbol] = q.price * p.shares * (p.currency === 'USD' ? fx.price : 1);
-      total += values[p.symbol];
-      priced++;
-    }
-  }
-  $('#value').textContent = priced ? money(total) : '—';
-  $('#count').textContent = held.length;
-  $('#coverage').textContent = `${priced} / ${held.length} holdings priced. ${
-    priced < held.length ? 'Incomplete total.' : ''
-  }${
-    fresh(fx)
-      ? ' USD/NOK: ' + fx.price.toFixed(4) + ' · ' + new Date(fx.asof * 1000).toLocaleDateString()
-      : ''
-  }`;
+  const { positions, quotes } = state;
+  const alerts = [];
   $('#holdings').innerHTML = positions.length
     ? positions
         .map((p) => {
@@ -36,7 +9,11 @@ function render() {
             valid = q && q.currency === p.currency;
           const gain = valid && p.cost > 0 ? (q.price / p.cost - 1) * 100 : null;
           return `<tr><td><b>${esc(p.symbol)}</b><small>${
-            p.shares ? (p.long_term ? 'Long-term holding · keep under review' : 'Holding') : 'Watchlist'
+            p.shares
+              ? p.long_term
+                ? 'Long-term holding · keep under review'
+                : 'Holding'
+              : 'Watchlist'
           } · ${esc(p.currency)}</small></td><td>${p.shares}<small>${money(
             p.cost,
             p.currency
@@ -60,7 +37,9 @@ function render() {
     const q = quotes[p.symbol],
       items = [];
     if (p.shares > 0 && p.long_term)
-      items.push('Long-term designation does not remove this holding from review; significant price, concentration and portfolio risks still matter.');
+      items.push(
+        'Long-term designation does not remove this holding from review; significant price, concentration and portfolio risks still matter.'
+      );
     if (!fresh(q) || q.currency !== p.currency)
       items.push(
         'Current usable data unavailable. Refresh quotes and check the selected trading currency.'
@@ -117,7 +96,6 @@ function render() {
       );
     }
   }
-  $('#alertsCount').textContent = alerts.length;
   $('#alerts').innerHTML =
     alerts.join('') ||
     '<article class="card">No rules triggered. This does not establish that a stock is a good investment. Review company reports and your thesis regularly.</article>';

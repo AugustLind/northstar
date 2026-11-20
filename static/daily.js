@@ -1,6 +1,51 @@
 /* Notification permission is requested only by the user's explicit button click. */
 let dailyView = null,
-  dailyRequest = 0;
+  dailyRequest = 0,
+  overviewAccountRequest = 0;
+async function loadOverviewAccount() {
+  const token = ++overviewAccountRequest;
+  $('#overviewAccountStatus').textContent = 'Loading current valuation and ledger performance…';
+  try {
+    const value = await api('account-performance?allow_prior_close=0');
+    if (token !== overviewAccountRequest) return;
+    $('#overviewValue').textContent =
+      value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
+    $('#overviewValueMeta').textContent =
+      (value.current_price_basis || 'Provider quote basis') +
+      ' · reporting date ' +
+      (value.current_date || 'unavailable') +
+      (value.current_asof
+        ? ' · provider prices as of ' + new Date(value.current_asof * 1000).toLocaleString()
+        : '');
+    $('#overviewMove').textContent =
+      value.today_change_nok == null
+        ? 'Unavailable'
+        : money(value.today_change_nok) + ' · ' + value.today_change_pct.toFixed(2) + '%';
+    $('#overviewMoveMeta').textContent =
+      value.today_change_nok == null
+        ? 'Today’s movement needs current same-session quotes and prior closes.'
+        : 'Held-asset price change · % of prior account value · ' +
+          value.today_date +
+          ' · cash flows excluded';
+    const verified =
+      ['available', 'estimated'].includes(value.status) && value.investment_pnl_nok != null;
+    $('#overviewPnl').textContent = verified ? money(value.investment_pnl_nok) : 'Unavailable';
+    $('#overviewPnlMeta').textContent = verified
+      ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
+      : 'Requires reconciled ledger, comparable valuations and verified opening history.';
+    const notices = (value.current_coverage || []).concat(value.coverage || []);
+    $('#overviewAccountStatus').textContent = notices.length
+      ? notices.join(' ')
+      : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';
+  } catch (error) {
+    if (token === overviewAccountRequest) {
+      $('#overviewValue').textContent = 'Unavailable';
+      $('#overviewMove').textContent = 'Unavailable';
+      $('#overviewPnl').textContent = 'Unavailable';
+      $('#overviewAccountStatus').textContent = error.message;
+    }
+  }
+}
 function safeDailyLink(url) {
   return typeof officialNoticeUrl === 'function' ? officialNoticeUrl(url) : '';
 }
@@ -129,6 +174,7 @@ function renderDaily(v) {
 }
 async function loadDaily() {
   const token = ++dailyRequest;
+  loadOverviewAccount();
   try {
     const v = await api('daily');
     if (token === dailyRequest) renderDaily(v);
@@ -137,6 +183,27 @@ async function loadDaily() {
   }
 }
 $('#refreshDaily').onclick = loadDaily;
+$('#refreshOverviewAccount').onclick = async () => {
+  const button = $('#refreshOverviewAccount');
+  button.disabled = true;
+  button.textContent = 'Refreshing market data…';
+  try {
+    const result = await api('refresh', {});
+    await loadOverviewAccount();
+    if (result.errors && result.errors.length)
+      $('#overviewAccountStatus').textContent = result.errors.join(' ');
+  } catch (error) {
+    $('#overviewAccountStatus').textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Refresh account value';
+  }
+};
+$('#openAccountPerformance').onclick = () => {
+  openWorkspace('portfolio');
+  $('#accountPerformance').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+$('#openAccountSetup').onclick = () => openWorkspace('activity');
 $('#markAlertsRead').onclick = async () => {
   if (!dailyView) return;
   try {

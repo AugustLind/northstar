@@ -1,17 +1,34 @@
 <section id="daily" class="tab">
-  <section class="metrics overview-metrics" id="overviewMetrics" aria-label="Overview account summary">
+  <section
+    class="metrics overview-metrics"
+    id="overviewMetrics"
+    aria-label="Overview account summary"
+  >
     <article>
-      <small>Priced holdings · NOK</small><strong id="value">—</strong
-      ><small id="coverage">Add holdings to begin</small>
+      <small>Current value at provider quotes · NOK</small><strong id="overviewValue">—</strong
+      ><small id="overviewValueMeta">Loading recorded holdings, cash and quotes…</small>
     </article>
     <article>
-      <small>Companies held</small><strong id="count">0</strong
-      ><small>Watchlist positions have zero shares</small>
+      <small>Today’s movement</small><strong id="overviewMove">Unavailable</strong
+      ><small id="overviewMoveMeta">Requires current same-session prices</small>
     </article>
     <article>
-      <small>Items to review</small><strong id="alertsCount">0</strong
-      ><small>Rule-based prompts, not trade instructions</small>
+      <small>Investment gain / loss</small><strong id="overviewPnl">Unavailable</strong
+      ><small id="overviewPnlMeta">Requires verified opening history</small>
     </article>
+    <p id="overviewAccountStatus" class="overview-account-status" role="status">
+      Loading account summary…
+    </p>
+    <div class="researchtools overview-account-actions">
+      <button id="refreshOverviewAccount" type="button">Refresh account value</button>
+      <button id="openAccountPerformance" type="button">Detailed performance in Portfolio</button>
+      <button id="openAccountSetup" type="button">Reconcile or set up activity &amp; cash</button>
+    </div>
+    <p class="muted overview-account-status">
+      Current value includes recorded NOK cash and held assets at provider quotes. Historical
+      investment gain/loss is measured from the verified opening snapshot to the last completed
+      priced date; deposits and withdrawals are excluded from investment return.
+    </p>
   </section>
   <div class="sectionhead">
     <div>
