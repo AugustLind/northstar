@@ -524,9 +524,36 @@ def daily_view():
 
 
 def email_plan():
-    snapshot=state()
+    now=time.time()
+    snapshot=state(True)
     report=read_meta('report')
-    return report,trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
+    plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
+    alerts=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view(),now)['reviews']
+    risk=portfolio_risk.view(snapshot,snapshot['portfolio_preferences'],now)
+    quote_times=[q.get('asof') for p in snapshot['positions'] if p['shares']>0
+                 for q in [trade_plan.quote_for(snapshot,portfolio_fit.canonical(p['symbol'],p['currency']))]
+                 if q and isinstance(q.get('asof'),(int,float))]
+    if any(p['shares']>0 and p['currency']=='USD' for p in snapshot['positions']):
+        fx=snapshot['quotes'].get('NOK=X')
+        if fx and isinstance(fx.get('asof'),(int,float)):
+            quote_times.append(fx['asof'])
+    risk_source=min(quote_times) if quote_times else None
+    for warning in risk.get('risk_warnings',[]):
+        label=warning['label']
+        if label not in ('Historical 95% daily VaR','Historical 95% tail loss','Historical proxy drawdown') and ' long-term holding · ' not in label:
+            continue
+        identity=hashlib.sha256(('risk:'+label).encode()).hexdigest()[:24]
+        long_term=' long-term holding · ' in label
+        alerts.append({'id':identity,'priority':95 if long_term else 85,'title':'Review portfolio risk: '+label,
+                       'detail':('Long-term designation does not remove this significant risk from review. ' if long_term else '')+
+                                'Observed or hypothetical loss of '+str(round(warning['loss_pct'],1))+
+                                '% meets your '+str(risk['risk_warning_pct'])+'% warning level. Historical measures describe past data; scenario losses are hypothetical. This is not a guaranteed loss limit or a trade instruction.',
+                       'kind':'risk','symbol':None,
+                       'url':email_alerts.dashboard_url(workspace='portfolio'),
+                       'source_asof':risk_source,'observed':now})
+    long_term_symbols=[portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
+                       if p['shares']>0 and p.get('long_term',False)]
+    return {**(report or {}),'review_alerts':alerts,'long_term_symbols':long_term_symbols},plan
 
 
 def email_worker():

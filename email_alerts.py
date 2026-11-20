@@ -65,12 +65,24 @@ def event_id(target, symbol, direction, change_id, kind):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def dashboard_url(env=None, workspace='recommendations'):
+    env=os.environ if env is None else env
+    pages=env.get('NORTHSTAR_PAGES_ORIGIN','').rstrip('/')
+    if pages.startswith('https://'):
+        return pages+'/northstar/#'+workspace
+    public=env.get('NORTHSTAR_PUBLIC_ORIGIN','').rstrip('/')
+    if public.startswith('https://'):
+        return public+'/recommendations#'+workspace
+    return None
+
+
 def sync(db, report, plan, config, now):
     """Recheck the live plan before queuing or retrying an old suggestion."""
     schema(db)
     active = []
     rows = {}
     if trade_plan.current_report(report, now):
+        long_term=set((report or {}).get('long_term_symbols',[]))
         rows = {(r['symbol'], 'buy'): r for r in plan.get('buys', [])}
         rows.update({(r['symbol'], 'sell'): r for r in plan.get('holdings', []) if r.get('sell_shares')})
         for change in report.get('recommendation_changes', []):
@@ -87,6 +99,7 @@ def sync(db, report, plan, config, now):
                 payload = {'symbol': symbol, 'direction': direction, 'shares': row[quantity],
                            'price': row['price'], 'quote_asof': row['quote_asof'],
                            'report_generated': report['generated'],
+                           'long_term': symbol in long_term,
                            'reason': row.get('reason') or ' '.join(row.get('reasons', [])),
                            'change': change['change']}
             else:
@@ -106,6 +119,35 @@ def sync(db, report, plan, config, now):
                 WHERE email_outbox.status IN ('pending','cancelled') ''',
                        (key, config['target'], symbol, direction, change_id, kind,
                         json.dumps(payload, allow_nan=False), now, now))
+    for alert in (report or {}).get('review_alerts',[]):
+        if alert.get('kind') not in ('announcement','company','risk') or not alert.get('id'):
+            continue
+        source_asof=alert.get('source_asof')
+        if (isinstance(source_asof,bool) or not isinstance(source_asof,(int,float))
+                or not 0<=now-source_asof<=7*86400):
+            continue
+        symbol=alert.get('symbol') or ''
+        key=event_id(config['target'],symbol,'review',alert['id'],'review')
+        source_url=alert.get('url')
+        if (not isinstance(source_url,str) or len(source_url)>2000
+                or not source_url.startswith('https://') or any(c in source_url for c in '\r\n\x00')):
+            source_url=None
+        analysis_asof=(report or {}).get('generated')
+        if isinstance(analysis_asof,bool) or not isinstance(analysis_asof,(int,float)):
+            analysis_asof=source_asof
+        payload={'title':str(alert.get('title','Review alert'))[:500],
+                 'detail':str(alert.get('detail',''))[:2000],
+                 'priority':(max(0,min(100,alert.get('priority',50)))
+                             if isinstance(alert.get('priority',50),(int,float)) and not isinstance(alert.get('priority',50),bool) else 50),
+                 'url':source_url,'source_asof':source_asof,'report_generated':analysis_asof}
+        active.append(key)
+        db.execute('''INSERT INTO email_outbox
+            (id,target,symbol,direction,change_id,kind,payload,status,created,updated)
+            VALUES (?,?,?,'review',?,'review',?,'pending',?,?)
+            ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, updated=excluded.updated,
+            status='pending',next_attempt=CASE WHEN email_outbox.status='cancelled' THEN 0 ELSE email_outbox.next_attempt END
+            WHERE email_outbox.status IN ('pending','cancelled')''',
+                   (key,config['target'],symbol or None,alert['id'],json.dumps(payload,allow_nan=False),now,now))
     # Withdrawn, superseded, stale or newly blocked suggestions must not be retried.
     for row in db.execute("SELECT * FROM email_outbox WHERE status='pending' AND kind!='test'").fetchall():
         # A withdrawal may disappear from the next scan's change list. Retain its
@@ -127,17 +169,35 @@ def message(config, events, dashboard_url=None):
     digest = hashlib.sha256('|'.join(sorted(r['id'] for r in events)).encode()).hexdigest()
     msg['Message-ID'] = '<northstar-'+digest+'@'+config['EMAIL_FROM'].split('@')[1]+'>'
     test = all(r['kind'] == 'test' for r in events)
+    has_reviews=any(r['kind']=='review' for r in events)
+    has_plan_changes=any(r['kind']!='review' and r['kind']!='test' for r in events)
     msg['Subject'] = 'Northstar: email test' if test else 'Northstar: '+str(len(events))+' portfolio review update(s)'
-    lines = ['Northstar email delivery is working.' if test else 'Your confirmed share-count plan has changed.', '']
+    opening=('Northstar email delivery is working.' if test else
+             'Your share-count plan has changed and new review alerts are available.' if has_reviews and has_plan_changes else
+             'New portfolio risk and issuer review alerts are available.' if has_reviews else
+             'Your confirmed share-count plan has changed.')
+    lines = [opening, '']
     for event in events:
         payload = json.loads(event['payload'])
         if event['kind'] == 'test':
             continue
         if event['kind'] == 'withdrawn':
             lines.append(payload['symbol']+': previous '+payload['direction']+' suggestion withdrawn. Do not use the earlier quantity.')
+            lines.append('Change: Withdrawn. Priority: Elevated review.')
+        elif event['kind'] == 'review':
+            lines.append(payload['title'])
+            urgency='High-priority review' if payload.get('priority',50)>=90 else 'Priority review' if payload.get('priority',50)>=75 else 'Review'
+            lines.append('Urgency: '+urgency+'.')
+            lines.append(payload['detail'])
+            lines.append('Source data: '+time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(payload['source_asof']))+'.')
+            if payload.get('url'):
+                lines.append('Supporting source: '+payload['url'])
         else:
             lines.append(payload['symbol']+': review '+payload['direction']+' of '+str(payload['shares'])+' shares at a quoted '+str(payload['price'])+' NOK.')
+            lines.append('Change: '+payload['change']+'. Urgency: '+('High-priority holding review.' if payload['direction']=='sell' else 'Candidate review.'))
             lines.append('Quote: '+time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(payload['quote_asof']))+'.')
+            if payload.get('long_term'):
+                lines.append('Long-term designation noted; this is a review prompt and does not direct a sale.')
             lines.append(payload['reason'])
         lines.append('Analysis: '+time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(payload['report_generated']))+'.')
         lines.append('')
@@ -287,8 +347,7 @@ class Worker:
                         db.execute("UPDATE email_outbox SET status='cancelled',updated=? WHERE id=?", (now, event['id']))
                 return
             try:
-                origin = (os.environ if self.env is None else self.env).get('NORTHSTAR_PAGES_ORIGIN', '')
-                dashboard = origin+'/northstar/#recommendations' if origin.startswith('https://') else None
+                dashboard = dashboard_url(os.environ if self.env is None else self.env)
                 deliver(config, message(config, events, dashboard))
             except Exception as error:
                 failure = error_message(error)
