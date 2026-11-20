@@ -16,17 +16,24 @@ const workspaceTitles = {
   portfolio: 'Portfolio',
   validation: 'Strategy lab',
 };
+function workspaceElement(id) {
+  if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(id)) return null;
+  return document.getElementById ? document.getElementById(id) : $('#' + id);
+}
 let lastWorkspaceLocation = location.pathname + location.search + location.hash;
 function workspaceFromLocation() {
-  return location.hash
-    ? location.hash.slice(1)
+  const hashTarget = location.hash ? location.hash.slice(1) : '';
+  return hashTarget && (workspaceRoutes[hashTarget] || workspaceElement(hashTarget))
+    ? hashTarget
     : location.pathname === '/recommendations'
     ? 'recommendations'
     : 'daily';
 }
 function openWorkspace(target, updateHistory = true) {
-  if (!Object.prototype.hasOwnProperty.call(workspaceRoutes, target)) target = 'daily';
-  const page = workspaceRoutes[target] || 'daily';
+  const destination = workspaceElement(target);
+  const section = destination && destination.closest ? destination.closest('.tab') : null;
+  const page = workspaceRoutes[target] || (section && section.id) || 'daily';
+  if (!destination) target = page;
   $('#workspaceTitle').textContent = workspaceTitles[page];
   for (const section of document.querySelectorAll('.tab')) section.hidden = section.id !== page;
   for (const button of document.querySelectorAll('[data-tab]')) {
@@ -35,12 +42,17 @@ function openWorkspace(target, updateHistory = true) {
     if (active) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
-  if (target !== page) {
-    const group = $('#' + target + 'Group');
+  if (target !== page && destination) {
+    const group = workspaceElement(target + 'Group');
     if (group) group.open = true;
-    const section = $('#' + target);
-    if (section && section.scrollIntoView)
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    for (let node = destination; node; node = node.parentElement)
+      if (node.tagName === 'DETAILS') node.open = true;
+    if (destination.scrollIntoView)
+      destination.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (destination.focus) {
+      if (!destination.hasAttribute('tabindex')) destination.setAttribute('tabindex', '-1');
+      destination.focus({ preventScroll: true });
+    }
   }
   if (updateHistory && typeof history !== 'undefined' && history.pushState) {
     const nextUrl = location.pathname + location.search + '#' + target;

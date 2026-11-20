@@ -367,8 +367,7 @@ $('#refreshOverviewAccount').onclick = async () => {
   }
 };
 $('#openAccountPerformance').onclick = () => {
-  openWorkspace('portfolio');
-  $('#accountPerformance').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  openWorkspace('accountPerformance');
 };
 $('#openAccountSetup').onclick = () => openWorkspace('activity');
 $('#markAlertsRead').onclick = async () => {

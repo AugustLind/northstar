@@ -30,7 +30,9 @@ not guaranteed; offline operation depends on previously cached data.
 
 ## First visit
 
-Start in **Overview → Your next steps**. Explore Research immediately, or open
+Start in **Overview → Needs attention** to review items that need action, then check
+the separate **Buying candidates** list. Open **Advanced tools** in a workspace for its
+specialist workflows. Explore Research immediately, or open
 Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is
 a watchlist entry. For actual account returns, verify cash and an opening snapshot
 in **Portfolio → Activity & cash**, then import later transactions and reconcile

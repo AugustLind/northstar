@@ -32,7 +32,7 @@
   </section>
   <div class="sectionhead">
     <div>
-      <p class="eyebrow">YOUR THREE PRIORITY REVIEWS</p>
+      <p class="eyebrow">DAILY PORTFOLIO REVIEW</p>
       <h2>Today in your portfolio</h2>
     </div>
     <button id="refreshDaily">Refresh overview</button>
@@ -76,7 +76,12 @@
       missing data with guesses.
     </p>
   </details>
-  <p id="dailyStatus" role="status">Loading the daily overview…</p>
+  <section class="card" aria-labelledby="needsAttentionTitle">
+    <h2 id="needsAttentionTitle">Needs attention</h2>
+    <p id="dailyStatus" role="status">Loading the daily overview…</p>
+    <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
+    <div id="dailyTop"></div>
+  </section>
   <section class="buy-candidates" aria-labelledby="buyCandidatesTitle">
     <div class="sectionhead">
       <div>
@@ -88,6 +93,8 @@
     <div id="buyCandidates" class="candidate-grid"></div>
     <button id="buyCandidatesRecovery" type="button" hidden></button>
   </section>
+  <details class="workspacefold advanced-tools" id="overviewAdvanced">
+    <summary>Advanced tools</summary>
   <section class="card" id="systemHealth">
     <div class="sectionhead">
       <div>
@@ -110,8 +117,6 @@
       </details>
     </details>
   </section>
-  <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
-  <div id="dailyTop"></div>
   <section class="card">
     <h2>What changed since the previous scan?</h2>
     <div id="dailyChanges"></div>
@@ -268,5 +273,6 @@
       </p>
       <button id="export">Export notebook JSON</button>
     </section>
+  </details>
   </details>
 </section>

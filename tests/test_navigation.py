@@ -27,6 +27,17 @@ class NavigationTests(unittest.TestCase):
         self.assertIn('workspaceTitle',layout.nodes)
         self.assertIn('accountName',layout.nodes)
         self.assertIn('accountStatus',layout.nodes)
+        for id in ['overviewAdvanced','researchAdvanced','portfolioAdvanced','strategyAdvanced']:
+            self.assertEqual(layout.nodes[id]['attrs'].get('class','').split()[0],'workspacefold')
+            self.assertNotIn('open',layout.nodes[id]['attrs'])
+            self.assertIn('Advanced tools',(Path(__file__).resolve().parents[1]/'static/index.html').read_text().split('id="'+id+'"')[1].split('</summary>',1)[0])
+        rendered=(Path(__file__).resolve().parents[1]/'static/index.html').read_text()
+        self.assertLess(rendered.index('id="overviewMetrics"'),rendered.index('id="needsAttentionTitle"'))
+        self.assertLess(rendered.index('id="needsAttentionTitle"'),rendered.index('id="buyCandidatesTitle"'))
+        self.assertIn('portfolioAdvanced',layout.nodes['accountPerformance']['ancestors'])
+        self.assertIn('researchAdvanced',layout.nodes['chartPlot']['ancestors'])
+        self.assertIn('strategyAdvanced',layout.nodes['robustnessPanel']['ancestors'])
+        self.assertIn('overviewAdvanced',layout.nodes['systemHealth']['ancestors'])
         self.assertIn('daily',layout.nodes['overviewMetrics']['ancestors'])
         tabs={id for id,node in layout.nodes.items() if 'tab' in node['attrs'].get('class','').split()}
         self.assertEqual(tabs,set(layout.buttons))
