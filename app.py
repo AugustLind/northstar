@@ -578,12 +578,16 @@ def email_plan():
     long_term_symbols=[portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
                        if p['shares']>0 and p.get('long_term',False)]
     oslo=ZoneInfo('Europe/Oslo')
+    def oslo_date(timestamp):
+        if (isinstance(timestamp,(int,float)) and not isinstance(timestamp,bool)
+                and math.isfinite(timestamp) and 0<=timestamp<=now+300):
+            return datetime.fromtimestamp(timestamp,timezone.utc).astimezone(oslo).date().isoformat()
+        return None
     quote_times=[q['asof'] for symbol,q in snapshot['quotes'].items()
                  if symbol!='NOK=X' and isinstance(q.get('asof'),(int,float))
                  and not isinstance(q.get('asof'),bool) and math.isfinite(q['asof'])
                  and 0<=q['asof']<=now+300]
-    last_close_date=(datetime.fromtimestamp(max(quote_times),timezone.utc).astimezone(oslo).date().isoformat()
-                     if quote_times else None)
+    last_close_date=oslo_date(max(quote_times)) if quote_times else None
     stale=[]
     for position in snapshot['positions']:
         if position['shares']<=0:continue
@@ -615,9 +619,7 @@ def email_plan():
         if alert.get('kind') not in ('announcement','company') or alert.get('symbol') not in held_symbols:
             continue
         source_asof=alert.get('source_asof')
-        source_date=(datetime.fromtimestamp(source_asof,timezone.utc).astimezone(oslo).date().isoformat()
-                     if isinstance(source_asof,(int,float)) and not isinstance(source_asof,bool)
-                     and math.isfinite(source_asof) and 0<=source_asof<=now+300 else None)
+        source_date=oslo_date(source_asof)
         detail=str(alert.get('title','Holding review'))+'. '+str(alert.get('detail',''))
         if source_date:
             detail+=' Source date: '+source_date+'.'
@@ -638,10 +640,7 @@ def email_plan():
     candidates=[]
     for card in (report or {}).get('cards',[]):
         if card.get('action')!='Consider buying' or card.get('held'):continue
-        quote_asof=card.get('asof')
-        quote_date=(datetime.fromtimestamp(quote_asof,timezone.utc).astimezone(oslo).date().isoformat()
-                    if isinstance(quote_asof,(int,float)) and not isinstance(quote_asof,bool)
-                    and math.isfinite(quote_asof) and 0<=quote_asof<=now+300 else 'quote date unavailable')
+        quote_date=oslo_date(card.get('asof')) or 'quote date unavailable'
         candidates.append((card.get('rank',9999),str(card['symbol'])+' — '+quote_date+' close'))
     candidates=[text for _,text in sorted(candidates)[:5]]
     warnings=risk.get('risk_warnings',[])
