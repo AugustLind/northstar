@@ -7,6 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
 from browser_fixture import Fixture
 from browser_client import Browser
+import app
 
 
 def run():
@@ -20,10 +21,37 @@ def run():
             browser.wait("document.querySelector('#connectionPanel').hidden && document.querySelector('#holdings').textContent.includes('SYNTH.OL') && document.querySelector('#accountStatus').textContent==='Connected'",'authenticated account context')
             browser.evaluate('loadDaily()')
             browser.wait("document.querySelector('#dailyStatus').textContent.startsWith('Updated') && document.querySelector('#holdingAssessments').textContent.includes('Policy result:') && !document.querySelector('#buyCandidatesStatus').textContent.includes('Loading eligible candidates')",'authenticated holding assessment and buying-candidate response')
+            browser.wait("!document.querySelector('#overviewAccountStatus').textContent.includes('Loading')",'current account summary response')
+            if browser.evaluate("document.querySelector('#overviewValue').textContent==='Unavailable' || document.querySelector('#overviewValue').textContent==='—'"):
+                raise RuntimeError('Current account value unavailable: '+str(browser.evaluate("document.querySelector('#overviewValueMeta').textContent+' '+document.querySelector('#overviewAccountStatus').textContent")))
+            if browser.evaluate("document.querySelector('#overviewPnl').textContent==='Unavailable'"):
+                raise RuntimeError('Verified historical investment P&L unavailable: '+str(browser.evaluate("document.querySelector('#overviewPnlMeta').textContent+' '+document.querySelector('#overviewAccountStatus').textContent")))
+            expected_value="new Intl.NumberFormat('nb-NO',{style:'currency',currency:'NOK',maximumFractionDigits:2}).format("+str(fixture.expected_current_value_nok)+")"
+            if not browser.evaluate("document.querySelector('#overviewValue').textContent==="+expected_value):
+                raise RuntimeError('Current value does not match synthetic holdings plus recorded cash.')
+            if not browser.evaluate("document.querySelector('#overviewValueMeta').textContent.includes('NOK cash') && document.querySelector('#overviewValueMeta').textContent.includes('reporting date') && document.querySelector('#overviewPnlMeta').textContent.includes(' to ')"):
+                raise RuntimeError('Overview account dates, cash scope or price basis are missing.')
+            if browser.evaluate("document.querySelector('#overviewMove').textContent!=='Unavailable'"):
+                raise RuntimeError('A prior completed session was presented as today movement.')
+            with app.connect() as db:
+                row=db.execute('SELECT payload FROM quotes WHERE symbol=?',('SYNTH.OL',)).fetchone()
+                original_quote=json.loads(row['payload'])
+                stale_quote={**original_quote,'asof':time.time()-5*86400}
+                db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(stale_quote),'SYNTH.OL'))
+            browser.evaluate('loadOverviewAccount()')
+            browser.wait("document.querySelector('#overviewValue').textContent==='Unavailable' && document.querySelector('#overviewAccountStatus').textContent.includes('refresh for a current quote')",'incomplete current quote coverage')
+            with app.connect() as db:
+                db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(original_quote),'SYNTH.OL'))
+            browser.evaluate('loadOverviewAccount()')
+            browser.wait("document.querySelector('#overviewValue').textContent!=='Unavailable'",'account valuation recovery after quote refresh')
             if not browser.evaluate("document.querySelector('#workspaceTitle').textContent==='Overview' && document.querySelector('#overviewMetrics').parentElement.id==='daily' && document.querySelector('[data-tab][aria-current=page]').textContent.trim()==='Overview'"):
                 raise RuntimeError('Overview account/section orientation failed.')
             if width<600 and not browser.evaluate("getComputedStyle(document.querySelector('.workspace-nav')).gridTemplateColumns.split(' ').length===2"):
                 raise RuntimeError('Mobile workspace navigation did not use its compact layout.')
+            browser.evaluate("document.querySelector('#openAccountPerformance').click()")
+            browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#accountPerformanceStatus').textContent.includes('available')",'Overview to detailed account performance')
+            if not browser.evaluate("document.querySelector('#accountPerformanceMetrics').textContent.includes(money(60))"):
+                raise RuntimeError('Detailed performance did not keep the synthetic 100 NOK deposit and 40 NOK withdrawal separate as net contributions.')
             browser.evaluate("document.querySelector('[data-tab=\"daily\"]').click()")
             browser.wait("!document.querySelector('#gettingStarted').hidden && document.querySelectorAll('#setupChecklist li').length===3",'consumer getting-started checklist')
             browser.evaluate("document.querySelector('#startLedger').click()")
@@ -95,7 +123,6 @@ def run():
             if width==1440:
                 started=time.time()
                 browser.evaluate("document.querySelector('#validationRobustness').checked=true;document.querySelector('#runValidation').click()")
-                import app
                 deadline=time.time()+120
                 while time.time()<deadline:
                     progress=app.read_meta('validation_progress',{})
@@ -126,11 +153,17 @@ def run():
                 browser.wait("document.querySelector('#workspaceTitle').textContent==='Strategy lab'",'mobile Strategy lab navigation')
             if not browser.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):raise RuntimeError('Workspace overflows the viewport.')
             browser.call('Page.navigate',{'url':fixture.origin+'/#fit'})
-            browser.wait("document.querySelector('#accountStatus').textContent==='Connected' && location.hash==='#fit' && document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#fitGroup').open",'direct advanced-tool link')
+            browser.wait("location.hash==='#fit'",'direct advanced-tool URL')
+            browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#fitGroup').open",'direct advanced-tool workspace')
+            browser.wait("document.querySelector('#accountStatus').textContent==='Connected'",'connected account after direct route')
+            if browser.evaluate("document.querySelector('#accountStatus').textContent!=='Connected'"):
+                raise RuntimeError('Direct route lost the connected account: '+str(browser.evaluate("document.querySelector('#accountStatus').textContent+' '+document.querySelector('#accountPerformanceStatus').textContent")))
             if not browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').getAttribute('aria-current')==='page'"):
                 raise RuntimeError('Deep-link section indicator does not match its title.')
             browser.evaluate("document.querySelector('#disconnect').click()")
             browser.wait("document.querySelector('#connectionPanel') && !document.querySelector('#connectionPanel').hidden && !sessionStorage.getItem('northstar-key') && document.querySelector('#accountStatus').textContent==='Not connected' && !document.querySelector('#holdings').textContent.includes('SYNTH.OL')",'sign-out data clearing')
+            browser.call('Page.navigate',{'url':fixture.origin+'/#daily'})
+            browser.wait("document.querySelector('#overviewValue').textContent==='Unavailable' && document.querySelector('#overviewAccountStatus').textContent.includes('Sign in')",'disconnected Overview account state')
             if browser.errors:raise RuntimeError('Uncaught browser error during authenticated workflow.')
             completed='sign-in, holdings, account performance, research, '
             if width==1440:completed+='experiment, replay, '

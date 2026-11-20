@@ -82,6 +82,7 @@ $('#connectionForm').onsubmit = async (e) => {
     $('#message').textContent = 'Connected to Northstar.';
     await load();
     if (typeof loadResearch === 'function') await loadResearch();
+    openWorkspace(workspaceFromLocation(), false);
   } catch (e) {
     $('#connectionMessage').textContent = e.message;
   }

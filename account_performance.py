@@ -6,6 +6,7 @@ Returns use dated net broker cash, without subtracting informational fees again.
 import datetime as dt
 import math
 import time
+from zoneinfo import ZoneInfo
 import portfolio_fit as pf
 
 VERSION='ledger-performance-v1'
@@ -21,6 +22,82 @@ METHOD=('Account valuations use historical-share-unit closes, recorded quantitie
 def finite(v):return isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
 def day(stamp):return dt.datetime.fromtimestamp(stamp,dt.timezone.utc).date().isoformat()
 def event_order(e):return (e['date'],0 if e['type']=='split' else 1 if e['type']=='buy' else 2,e.get('id',0),e.get('uid',''))
+
+
+def current_summary(snapshot,now,events=()):
+    """Current quote valuation and same-session movement, kept separate from ledger history."""
+    positions=snapshot.get('positions',[]);quotes=snapshot.get('quotes',{})
+    profile=snapshot.get('manual_portfolio_preferences',{});cash=profile.get('cash_nok')
+    result={'current_value_nok':None,'current_asof':None,'current_status':'unavailable',
+            'today_change_nok':None,'today_change_pct':None,'today_date':None,'current_date':None,
+            'current_coverage':[],'current_price_basis':'Provider quote; recorded quantities and NOK cash.'}
+    def cover(message):
+        if message not in result['current_coverage']:result['current_coverage'].append(message)
+    if not finite(cash):
+        cover('Recorded cash is unavailable.');return result
+    held=[p for p in positions if finite(p.get('shares')) and p['shares']>0]
+    if not held and cash==0:
+        cover('Add holdings or record account cash to show a current value.')
+        return result
+    fx=quotes.get('NOK=X');total=cash;asofs=[];change=0.;change_base=cash;valuation_valid=True
+    today=dt.datetime.fromtimestamp(now,ZoneInfo('Europe/Oslo')).date().isoformat()
+    movement_valid=(snapshot.get('ledger_reconciled') is True and
+                    not any(e.get('date')==today for e in events))
+    for p in held:
+        symbol=pf.canonical(p['symbol'],p['currency']);q=quotes.get(symbol) or quotes.get(p['symbol'])
+        if not q or not pf.fresh(q,now) or not finite(q.get('price')) or not finite(q.get('asof')):
+            cover(symbol+': refresh for a current quote.');movement_valid=False;valuation_valid=False;continue
+        if q.get('currency')!=p['currency']:
+            cover(symbol+': quote currency does not match the recorded holding.');movement_valid=False;valuation_valid=False;continue
+        conversion=1.;fxrow=None
+        if p['currency']=='USD':
+            fxrow=fx
+            if (not fxrow or not pf.fresh(fxrow,now) or not finite(fxrow.get('price')) or not finite(fxrow.get('asof'))
+                or fxrow.get('currency')!='NOK'):
+                cover('USD/NOK: refresh for a current NOK conversion rate.');movement_valid=False;valuation_valid=False;continue
+            conversion=fxrow['price'];asofs.append(fxrow['asof'])
+        elif p['currency']!='NOK':
+            cover(symbol+': unsupported account currency.');movement_valid=False;valuation_valid=False;continue
+        total+=p['shares']*q['price']*conversion;asofs.append(q['asof'])
+        qday=dt.datetime.fromtimestamp(q['asof'],ZoneInfo('Europe/Oslo')).date().isoformat()
+        prior=[point for point in q.get('history',[]) if q.get('account_history_version')==1 and
+               finite(point.get('account_close')) and point['account_close']>0 and
+               dt.datetime.fromtimestamp(point.get('time',0),ZoneInfo('Europe/Oslo')).date().isoformat()<qday]
+        if qday!=today or not prior:
+            movement_valid=False
+        previous_point=max(prior,key=lambda point:point['time']) if prior else None
+        previous=previous_point['account_close'] if previous_point else None
+        previous_date=(dt.datetime.fromtimestamp(previous_point['time'],ZoneInfo('Europe/Oslo')).date().isoformat()
+                       if previous_point else None)
+        if previous_date and (dt.date.fromisoformat(qday)-dt.date.fromisoformat(previous_date)).days>4:
+            movement_valid=False
+        if p['currency']=='USD':
+            fxday=dt.datetime.fromtimestamp(fxrow['asof'],ZoneInfo('Europe/Oslo')).date().isoformat()
+            fxprior=[point for point in fxrow.get('history',[]) if fxrow.get('account_history_version')==1 and
+                     finite(point.get('account_close')) and point['account_close']>0 and
+                     dt.datetime.fromtimestamp(point.get('time',0),ZoneInfo('Europe/Oslo')).date().isoformat()<fxday]
+            fxprevious=max(fxprior,key=lambda point:point['time']) if fxprior else None
+            fxprevious_date=(dt.datetime.fromtimestamp(fxprevious['time'],ZoneInfo('Europe/Oslo')).date().isoformat()
+                             if fxprevious else None)
+            if (fxday!=today or not fxprevious or previous is None or
+                (dt.date.fromisoformat(fxday)-dt.date.fromisoformat(fxprevious_date)).days>4):movement_valid=False
+            else:
+                priorfx=fxprevious['account_close']
+                change+=p['shares']*(q['price']*conversion-previous*priorfx)
+                change_base+=p['shares']*previous*priorfx
+        elif previous is not None:
+            change+=p['shares']*(q['price']-previous)
+            change_base+=p['shares']*previous
+    result.update(current_value_nok=total if valuation_valid else None,
+                  current_asof=min(asofs) if asofs else None,current_status='available' if valuation_valid else 'unavailable',
+                  current_date=today,today_date=today)
+    if movement_valid and change_base>0:
+        result.update(today_change_nok=change,today_change_pct=change/change_base*100)
+    else:
+        cover('Today’s movement needs a reconciled ledger, current same-session quotes and nearby prior closes; same-day events lack intraday timing.')
+    if snapshot.get('ledger_reconciled') is not True:
+        cover('Current valuation uses recorded holdings and cash; reconcile them in Portfolio → Activity & cash.')
+    return result
 
 
 def positions_map(rows):
@@ -57,6 +134,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
          'opening_value_nok':None,'ending_value_nok':None,'net_contributions_nok':None,'investment_pnl_nok':None,
          'daily_linked_return_pct':None,'modified_dietz_pct':None,'realized_trade_pnl_nok':None,
          'income_nok':None,'reported_fees_nok':None,'carried_valuations':0,'excluded_later_events':0,'opening_basis':None}
+    out.update(current_summary(snapshot,now,events))
     def block(reason):
         if reason not in out['coverage']:out['coverage'].append(reason)
     if not baseline:

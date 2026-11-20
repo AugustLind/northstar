@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Northstar · Investment notebook</title>
-    <link rel="stylesheet" href="./style.css?v=41c55d25eacc" />
+    <link rel="stylesheet" href="./style.css?v=c8b07d4259e1" />
   </head>
   <body>
     <header>
@@ -61,19 +61,36 @@
         ><button type="button" data-tab="validation">Strategy lab</button>
       </nav>
       <section id="daily" class="tab">
-        <section class="metrics overview-metrics" id="overviewMetrics" aria-label="Overview account summary">
+        <section
+          class="metrics overview-metrics"
+          id="overviewMetrics"
+          aria-label="Overview account summary"
+        >
           <article>
-            <small>Priced holdings · NOK</small><strong id="value">—</strong
-            ><small id="coverage">Add holdings to begin</small>
+            <small>Current value at provider quotes · NOK</small><strong id="overviewValue">—</strong
+            ><small id="overviewValueMeta">Loading recorded holdings, cash and quotes…</small>
           </article>
           <article>
-            <small>Companies held</small><strong id="count">0</strong
-            ><small>Watchlist positions have zero shares</small>
+            <small>Today’s movement</small><strong id="overviewMove">Unavailable</strong
+            ><small id="overviewMoveMeta">Requires current same-session prices</small>
           </article>
           <article>
-            <small>Items to review</small><strong id="alertsCount">0</strong
-            ><small>Rule-based prompts, not trade instructions</small>
+            <small>Investment gain / loss</small><strong id="overviewPnl">Unavailable</strong
+            ><small id="overviewPnlMeta">Requires verified opening history</small>
           </article>
+          <p id="overviewAccountStatus" class="overview-account-status" role="status">
+            Loading account summary…
+          </p>
+          <div class="researchtools overview-account-actions">
+            <button id="refreshOverviewAccount" type="button">Refresh account value</button>
+            <button id="openAccountPerformance" type="button">Detailed performance in Portfolio</button>
+            <button id="openAccountSetup" type="button">Reconcile or set up activity &amp; cash</button>
+          </div>
+          <p class="muted overview-account-status">
+            Current value includes recorded NOK cash and held assets at provider quotes. Historical
+            investment gain/loss is measured from the verified opening snapshot to the last completed
+            priced date; deposits and withdrawals are excluded from investment return.
+          </p>
         </section>
         <div class="sectionhead">
           <div>
@@ -101,9 +118,9 @@
           <p>
             <b>Overview:</b> start with Needs attention to fix freshness or reconciliation blockers, then
             open the linked holding or evidence review. A quiet state appears only after a successful
-            review load and is not a buy or hold recommendation. <b>Research:</b> explore
-            companies and the reasons behind a score. <b>Portfolio:</b> record holdings, cash and
-            transactions. <b>Strategy lab:</b> inspect experiments and saved forward results.
+            review load and is not a buy or hold recommendation. <b>Research:</b> explore companies and
+            the reasons behind a score. <b>Portfolio:</b> record holdings, cash and transactions.
+            <b>Strategy lab:</b> inspect experiments and saved forward results.
           </p>
           <p>
             <b>Account performance</b> measures your recorded holdings and cash flows. A
@@ -124,7 +141,10 @@
         <p id="dailyStatus" role="status">Loading the daily overview…</p>
         <section class="buy-candidates" aria-labelledby="buyCandidatesTitle">
           <div class="sectionhead">
-            <div><p class="eyebrow">PORTFOLIO FIT</p><h2 id="buyCandidatesTitle">Buying candidates</h2></div>
+            <div>
+              <p class="eyebrow">PORTFOLIO FIT</p>
+              <h2 id="buyCandidatesTitle">Buying candidates</h2>
+            </div>
           </div>
           <p id="buyCandidatesStatus" role="status" aria-live="polite">Loading eligible candidates…</p>
           <div id="buyCandidates" class="candidate-grid"></div>
@@ -693,16 +713,16 @@
           ><button id="nordnetPreview" type="button">Preview holdings</button>
           <p id="nordnetImportStatus" role="status"></p>
           <p>
-            Company names without ticker symbols need a confirmed Oslo ticker. Cached name matches
-            are suggestions; select the correct share class. Your confirmed name matches are
-            remembered for future uploads.
+            Company names without ticker symbols need a confirmed Oslo ticker. Cached name matches are
+            suggestions; select the correct share class. Your confirmed name matches are remembered for
+            future uploads.
           </p>
           <datalist id="nordnetTickerOptions"></datalist>
           <div id="nordnetImportRows"></div>
           <p id="nordnetImportMethod" class="muted"></p>
           <label class="check"
-            ><input type="checkbox" id="nordnetImportConfirmed" /> I checked the selected tickers
-            and want to replace their quantities and GAV with this export.</label
+            ><input type="checkbox" id="nordnetImportConfirmed" /> I checked the selected tickers and want
+            to replace their quantities and GAV with this export.</label
           ><button id="nordnetImportApply" type="button" disabled>Apply selected holdings</button>
         </section>
         <div class="tablewrap">
@@ -721,12 +741,15 @@
           </table>
         </div>
         <p class="muted">
-          *Price return in the stock’s currency. Excludes dividends, fees, tax and currency effects.
-          Cost basis is entered manually.
+          *Price return in the stock’s currency. Excludes dividends, fees, tax and currency effects. Cost
+          basis is entered manually.
         </p>
         <section class="card" id="portfolioAssessments">
           <h2>Holding assessments</h2>
-          <p class="muted">Existing technical policy results, price and concentration prompts, saved thesis notes, and sale review scenarios. These do not replace your decision policy or execute trades.</p>
+          <p class="muted">
+            Existing technical policy results, price and concentration prompts, saved thesis notes, and
+            sale review scenarios. These do not replace your decision policy or execute trades.
+          </p>
           <div id="holdingAssessments"></div>
         </section>
         <section class="card" id="accountPerformance">
@@ -741,13 +764,13 @@
           <p id="accountOpeningBasis" class="muted"></p>
           <div id="accountPerformanceMetrics" class="diagnosticgrid"></div>
           <label class="check"
-            ><input type="checkbox" id="allowPriorClose" /> Allow explicitly flagged prior closes,
-            at most four calendar days old</label
+            ><input type="checkbox" id="allowPriorClose" /> Allow explicitly flagged prior closes, at most
+            four calendar days old</label
           >
           <p class="muted">
             Strict mode requires exact-date prices. Prior closes can cover closures or missing
-            observations, but make the result an estimate. Research-adjusted prices are never
-            substituted for account valuations.
+            observations, but make the result an estimate. Research-adjusted prices are never substituted
+            for account valuations.
           </p>
           <div id="accountPerformanceChart" class="chartplot"></div>
           <p id="accountLaterEvents" class="muted"></p>
@@ -778,8 +801,8 @@
             <summary>Historical proxy using current weights</summary>
             <div id="portfolioRiskChart" class="chartplot"></div>
             <p>
-              Illustrative daily rebalanced current holdings with NOK cash, without fees. This is
-              not your historical account return.
+              Illustrative daily rebalanced current holdings with NOK cash, without fees. This is not your
+              historical account return.
             </p>
           </details>
           <h3>Hypothetical shocks</h3>
@@ -818,8 +841,8 @@
               <div>
                 <h2>What fits your portfolio?</h2>
                 <p>
-                  Check the current top 20 against your holdings, available cash and chosen
-                  allocation limits.
+                  Check the current top 20 against your holdings, available cash and chosen allocation
+                  limits.
                 </p>
               </div>
               <button id="refreshFit">Refresh portfolio check</button>
@@ -827,9 +850,7 @@
             <p id="fitStatus" role="status">Open this page to load your portfolio check.</p>
             <p id="fitScope" class="muted"></p>
             <div class="metrics">
-              <article>
-                <small>Holdings + cash · NOK</small><strong id="fitTotal">—</strong>
-              </article>
+              <article><small>Holdings + cash · NOK</small><strong id="fitTotal">—</strong></article>
               <article>
                 <small>Manually tracked cash</small><strong id="fitCash">—</strong
                 ><small id="fitCashShare"></small>
@@ -847,11 +868,11 @@
             <section class="card">
               <h2>Your allocation settings</h2>
               <p>
-                Enter cash available in the account you track here and one total budget shared
-                across the buy plan. The fee limit defaults to 2% of stock value. A technical sale
-                review defaults to 25% of a holding, rounded up; set it to 0 to disable that rule.
-                Starting limits are illustrative settings, not recommended allocations. Update cash
-                manually after real trades.
+                Enter cash available in the account you track here and one total budget shared across the
+                buy plan. The fee limit defaults to 2% of stock value. A technical sale review defaults to
+                25% of a holding, rounded up; set it to 0 to disable that rule. Starting limits are
+                illustrative settings, not recommended allocations. Update cash manually after real
+                trades.
               </p>
               <form id="fitPreferences">
                 <div class="grid">
@@ -968,9 +989,9 @@
                       required
                   /></label>
                   <p>
-                    Buy fee defaults to <b>79 kr per order</b>, regardless of share count. Enter
-                    your confirmed fee assumptions; blank sell fee means unknown. Buy budgets
-                    include the buy fee. Estimates exclude tax, spread and execution differences.
+                    Buy fee defaults to <b>79 kr per order</b>, regardless of share count. Enter your
+                    confirmed fee assumptions; blank sell fee means unknown. Buy budgets include the buy
+                    fee. Estimates exclude tax, spread and execution differences.
                   </p>
                 </div>
                 <details>
@@ -979,8 +1000,8 @@
                     Company metadata is looked up automatically using exact Oslo tickers. Available
                     sourced sector labels are used unless you override them here. Unknown or expired
                     classifications remain unclassified; no sector is guessed from a company name.
-                    Unclassified holdings prevent confirming sector capacity. Diversified businesses
-                    may not fit one sector well.
+                    Unclassified holdings prevent confirming sector capacity. Diversified businesses may
+                    not fit one sector well.
                   </p>
                   <div id="fitClassifications" class="grid"></div>
                   <div class="grid">
@@ -1004,11 +1025,10 @@
             </div>
             <h2>Top 20: individual stock checks</h2>
             <p>
-              These are independent previews, not additional orders. Use the shared-budget
-              share-count plan above for quantities. Market ranks stay unchanged. The fixed purchase
-              fee is included in sizing and fee drag. A stock must have a current technical buy
-              signal and pass the allocation preview for the saved purchase budget to appear within
-              your chosen limits.
+              These are independent previews, not additional orders. Use the shared-budget share-count
+              plan above for quantities. Market ranks stay unchanged. The fixed purchase fee is included
+              in sizing and fee drag. A stock must have a current technical buy signal and pass the
+              allocation preview for the saved purchase budget to appear within your chosen limits.
             </p>
             <div id="fitCandidates"></div>
             <p class="muted">
@@ -1052,10 +1072,10 @@
             <section class="card">
               <h3>1. Verify an opening snapshot</h3>
               <p>
-                First import your current holdings CSV and verify available cash in Portfolio fit.
-                Choose the date those holdings and cash represent, after all activity that day.
-                Earlier and same-day transactions are history only; later new transactions change
-                holdings and cash. Reinitializing keeps transaction history.
+                First import your current holdings CSV and verify available cash in Portfolio fit. Choose
+                the date those holdings and cash represent, after all activity that day. Earlier and
+                same-day transactions are history only; later new transactions change holdings and cash.
+                Reinitializing keeps transaction history.
               </p>
               <label>Verified snapshot date<input type="date" id="ledgerDate" /></label
               ><button type="button" id="ledgerInitialize">
@@ -1065,12 +1085,12 @@
             <section class="card">
               <h3>2. Import a transaction-history CSV</h3>
               <p>
-                This is a different file from the holdings export. Map the columns once. Net cash
-                must be signed and include actual broker charges; the estimated 79 kr purchase fee
-                is never added again. Only NOK cash and Oslo stock transactions are supported.
-                Transfers and unsupported events require reconciliation. A split needs a separate
-                mapped split-ratio column (for example 2:1), zero net cash, and a confirmed ticker;
-                quantities are never guessed from broker share deltas.
+                This is a different file from the holdings export. Map the columns once. Net cash must be
+                signed and include actual broker charges; the estimated 79 kr purchase fee is never added
+                again. Only NOK cash and Oslo stock transactions are supported. Transfers and unsupported
+                events require reconciliation. A split needs a separate mapped split-ratio column (for
+                example 2:1), zero net cash, and a confirmed ticker; quantities are never guessed from
+                broker share deltas.
               </p>
               <label
                 >Account label for duplicate detection<input
@@ -1078,17 +1098,14 @@
                   value="default"
                   maxlength="80" /></label
               ><label
-                >Transaction export<input
-                  id="ledgerFile"
-                  type="file"
-                  accept=".csv,.tsv,.txt" /></label
+                >Transaction export<input id="ledgerFile" type="file" accept=".csv,.tsv,.txt" /></label
               ><button type="button" id="ledgerInspect">Read columns</button>
               <div id="ledgerColumns" class="grid"></div>
               <button type="button" id="ledgerPreview">Preview transactions</button>
               <div id="ledgerRows"></div>
               <label class="check"
-                ><input id="ledgerConfirm" type="checkbox" /> I checked event types, signed net cash
-                and ticker matches.</label
+                ><input id="ledgerConfirm" type="checkbox" /> I checked event types, signed net cash and
+                ticker matches.</label
               ><button type="button" id="ledgerApply" disabled>Apply selected transactions</button>
               <p id="ledgerMessage" role="status"></p>
             </section>
@@ -1104,8 +1121,8 @@
               ><button type="button" id="checkBrokerCash">Compare cash balances</button>
               <p id="brokerCashStatus" role="status"></p>
               <p>
-                A mismatch withholds share-count plans until resolved. Import missing transactions
-                or correct the verified opening snapshot; this check does not overwrite cash.
+                A mismatch withholds share-count plans until resolved. Import missing transactions or
+                correct the verified opening snapshot; this check does not overwrite cash.
               </p>
             </section>
             <h3>Recent imported activity</h3>
@@ -1291,8 +1308,8 @@
     </dialog>
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
-      <script src="./app.js?v=12fe290aa44b"></script>
-      <script src="./portfolio.js?v=7e4ee7663f8c"></script>
+      <script src="./app.js?v=7722a3d38f12"></script>
+      <script src="./portfolio.js?v=16c31098de0c"></script>
       <script src="./navigation.js?v=0e4df80195ed"></script>
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
@@ -1301,7 +1318,7 @@
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
       <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
-      <script src="./daily.js?v=b5297f793f12"></script>
+      <script src="./daily.js?v=d23bef44e610"></script>
       <script src="./advice.js?v=14f5b876ee6a"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>

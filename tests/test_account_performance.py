@@ -20,6 +20,30 @@ def setup(events,prices,opening_shares=10,opening_cash=100,opening_cost=10,legac
     return snapshot,baseline
 
 class AccountPerformanceTests(unittest.TestCase):
+    def test_current_value_and_today_movement_use_current_quotes_and_recorded_cash(self):
+        q=quote([('2025-01-03',10)])
+        q.update(price=12,asof=stamp('2025-01-06')+12*3600)
+        q['history'][0]['raw_close']=20
+        snapshot={'positions':[{'symbol':'A.OL','currency':'NOK','shares':10}],
+                 'quotes':{'A.OL':q},'manual_portfolio_preferences':{'cash_nok':100},'ledger_reconciled':True}
+        value=ap.current_summary(snapshot,stamp('2025-01-06')+21*3600)
+        self.assertEqual(value['current_value_nok'],220)
+        self.assertEqual(value['today_change_nok'],20)
+        self.assertEqual(value['today_change_pct'],10)
+        self.assertEqual(value['today_date'],'2025-01-06')
+        self.assertIsNone(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600,
+            [event(4,'2025-01-06','buy',-10,1)])['today_change_nok'])
+        snapshot['ledger_reconciled']=False
+        self.assertIsNone(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600)['today_change_nok'])
+        snapshot['quotes']['A.OL']['asof']=stamp('2025-01-05')
+        self.assertIsNone(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600)['today_change_nok'])
+        snapshot['quotes']={}
+        self.assertIsNone(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600)['current_value_nok'])
+
+    def test_empty_account_does_not_invent_zero_value(self):
+        snapshot={'positions':[],'quotes':{},'manual_portfolio_preferences':{'cash_nok':0}}
+        self.assertIsNone(ap.current_summary(snapshot,NOW)['current_value_nok'])
+
     def test_dividend_cash_does_not_double_count_adjusted_prices(self):
         rows=[event(1,'2025-01-02','dividend',5)]
         s,b=setup(rows,quote([('2025-01-01',10),('2025-01-02',9.5)]))
