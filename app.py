@@ -4,6 +4,7 @@ import math
 import re
 import sqlite3
 import time
+from datetime import datetime, timezone
 import threading
 import os
 import hashlib
@@ -12,6 +13,7 @@ import base64
 import binascii
 import secrets
 import research
+import decision_policy
 import fundamentals
 import announcements
 import validation
@@ -37,6 +39,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote, urlsplit, parse_qs
 from urllib.error import HTTPError, URLError
 from concurrent.futures import ThreadPoolExecutor
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).parent
 STARTED_AT=time.time()
@@ -74,6 +77,8 @@ def connect():
     for action in ('UPDATE','DELETE'):
         db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_account_baselines_{action.lower()} BEFORE {action} ON account_baselines BEGIN SELECT RAISE(ABORT,'Opening checkpoints are append-only'); END")
     db.execute('CREATE TABLE IF NOT EXISTS positions (symbol TEXT PRIMARY KEY, currency TEXT, shares REAL, cost REAL, thesis TEXT, review TEXT, below REAL, above REAL)')
+    if 'long_term' not in {r['name'] for r in db.execute('PRAGMA table_info(positions)')}:
+        db.execute('ALTER TABLE positions ADD COLUMN long_term INTEGER NOT NULL DEFAULT 0')
     db.execute('CREATE TABLE IF NOT EXISTS quotes (symbol TEXT PRIMARY KEY, payload TEXT)')
     db.execute('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, payload TEXT)')
     return db
@@ -139,11 +144,18 @@ def save_position(data):
     currency = data.get('currency')
     if currency not in ('USD', 'NOK'):
         raise ValueError('Choose USD or NOK.')
+    long_term=data.get('long_term',False)
+    if not isinstance(long_term,bool):
+        raise ValueError('Long-term designation must be true or false.')
     values = (symbol, currency, positive(data.get('shares')), positive(data.get('cost')),
               str(data.get('thesis', ''))[:5000], str(data.get('review', ''))[:5000],
-              positive(data.get('below'), True), positive(data.get('above'), True))
+              positive(data.get('below'), True), positive(data.get('above'), True), int(long_term))
     with connect() as db:
-        db.execute('INSERT OR REPLACE INTO positions VALUES (?,?,?,?,?,?,?,?)', values)
+        db.execute('''INSERT INTO positions(symbol,currency,shares,cost,thesis,review,below,above,long_term)
+                      VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol) DO UPDATE SET
+                      currency=excluded.currency,shares=excluded.shares,cost=excluded.cost,
+                      thesis=excluded.thesis,review=excluded.review,below=excluded.below,
+                      above=excluded.above,long_term=excluded.long_term''', values)
 
 def fetch_quote(symbol):
     # Unofficial public endpoint: errors are surfaced, never replaced with sample prices.
@@ -224,7 +236,9 @@ def _refresh(extra_symbols=None):
     for symbol in extra_symbols or []:
         lookups.setdefault(symbol, symbol)
     lookups['NOK=X'] = 'NOK=X'
-    if extra_symbols is not None:lookups['OSEBX.OL']='OSEBX.OL'
+    if extra_symbols is not None:
+        lookups['OSEBX.OL']='OSEBX.OL'
+        lookups['OBXD.OL']='OBXD.OL'
     symbols = list(dict.fromkeys(lookups.values()))
     progress_lock = threading.Lock()
     progress = {'done':0,'total':len(symbols),'started':time.time(),'failed':0}
@@ -410,6 +424,28 @@ def start_validation(data):
         raise
 
 
+def set_promoted_experiment_model(data):
+    """Save only a model present in the most recent robustness experiment."""
+    if not isinstance(data,dict) or 'max_positions' not in data:
+        raise ValueError('Choose an available experimental model.')
+    count=data.get('max_positions')
+    if count is None:
+        write_meta('promoted_experiment_model',None)
+    else:
+        report=read_meta('validation_report',{}) or {}
+        variants=((report.get('robustness') or {}).get('variants') or [])
+        if (isinstance(count,bool) or not isinstance(count,int) or count not in (10,20)
+                or not any(v.get('max_positions')==count for v in variants)):
+            raise ValueError('That model is not available in the latest completed experiment. Run it again and review the results.')
+        write_meta('promoted_experiment_model',{
+            'label':str(count)+'-position recommendation cap','max_positions':count,
+            'validation_generated':report.get('generated'),
+            'promoted_at':time.time()})
+    if WORKER:
+        WORKER.trigger()
+    return {'promoted_model':read_meta('promoted_experiment_model')}
+
+
 def ledger_view():
     snapshot=state();profile=snapshot['manual_portfolio_preferences'];baseline=read_meta('ledger_state')
     with connect() as db:
@@ -515,9 +551,132 @@ def daily_view():
 
 
 def email_plan():
-    snapshot=state()
+    now=time.time()
+    snapshot=state(True)
     report=read_meta('report')
-    return report,trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
+    plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
+    alerts=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view(),now)['reviews']
+    risk=portfolio_risk.view(snapshot,snapshot['portfolio_preferences'],now)
+    quote_times=[q.get('asof') for p in snapshot['positions'] if p['shares']>0
+                 for q in [trade_plan.quote_for(snapshot,portfolio_fit.canonical(p['symbol'],p['currency']))]
+                 if q and isinstance(q.get('asof'),(int,float))]
+    if any(p['shares']>0 and p['currency']=='USD' for p in snapshot['positions']):
+        fx=snapshot['quotes'].get('NOK=X')
+        if fx and isinstance(fx.get('asof'),(int,float)):
+            quote_times.append(fx['asof'])
+    risk_source=min(quote_times) if quote_times else None
+    for warning in risk.get('risk_warnings',[]):
+        label=warning['label']
+        if label not in ('Historical 95% daily VaR','Historical 95% tail loss','Historical proxy drawdown') and ' long-term holding · ' not in label:
+            continue
+        identity=hashlib.sha256(('risk:'+label).encode()).hexdigest()[:24]
+        long_term=' long-term holding · ' in label
+        alerts.append({'id':identity,'priority':95 if long_term else 85,'title':'Review portfolio risk: '+label,
+                       'detail':('Long-term designation does not remove this significant risk from review. ' if long_term else '')+
+                                'Observed or hypothetical loss of '+str(round(warning['loss_pct'],1))+
+                                '% meets your '+str(risk['risk_warning_pct'])+'% warning level. Historical measures describe past data; scenario losses are hypothetical. This is not a guaranteed loss limit or a trade instruction.',
+                       'kind':'risk','symbol':None,
+                       'loss_pct':warning['loss_pct'],'warning_pct':risk['risk_warning_pct'],
+                       'url':email_alerts.dashboard_url(workspace='portfolio'),
+                       'source_asof':risk_source,'observed':now})
+    long_term_symbols=[portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
+                       if p['shares']>0 and p.get('long_term',False)]
+    oslo=ZoneInfo('Europe/Oslo')
+    def oslo_date(timestamp):
+        if (isinstance(timestamp,(int,float)) and not isinstance(timestamp,bool)
+                and math.isfinite(timestamp) and 0<=timestamp<=now+300):
+            return datetime.fromtimestamp(timestamp,timezone.utc).astimezone(oslo).date().isoformat()
+        return None
+    today=oslo_date(now)
+    close_dates=[oslo_date(point.get('time')) for symbol,q in snapshot['quotes'].items()
+                 if symbol!='NOK=X' for point in q.get('history',[])
+                 if isinstance(point.get('close'),(int,float)) and not isinstance(point['close'],bool)
+                 and math.isfinite(point['close']) and point['close']>0]
+    # Today's daily provider bar can still be trading. Use an earlier dated bar.
+    last_close_date=max((date for date in close_dates if date and date<today),default=None)
+    stale=[]
+    for position in snapshot['positions']:
+        if position['shares']<=0:continue
+        symbol=portfolio_fit.canonical(position['symbol'],position['currency'])
+        quote=trade_plan.quote_for(snapshot,symbol)
+        if not quote:stale.append(symbol+': quote missing')
+        elif not portfolio_fit.fresh(quote,now):stale.append(symbol+': quote stale')
+        if position['currency']=='USD':
+            fx=snapshot['quotes'].get('NOK=X')
+            if not fx:stale.append('NOK/USD conversion quote missing')
+            elif not portfolio_fit.fresh(fx,now):stale.append('NOK/USD conversion quote stale')
+    report_ok=trade_plan.current_report(report,now)
+    if not report_ok:
+        stale.append('Research report: stale or missing')
+    coverage=(report or {}).get('coverage',{})
+    if coverage.get('unavailable'):
+        stale.append(str(coverage['unavailable'])+' research entries have missing or inadequate data')
+    holdings_attention=[]
+    for holding in plan.get('holdings',[]):
+        if holding.get('sell_shares') or holding.get('technical_action') in trade_plan.SELL_SIGNALS:
+            reasons=' '.join(holding.get('reasons',[]))
+            detail=(holding['symbol']+' — review '+str(holding.get('technical_action') or 'holding risk')+
+                    (('; '+str(holding['sell_shares'])+' shares in the current review scenario') if holding.get('sell_shares') else '')+
+                    ('. '+reasons if reasons else '.'))
+            holdings_attention.append((90,detail[:700]))
+    held_symbols={portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions'] if p['shares']>0}
+    for alert in alerts:
+        if alert.get('kind') not in ('announcement','company') or alert.get('symbol') not in held_symbols:
+            continue
+        source_asof=alert.get('source_asof')
+        source_date=oslo_date(source_asof)
+        detail=str(alert.get('title','Holding review'))+'. '+str(alert.get('detail',''))
+        if source_date:
+            detail+=' Source date: '+source_date+'.'
+        else:
+            detail+=' Source date unavailable.'
+            stale.append(str(alert['symbol'])+': review source date missing')
+        if isinstance(source_asof,(int,float)) and now-source_asof>7*86400:
+            stale.append(str(alert['symbol'])+': review source is stale')
+        source_url=alert.get('url')
+        if (isinstance(source_url,str) and len(source_url)<=2000 and source_url.startswith('https://')
+                and not any(c in source_url for c in '\r\n\x00')):
+            detail+=' Source: '+source_url
+        priority=alert.get('priority',80)
+        if not isinstance(priority,(int,float)) or isinstance(priority,bool) or not math.isfinite(priority):
+            priority=80
+        holdings_attention.append((priority,detail[:700]))
+    holdings_attention=[detail for _,detail in sorted(holdings_attention,key=lambda item:-item[0])[:5]]
+    candidates=[]
+    if report_ok:
+        for card in decision_policy.recommendations((report or {}).get('cards',[]),(report or {}).get('promoted_model')):
+            if card.get('held'):continue
+            if not trade_plan.signal_current(card,now):
+                stale.append(str(card['symbol'])+': candidate quote stale or missing; candidate withheld')
+                continue
+            quote_date=oslo_date(card.get('asof'))
+            reasons=' '.join(card.get('reasons',[])[:2]) or 'Passes the shared technical entry screen.'
+            candidates.append(str(card['symbol'])+' — '+quote_date+' quote reference. '+reasons[:500])
+    candidates=candidates[:5]
+    warnings=risk.get('risk_warnings',[])
+    measures=[]
+    for label,key in (('annualized historical volatility','volatility_pct'),('daily 95% VaR','var95_pct')):
+        value=risk.get(key)
+        if isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value):
+            measures.append(label+' '+str(round(value,1))+'%')
+    if warnings:
+        warning_text='; '.join(str(w['label'])+' '+str(round(w['loss_pct'],1))+'% loss' for w in warnings[:3])
+        risk_text=(('Historical risk: '+', '.join(measures)+'. ' if measures else 'Historical risk available. ')
+                   if risk.get('status')=='available' else 'Historical risk unavailable; valuation scenarios show: ')+warning_text
+    elif risk.get('status')=='available':
+        risk_text=(('Historical risk: '+', '.join(measures)+'. ' if measures else 'Historical risk is available. ')+
+                   'No calculated warnings at the '+str(risk.get('risk_warning_pct',20))+'% warning level.')
+    elif risk.get('status')=='cash_only':
+        risk_text='Cash only; no invested portfolio risk is currently calculated.'
+    else:
+        risk_text='Historical risk unavailable'+(': '+', '.join(risk.get('missing',[])[:3]) if risk.get('missing') else '.')
+    summary={'last_close_date':last_close_date,'holdings_attention':holdings_attention[:5],
+             'candidates':candidates,'risk':risk_text,
+             'data_status':('Stale or missing: '+ '; '.join(stale[:6])+'.' if stale else
+                            'No stale or missing tracked quote data.')}
+    return {**(report or {}),'review_alerts':alerts,'long_term_symbols':long_term_symbols,
+            'risk_review_complete':risk.get('status') in ('available','cash_only'),
+            'weekly_summary':summary},plan
 
 
 def email_worker():
@@ -632,7 +791,8 @@ class Handler(BaseHTTPRequestHandler):
                 paper = validation.paper_view(db, state()['quotes'])
             progress=read_meta('validation_progress',{})
             if progress.get('running') and not VALIDATION_LOCK.locked():progress={**progress,'running':False,'error':'Experiment interrupted by a server restart. Run it again.'}
-            return self.send_json({'historical':read_meta('validation_report'), 'paper':paper,'progress':progress})
+            return self.send_json({'historical':read_meta('validation_report'), 'paper':paper,'progress':progress,
+                                   'promoted_model':read_meta('promoted_experiment_model')})
         if self.path == '/api/research':
             return self.send_json(WORKER.view() if WORKER else {'report': read_meta('report'), 'settings': settings(), 'worker': {}})
         if self.path == '/api/state':
@@ -725,6 +885,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(portfolio_fit.preview(data.get('symbol',''),data.get('amount',0),snapshot,snapshot['portfolio_preferences']))
             elif self.path == '/api/validation':
                 return self.send_json(start_validation(data))
+            elif self.path == '/api/validation/promotion':
+                return self.send_json(set_promoted_experiment_model(data))
             elif self.path == '/api/analyze':
                 if not WORKER:
                     return self.send_json({'error': 'Background worker is not started.'}, 503)

@@ -1,0 +1,287 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+\setlist{nosep,leftmargin=*}
+\emergencystretch=2em
+\title{Mathematics of Northstar's Research and Portfolio Tools}
+\author{Northstar project documentation}
+\date{20 November 2026}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This paper describes the implemented calculations for technical research
+decisions, trade guidance, portfolio risk, ledger-derived performance, and
+historical and forward strategy evidence. It is intended for learning and
+technical reproduction. The rules are deterministic summaries and review aids;
+they do not forecast returns, establish suitability, or place trades. Each
+quantity below names its units and sample convention because those choices
+affect interpretation.
+\end{abstract}
+
+\section{Scope and notation}
+
+Prices are daily closes unless stated otherwise. A return is a fraction in
+equations unless a percent sign is shown; the interface often displays
+percentage points. Let $P_t$ be a close, $V_t$ share volume, and $T_t=P_tV_t$
+the observed traded value. Moving averages are arithmetic means over the
+indicated number of observations. A session count is not a calendar-day count.
+The app analyzes adjusted research closes; account valuation uses its separate
+share-unit price series.
+
+The code paths described here are implemented in
+\path{decision_policy.py}, \path{indicators.py}, \path{trade_plan.py},
+\path{portfolio_risk.py}, \path{account_performance.py}, and
+\path{validation.py}. The accessible summary is \path{docs/MATHEMATICS.md};
+detailed user-facing methodology and limitations remain in
+\path{docs/REFERENCE.md}.
+
+\section{Research score and decisions}
+
+\subsection{Ranking score}
+
+The overall score is a weighted average of five component scores $s_j$ on a
+0--100 scale:
+\[
+ S=0.30s_{\rm trend}+0.25s_{\rm momentum}+0.20s_{\rm risk}
+   +0.15s_{\rm timing}+0.10s_{\rm liquidity}.
+\]
+It is rounded to one decimal; ticker breaks ties. The trend score awards 25
+points for each of $P_t>MA_{50,t}$, $P_t>MA_{200,t}$,
+$MA_{50,t}>MA_{200,t}$, and positive three-month return. The momentum score is
+\[
+s_{\rm momentum}=\operatorname{clamp}_{[0,100]}\!\left(
+50+25\frac{0.6R_3+0.4R_6}{\max(\sigma,10)}\right),
+\]
+where $R_3,R_6$ are percentage returns over 63 and 126 sessions and $\sigma$
+is annualised volatility in percentage points. The risk component is
+\[
+s_{\rm risk}=\operatorname{clamp}_{[0,100]}(100-0.8\sigma+0.5D),
+\]
+where $D\leq0$ is the worst drawdown in the loaded history, in percent. Timing
+uses RSI(14), MACD, and price extension. For RSI, let $g_t$ and $\ell_t$ be
+the recursively smoothed mean positive and negative close changes: each starts
+as the arithmetic mean of its first 14 changes and then updates as
+$(13g_{t-1}+\max(\Delta P_t,0))/14$ and
+$(13\ell_{t-1}+\max(-\Delta P_t,0))/14$. Then
+\[
+RSI_t=\begin{cases}50&g_t=\ell_t=0,\\100&\ell_t=0,\\
+100-100/(1+g_t/\ell_t)&\text{otherwise.}\end{cases}
+\]
+EMA uses $E_t=\alpha x_t+(1-\alpha)E_{t-1}$,
+$\alpha=2/(n+1)$, initialized at the first value. MACD is
+$EMA_{12}-EMA_{26}$; its signal is the 9-period EMA of MACD. Timing starts at
+90 points for $40\leq RSI\leq65$, 65 for $30\leq RSI<40$ or
+$65<RSI<70$, and 35 otherwise; it adds 10 when MACD exceeds its signal (or
+subtracts 10 otherwise), and subtracts 20 when the close is at least 15\% above
+$MA_{50}$. The result is clamped to 0--100. The liquidity score is
+\[
+s_{\rm liquidity}=\operatorname{clamp}_{[0,100]}\!\left(
+50+25\log_{10}\frac{\max(\bar T_{20},1)}{\max(L,1)}\right),
+\]
+where $\bar T_{20}$ is mean observed traded value and $L$ is the configured
+NOK floor. Fewer than 15 valid turnover observations gives a zero score.
+These components overlap and are not probabilities or independent evidence.
+
+\subsection{Entry and held-position review}
+
+Ranking order never overrides the entry gate. An entry-eligible stock must
+have at least 200 fresh daily observations and matching currency, pass all
+four trend conditions, have annualised volatility $<50\%$, close less than
+15\% above $MA_{50}$, at least 15 valid traded-value observations in the last
+20, and mean traded value at least $L$ (default NOK 250{,}000). A held stock
+can qualify for an addition under the same screen. Portfolio constraints and
+personal confirmation rules also apply before quantities are suggested.
+
+For an owned holding, a technical sell review occurs when both
+\[
+P_t<MA_{200,t}\qquad\text{and}\qquad R_3<0.
+\]
+A saved lower review price triggers when the current quote is at or below it;
+a saved upper review price triggers when the quote is at or above it. The
+lower-level check takes precedence if both personal levels could apply.
+Losing entry eligibility alone does not trigger a sale. The default review
+quantity is 25\% of owned whole shares, rounded upward, subject to configured
+portfolio reductions; zero disables that review quantity. Confirmation,
+cooldown, cash, and allocation limits are guidance safeguards. No order is
+transmitted.
+
+\section{Trade-cost examples}
+
+For budget $B$, price $P$, and one fixed buy fee $F_b$, whole shares are
+\[
+n=\max\left(0,\left\lfloor\frac{B-F_b}{P}\right\rfloor\right),
+\qquad C_b=nP+F_b.
+\]
+The fee is charged only when $n>0$; if $n=0$, order cost and fee are both
+zero. When $n>0$, fee drag is $100F_b/(nP)$ percent and fee-only break-even is
+$P+F_b/n$. For $m$ shares sold at $P$, estimated proceeds are $mP-F_s$ only
+if a sell fee $F_s$ is entered; otherwise the display remains gross at $mP$.
+Taxes, spread, and execution slippage are not included in these personal
+previews.
+
+\paragraph{Checked example.} With $B=10{,}000$ NOK, $P=100$ NOK, and the
+default $F_b=79$ NOK, $n=\lfloor9{,}921/100\rfloor=99$, order cost is
+9{,}979 NOK, and 21 NOK remains. With average cost $C=100$ NOK/share, ten
+shares, $F_b=79$ NOK and an entered $F_s=31$ NOK, the displayed break-even is
+$100+(79+31)/10=111$ NOK/share. This is a fee estimate, not a recovery target.
+
+\section{Portfolio risk}
+
+For asset $i$, daily simple return over the exact interval $(a,b)$ is
+\[
+r_{i,(a,b)}=P_{i,b}/P_{i,a}-1.
+\]
+The portfolio view joins these interval keys exactly; it requires at least 60
+common intervals for every holding and uses at most the latest 252. No missing
+return is filled and an incomplete subset is not renormalized. USD assets are
+converted using FX observations at both endpoints. Cash in NOK has zero return.
+
+With current portfolio weights $w_i$ (including cash) and sample covariance
+matrix $\widehat\Sigma$, the historical daily-rebalanced proxy has
+\[
+\widehat\sigma_p=\sqrt{252\,w^\top\widehat\Sigma w}.
+\]
+Variance contribution is $w_i\operatorname{Cov}(r_i,r_p)$; its share of total
+variance divides by $\operatorname{Var}(r_p)$. Volatility contributions sum
+to portfolio volatility; variance shares sum to 100\% when total variance is
+positive. A hedge can contribute negatively. These are historical proxies
+using today's weights, not account history.
+
+Empirical 95\% VaR is the nonnegative magnitude of the interpolated 5th
+percentile return. Expected shortfall averages exactly the worst 5\% of the
+observed probability mass, including a fractional boundary observation.
+Drawdown at time $t$ is $P_t/\max_{u\leq t}P_u-1$. Short samples and flat
+series can leave statistics undefined.
+
+Scenario shocks are arithmetic assumptions on current market value $V_i$.
+For a stock shock $s$ and USD/NOK shock $f$, both in fractions,
+\[
+\Delta V_i=V_i\big((1+s_i)(1+f_i)-1\big),
+\]
+where $s_i=s$ for affected equities (or a selected classified sector), and
+$f_i=f$ only for USD-denominated assets. The combined effect is multiplicative.
+The default warning threshold is 20\%; it flags historical or scenario loss
+estimates at or above the threshold. It is a review prompt, not a guaranteed
+loss limit. Revenue exposure, hedges, costs, and taxes are not inferred.
+
+\section{Ledger account performance}
+
+Let $V_0,V_T$ be verified opening and ending account values and $F_k$ the
+signed external cash flow on date $k$ (deposits positive, withdrawals
+negative). Investment P\&L is
+\[
+\Pi=V_T-V_0-\sum_kF_k.
+\]
+Trades, fees, dividends, and interest are internal activity; recorded net
+broker cash already reflects charges. Daily-linked return chains each
+end-of-day flow-adjusted factor:
+\[
+G=\prod_t\frac{V_t-F_t}{V_{t-1}},\qquad R_{\rm linked}=G-1.
+\]
+This convention is an estimate because exports do not include exact flow
+times. Modified Dietz is
+\[
+R_{\rm MD}=\frac{\Pi}{V_0+\sum_k w_kF_k},\qquad
+w_k=\frac{\text{calendar days from flow }k\text{ to end}}
+{\text{calendar days in period}}.
+\]
+If the weighted denominator is not positive, or flow timing makes linked
+return undefined, the percentage is withheld while measurable NOK P\&L may
+remain. Missing exact-date prices suppress the calculation. Explicit prior
+close mode allows at most four calendar days and marks the result estimated.
+The ledger must reconcile with current shares and tracked cash. Realized trade
+P\&L uses verified weighted-average book cost and is not tax-lot accounting.
+
+\section{Historical strategy testing}
+
+The strategy experiment is a distinct model from personal trade plans. It
+forms monthly decisions from bars through decision date $t$ and executes at
+the next common session close. Holdings persist until an explicit technical
+exit; qualifying entries fill vacant slots in score order, up to the chosen
+cap. Equal-weight rebalance is an experimental overlay. Empty slots remain
+cash. The baseline uses 20 slots and monthly decisions. Personal price levels,
+confirmation, cooldowns, portfolio limits, and personalized share quantities
+are not simulated.
+
+For normalized equity $E_t$, a held portfolio with weights $w_{i,t}$ earns the
+close-to-close gross return $\sum_iw_{i,t-1}(P_{i,t}/P_{i,t-1}-1)$ before
+rebalancing costs. Each positive-value buy order incurs the stated 79 NOK
+fixed fee; per-order experiment sale fees are configurable. Extra slippage is
+charged in both directions in proportion to traded notional. Potential order
+fees are reserved before sizing; unused reserves remain cash. Fixed per-order
+fees are normalized by the configured initial capital. The benchmark is a same-stock equal
+weight basket and, when available, the OSEBX gross-return index over exact
+matching dates. Displayed excess is strategy net return minus index gross
+return in percentage points, not risk-adjusted alpha. Strategy return uses
+initial capital before the first execution's costs: a flat 100,000 NOK account
+with one 79 NOK purchase fee returns $-0.079\%$, even against a flat index.
+Index costs are not available, and neither side is terminally liquidated.
+
+An investable comparator uses DNB OBX ETF (provider symbol OBXD.OL), which
+tracks the 25-stock OBX basket rather than OSEBX GR. With capital $C$, entry
+fee $F$, slippage fraction $s$, and adjusted entry and end prices $P_0,P_T$,
+its ending wealth relative to initial capital is
+\[
+E_T^{fund}=(1-F/C)\frac{P_T}{P_0(1+s)}.
+\]
+Only dividend/split-adjusted NOK closes covering every matched session are
+accepted. No dates are filled. Fund expenses are embedded in observed prices
+and are not deducted twice. Fractional units, no terminal liquidation, taxes,
+spreads, tracking differences and provider revisions limit comparability.
+DNB's official fund page lists a 0.2\% management fee (checked 20 November
+2026), not a verified historical fee schedule:
+\url{https://www.dnb.no/en/markets/shares/exchange-traded-products/etf/dnb-obx}.
+
+For a return sequence $r_t$, annualized volatility is
+\[
+\sigma_{ann}=\sqrt{252}\,s(r_t),
+\]
+where $s(r_t)$ is the sample standard deviation of fractional returns. Sharpe
+at zero risk-free rate is $252\bar r/\sigma_{ann}$; Sortino is
+$252\bar r/\sigma_{down}$, with
+$\sigma_{down}=\sqrt{252\,\operatorname{mean}(\min(r_t,0)^2)}$. CAGR uses
+elapsed years; drawdown is wealth relative to its running maximum. Reported
+metrics require their stated sample counts.
+
+The optional robustness grid compares 10/20 positions and 1/3 month
+rebalance intervals. The chronological split is approximately 70\% training
+and 30\% later holdout, with at least 20 sessions in each. Variant selection
+uses training Sharpe at zero risk-free rate, then training return, with
+deterministic ties. Holdings cross the boundary; holdout wealth is normalized
+at the prior close. Extra 25/50 basis-point runs are sensitivity checks, not
+independent confirmation. Repeated inspection or tuning against this
+historical holdout contaminates any unseen-test claim.
+
+Forward paper cohorts are a third, separate record. Each scan appends an
+immutable snapshot; hypothetical entry uses the first later close, and returns
+are shown only after a subsequent observation. Captured budget and fee
+assumptions are retained. Cohorts overlap, are not a funded rebalanced
+portfolio, and do not change primary advice. An experimental model affects
+recommendations only after an explicit investor promotion.
+
+\section{Limitations and reproducibility}
+
+Historical experiments use today's configured universe and complete-history
+assets. Delisted securities and reliable point-in-time fundamentals/news are
+unavailable; adjusted prices can be revised. This creates survivorship,
+selection, and data-revision bias. Complete-case filtering, fractional
+historical allocations, simplified execution, omitted taxes, market impact,
+and cash interest further limit inference. A matched index comparison does
+not establish investable performance. Forward paper results are hypothetical
+and have shorter, overlapping observation windows. None of these methods
+establishes a forecast or investment result.
+
+The maintained detailed explanations are in
+\href{REFERENCE.md}{\texttt{docs/REFERENCE.md}}. Source implementations are
+named in Section 1, and independent accounting examples and benchmark date
+checks are maintained in \texttt{tests/test\_account\_reference.py}. This
+paper describes the 20 November 2026 source snapshot; rerun its examples and
+recompile after behavioral changes.
+
+\end{document}

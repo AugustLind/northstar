@@ -80,17 +80,20 @@ function renderPortfolioFit(v) {
     for (const k of [
       'cash_nok',
       'purchase_nok',
+      'buy_fee_nok',
       'max_stock_pct',
       'max_sector_pct',
       'reserve_pct',
       'max_buy_fee_pct',
       'review_sell_pct',
+      'risk_warning_pct',
       'confirm_sessions',
       'signal_wait_hours',
       'trade_cooldown_days',
       'min_change_pct',
     ])
-      f.elements[k].value = v.profile[k];
+      f.elements[k].value = v.profile[k] == null && k === 'risk_warning_pct' ? 20 : v.profile[k];
+    f.elements.sell_fee_nok.value = v.profile.sell_fee_nok == null ? '' : v.profile.sell_fee_nok;
     const symbols = Array.from(
       new Set(
         p.holdings
@@ -152,7 +155,7 @@ function renderPortfolioFit(v) {
             esc(c.warnings.join(' ')) +
             '</small></td><td>' +
             fitPercent(c.fee_pct) +
-            '<small>79 kr per purchase</small></td><td>' +
+            '<small>' + esc(money(v.buy_fee_nok)) + ' per purchase order</small></td><td>' +
             fitMoney(c.max_purchase_nok) +
             '</td><td>' +
             (co
@@ -189,17 +192,20 @@ $('#fitPreferences').onsubmit = async (e) => {
   for (const k of [
     'cash_nok',
     'purchase_nok',
+    'buy_fee_nok',
     'max_stock_pct',
     'max_sector_pct',
     'reserve_pct',
     'max_buy_fee_pct',
     'review_sell_pct',
+    'risk_warning_pct',
     'confirm_sessions',
     'signal_wait_hours',
     'trade_cooldown_days',
     'min_change_pct',
   ])
     data[k] = Number(f.elements[k].value);
+  data.sell_fee_nok = f.elements.sell_fee_nok.value === '' ? null : Number(f.elements.sell_fee_nok.value);
   for (const select of document.querySelectorAll('#fitClassifications select[data-sector]')) {
     if (select.value !== (fitView.profile.sectors[select.dataset.sector] || '')) {
       if (select.value) data.sectors[select.dataset.sector] = select.value;

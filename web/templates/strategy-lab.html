@@ -13,6 +13,13 @@
     share. Selling commission is configured below; additional slippage applies in both
     directions.
   </p>
+  <p class="muted" id="validationBoundary">
+    These are experimental decision rules compared with the fixed 20-position monthly baseline.
+    Training and later holdout results, including poor results, are shown for review. Experiments do not
+    change the baseline automatically. Only explicit investor promotion applies a position count to primary
+    recommendations; promoting a model never changes holdings.
+    Free historical data cannot establish point-in-time or delisted-stock performance.
+  </p>
   <label
     >Starting capital · NOK<input
       id="validationCapital"
@@ -71,6 +78,7 @@
       OSEBX GR is a gross-return index, not an investable fund. Index costs are not modelled;
       missing benchmark dates are never filled with invented values.
     </p>
+    <p id="validationFund" class="muted">DNB OBX ETF comparison appears after a new experiment when adjusted NOK history covers the same dates.</p>
   </section>
   <p id="validationLimits" class="muted"></p>
   <details class="card" id="researchArchive">
@@ -99,4 +107,12 @@
   </p>
   <p id="paperMethod"></p>
   <div id="paperResults"></div>
+  <h3>Experimental recommendation model</h3>
+  <p>Historical candidates vary position count and rebalance interval. Promotion applies the candidate’s position count as a cap on primary recommendations; it does not change the shared stock entry signals. Review forward outcomes above before deciding. There is no automatic promotion or minimum observation period.</p>
+  <div class="researchtools">
+    <label>Candidate from latest experiment<select id="promotionModel"><option value="">Choose a completed candidate</option></select></label>
+    <button type="button" id="promoteModel">Promote candidate</button>
+    <button type="button" id="restoreBaseline">Use baseline recommendations</button>
+  </div>
+  <p id="promotionStatus" role="status"></p>
 </section>

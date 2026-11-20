@@ -20,6 +20,7 @@ async function loadValidation() {
     else if (progress.error) $('#validationStatus').textContent = progress.error;
     const p = v.paper;
     $('#paperMethod').textContent = p.method;
+    renderPromotion(v.historical, v.promoted_model);
     $('#paperResults').innerHTML = p.snapshots.length
       ? p.snapshots
           .map(
@@ -38,6 +39,13 @@ async function loadValidation() {
                 : s.return_pct.toFixed(2) + '% after assumed costs') +
               '</p><p>' +
               escapeHtml(paperBenchmarkLabel(s.benchmark)) +
+              (s.candidate_results
+                ? '<br>Candidate breadths · ' +
+                  s.candidate_results.map((c) => c.max_positions + ' positions: ' +
+                    (c.return_pct == null ? 'pending / incomplete (' + c.measured + ' measured)' : c.return_pct.toFixed(2) + '% after assumed costs') +
+                    ' · ' + paperBenchmarkLabel(c.benchmark))
+                    .join(' · ')
+                : '') +
               '</p><div class="tablewrap"><table><thead><tr><th>Saved stock</th><th>Saved action</th><th>Later entry close</th><th>Return after costs</th></tr></thead><tbody>' +
               s.symbols
                 .map(
@@ -60,6 +68,21 @@ async function loadValidation() {
   } catch (e) {
     $('#validationStatus').textContent = e.message;
   }
+}
+function renderPromotion(historical, promoted) {
+  const select = $('#promotionModel');
+  const variants = (historical && historical.robustness && historical.robustness.variants) || [];
+  const current = promoted ? promoted.max_positions : null;
+  const breadths = [...new Set(variants.map((v) => v.max_positions))].sort((a,b) => a-b);
+  select.innerHTML = '<option value="">Choose a completed candidate</option>' +
+    breadths.map((count) => '<option value="' + count + '"' +
+      (count === current ? ' selected' : '') + '>' + count + '-position recommendation cap · ' +
+      variants.filter((v) => v.max_positions === count).length + ' historical variants</option>').join('');
+  $('#promoteModel').disabled = variants.length === 0;
+  $('#promotionStatus').textContent = promoted
+    ? 'Active model: ' + promoted.label + ' · recommendation cap ' + promoted.max_positions +
+      ' · promoted ' + new Date(promoted.promoted_at * 1000).toLocaleString() + '.'
+    : 'Baseline recommendations are active.';
 }
 function renderValidation(v) {
   if (!v) {
@@ -86,9 +109,7 @@ function renderValidation(v) {
   $('#validationSummary').textContent =
     'Strategy ' +
     v.return_pct.toFixed(2) +
-    '% · Same-basket buy and hold ' +
-    v.benchmark_pct.toFixed(2) +
-    '% · Maximum drawdown ' +
+    '% after simulated costs · Maximum drawdown ' +
     v.max_drawdown_pct.toFixed(2) +
     '% · Costs ' +
     v.cost_pct_initial.toFixed(2) +
@@ -129,6 +150,21 @@ function renderValidation(v) {
       '</tbody></table></div>'
     : '';
   const index = v.oslo_index || {};
+  const indexComparison =
+    index.return_pct == null
+      ? 'OSEBX GR comparison unavailable: ' + (index.status || 'rerun experiment')
+      : 'OSEBX GR ' + index.return_pct.toFixed(2) +
+        '% gross return · ' +
+        (Number.isFinite(index.strategy_return_pct) && Number.isFinite(index.excess_percentage_points)
+          ? 'Strategy ' + index.strategy_return_pct.toFixed(2) +
+            '% after simulated costs · Excess ' + index.excess_percentage_points.toFixed(2) +
+            ' percentage points · '
+          : 'Matched strategy result unavailable for this saved report · ') +
+        (Number.isFinite(index.from) && Number.isFinite(index.to)
+          ? new Date(index.from * 1000).toISOString().slice(0, 10) +
+            ' to ' + new Date(index.to * 1000).toISOString().slice(0, 10)
+          : 'saved period');
+  $('#validationSummary').textContent += ' · ' + indexComparison;
   $('#validationIndex').textContent =
     (index.name || 'OSEBX GR') +
     ' · ' +
@@ -146,6 +182,15 @@ function renderValidation(v) {
         panel: 'volume',
       })
     : '';
+  const fund = v.oslo_fund || {};
+  $('#validationFund').textContent =
+    (fund.name || 'DNB OBX ETF') + ' · ' + (fund.status || 'Rerun experiment for fund comparison') +
+    (Number.isFinite(fund.return_pct)
+      ? ' · Fund ' + fund.return_pct.toFixed(2) + '% after entry costs · Strategy excess ' +
+        fund.excess_percentage_points.toFixed(2) + ' percentage points · ' +
+        new Date(fund.from * 1000).toISOString().slice(0, 10) + ' to ' +
+        new Date(fund.to * 1000).toISOString().slice(0, 10)
+      : '') + ' ' + (fund.method || '');
   $('#validationChart').innerHTML = ChartKit.svg(v.curve, {
     symbol: 'Strategy equity (green), same-basket benchmark (orange)',
     start: 0,
@@ -188,6 +233,30 @@ $('#runValidation').onclick = async () => {
     $('#validationStatus').textContent = e.message;
   } finally {
     b.disabled = validationPolling;
+  }
+};
+$('#promoteModel').onclick = async () => {
+  const max_positions = Number($('#promotionModel').value);
+  if (!max_positions) return;
+  $('#promoteModel').disabled = true;
+  try {
+    await api('validation/promotion', {max_positions});
+    await loadValidation();
+  } catch (e) {
+    $('#promotionStatus').textContent = e.message;
+  } finally {
+    $('#promoteModel').disabled = false;
+  }
+};
+$('#restoreBaseline').onclick = async () => {
+  $('#restoreBaseline').disabled = true;
+  try {
+    await api('validation/promotion', {max_positions: null});
+    await loadValidation();
+  } catch (e) {
+    $('#promotionStatus').textContent = e.message;
+  } finally {
+    $('#restoreBaseline').disabled = false;
   }
 };
 setInterval(() => {

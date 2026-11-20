@@ -36,7 +36,7 @@ function render() {
             valid = q && q.currency === p.currency;
           const gain = valid && p.cost > 0 ? (q.price / p.cost - 1) * 100 : null;
           return `<tr><td><b>${esc(p.symbol)}</b><small>${
-            p.shares ? 'Holding' : 'Watchlist'
+            p.shares ? (p.long_term ? 'Long-term holding · keep under review' : 'Holding') : 'Watchlist'
           } · ${esc(p.currency)}</small></td><td>${p.shares}<small>${money(
             p.cost,
             p.currency
@@ -59,6 +59,8 @@ function render() {
   for (const p of positions) {
     const q = quotes[p.symbol],
       items = [];
+    if (p.shares > 0 && p.long_term)
+      items.push('Long-term designation does not remove this holding from review; significant price, concentration and portfolio risks still matter.');
     if (!fresh(q) || q.currency !== p.currency)
       items.push(
         'Current usable data unavailable. Refresh quotes and check the selected trading currency.'
@@ -173,7 +175,11 @@ function edit(
   const f = $('#positionForm');
   f.reset();
   for (const [k, v] of Object.entries(p))
-    if (f.elements.namedItem(k)) f.elements.namedItem(k).value = v == null ? '' : v;
+    if (f.elements.namedItem(k)) {
+      const input = f.elements.namedItem(k);
+      if (input.type === 'checkbox') input.checked = Boolean(v);
+      else input.value = v == null ? '' : v;
+    }
   f.elements.symbol.readOnly = !!p.symbol;
   $('#formError').textContent = '';
   $('#editor').showModal();
@@ -183,7 +189,9 @@ $('#close').onclick = () => $('#editor').close();
 $('#positionForm').onsubmit = async (e) => {
   e.preventDefault();
   try {
-    await api('position', Object.fromEntries(new FormData(e.target)));
+    const data = Object.fromEntries(new FormData(e.target));
+    data.long_term = e.target.elements.long_term.checked;
+    await api('position', data);
     $('#editor').close();
     await load();
   } catch (e) {

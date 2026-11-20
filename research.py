@@ -116,7 +116,7 @@ def screen(symbol, q, position=None, min_turnover_nok=250000, as_of=None):
     return result
 
 
-def build_report(snapshot, universe, min_turnover_nok=250000, as_of=None):
+def build_report(snapshot, universe, min_turnover_nok=250000, as_of=None, promoted_model=None):
     now=time.time() if as_of is None else as_of
     positions = [p for p in snapshot['positions'] if p['currency'] == 'NOK']
     quotes = snapshot['quotes']
@@ -162,8 +162,12 @@ def build_report(snapshot, universe, min_turnover_nok=250000, as_of=None):
                     'label':item['classification']['label']} for item in notices['items'] if not item.get('corrected_by')][:2]}
         card['sparkline'] = card['history'][-60::3]
         card['history'] = []
+    recommendations=policy.recommendations(cards,promoted_model)
     report={'generated': now, 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
-            'top20':[c['symbol'] for c in ranked[:policy.MAX_CANDIDATES]], 'coverage':coverage,
+            'top20':[c['symbol'] for c in recommendations], 'coverage':coverage,
+            'paper_top20':[c['symbol'] for c in ranked[:policy.MAX_CANDIDATES]],
+            'recommendation_limit':promoted_model.get('max_positions',policy.MAX_CANDIDATES) if promoted_model else policy.MAX_CANDIDATES,
+            'promoted_model':promoted_model,
             'policy_version':policy.VERSION,'min_turnover_nok':min_turnover_nok,
             'portfolio_context':portfolio, 'portfolio_limits':{k:v for k,v in profile.items() if k!='sectors'},
             'universe_source': UNIVERSE_SOURCE, 'universe_snapshot': oslo_universe.ASOF,
@@ -295,7 +299,8 @@ class ResearchWorker:
             settings = self.settings()
             errors = self.refresh(settings['universe'])
             snapshot=self.snapshot()
-            report = build_report(snapshot, settings['universe'], settings.get('min_turnover_nok', 250000))
+            report = build_report(snapshot, settings['universe'], settings.get('min_turnover_nok', 250000),
+                                  promoted_model=self.read('promoted_experiment_model',None))
             signal_state=advice_state.observe(report,self.read('signal_state',{}),report['generated'])
             self.write('signal_state',signal_state);snapshot['signal_state']=signal_state
             report['trade_plan']=trade_plan.build(snapshot,report,snapshot.get('portfolio_preferences',{}))

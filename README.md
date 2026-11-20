@@ -86,6 +86,7 @@ Do not put access keys or portfolio data in `static/config.js`.
 | Goal | Instructions |
 |---|---|
 | Explain signals and review data limitations | [Technical reference](docs/REFERENCE.md) |
+| Read the mathematical models | [Short guide](docs/MATHEMATICS.md) · [LaTeX paper (PDF)](docs/strategy-mathematics.pdf) · [LaTeX source](docs/strategy-mathematics.tex) |
 | Configure server-side email alerts | [Email setup](#email-alerts) |
 | Enable local AI or a Linux user service | [Local services](docs/LOCAL-SERVICES.md) |
 | Run on an Oracle Ubuntu server, with private SSH access | [Oracle deployment](DEPLOY.md) |
@@ -110,8 +111,11 @@ python3 scripts/setup-email.py
 The helper prompts privately for SMTP settings, installs the server configuration
 and restarts Northstar. Open **Daily overview → Email alerts → Send test email**
 after setup. Keep passwords out of source files, GitHub and chat. Email works
-without an open browser. Stock alerts require valid confirmed share-plan quantities;
-test emails work independently of research and plan generation.
+without an open browser. Emails include confirmed share-plan changes, recent issuer
+and annual financial reviews, and significant historical or designated long-term
+holding risks. Risk emails include the configured warning level, relevant source
+freshness and supporting analysis. Unchanged conditions are deduplicated; test emails
+work independently of research and plan generation.
 See the [email reference](docs/REFERENCE.md#email-alerts) for delivery behavior,
 manual settings, and limitations.
 

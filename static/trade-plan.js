@@ -26,6 +26,7 @@ function renderQuantityPlan(plan) {
     ' · Unallocated ' +
     money(plan.unallocated_budget_nok) +
     '.</p>';
+  html += '<p>Sale fee impact: ' + (plan.sell_fees_nok == null ? 'Unknown; enter a sell fee assumption in Portfolio fit.' : money(plan.sell_fees_nok) + ' across planned sale orders.') + '</p>';
   html += buys.length
     ? '<div class="tablewrap"><table><thead><tr><th>Stock</th><th>Quantity to consider</th><th>Quote</th><th>Order total incl. fee</th><th>Why this quantity?</th></tr></thead><tbody>' +
       buys
@@ -70,13 +71,18 @@ function renderQuantityPlan(plan) {
             '</b><small>Owned: ' +
             esc(r.owned) +
             ' shares</small>' +
-            (r.price
-              ? '<small>Reference ' +
-                money(r.price) +
-                ' · ' +
-                new Date(r.quote_asof * 1000).toLocaleString() +
-                '</small>'
-              : '') +
+            (r.quote_source || r.quote_asof != null
+              ? '<small>Quote: ' + esc(r.quote_source || 'Source unavailable') + ' · ' +
+                (r.quote_age_seconds == null ? 'age unavailable' : esc(Math.floor(r.quote_age_seconds / 3600)) + 'h old') +
+                (r.quote_asof == null ? '' : ' · ' + new Date(r.quote_asof * 1000).toLocaleString()) + '</small>'
+              : '<small>Quote source and age unavailable.</small>') +
+            (r.limit_reference_price == null
+              ? '<small>Practical limit reference withheld until a fresh supported quote is available.</small>'
+              : '<small>Practical limit reference · current quote: ' + money(r.limit_reference_price) + '</small>' +
+                '<small>' + esc(r.limit_reference_note || '') + '</small>') +
+            '<small>Break-even: ' + (r.break_even_price == null ? esc(r.break_even_status || 'Unavailable') : money(r.break_even_price)) +
+              ' · break-even alone is not a reason to hold.</small>' +
+            (r.target_price == null ? '' : '<small>Separate target: ' + money(r.target_price) + ' · ' + esc(r.target_reason || '') + '</small>') +
             '</td><td><strong class="' +
             (r.sell_shares ? 'negative' : '') +
             '">' +
@@ -88,8 +94,8 @@ function renderQuantityPlan(plan) {
             '</strong></td><td>' +
             esc(r.sell_shares == null ? 'Unavailable' : r.remaining_shares) +
             '</td><td>' +
-            (r.gross_proceeds_nok == null ? 'Unavailable' : money(r.gross_proceeds_nok)) +
-            '<small>Before selling fees and tax</small></td><td>' +
+            (r.gross_proceeds_nok == null ? 'Unavailable' : money(r.net_proceeds_nok == null ? r.gross_proceeds_nok : r.net_proceeds_nok)) +
+            '<small>' + (r.fee_nok == null ? 'Gross proceeds · sell fee unknown' : money(r.gross_proceeds_nok) + ' gross · ' + money(r.fee_nok) + ' estimated fee') + ' · before tax</small></td><td>' +
             r.reasons.map(esc).join(' ') +
             '</td></tr>'
         )

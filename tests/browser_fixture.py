@@ -24,6 +24,7 @@ class Fixture:
         with app.connect() as db:
             db.execute('INSERT INTO quotes VALUES (?,?)',('SYNTH.OL',json.dumps(quote)))
             db.execute('INSERT INTO quotes VALUES (?,?)',('OSEBX.OL',json.dumps(quote)))
+            db.execute('INSERT INTO quotes VALUES (?,?)',('OBXD.OL',json.dumps({**quote,'history_basis':'Dividend/split adjusted close'})))
         app.save_settings({'universe':['SYNTH.OL'],'llm_enabled':False})
         app.save_position({'symbol':'SYNTH.OL','currency':'NOK','shares':3,'cost':100,'thesis':'Synthetic test only'})
         app.write_meta('portfolio_preferences',{'cash_nok':1000,'purchase_nok':0,'sectors':{'SYNTH.OL':'Industrials'}})

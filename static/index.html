@@ -164,8 +164,9 @@
         <section class="card">
           <h2>Email alerts</h2>
           <p>
-            Receive confirmed buy/sell plan changes and withdrawals by email, even when this page is
-            closed. Suggestions still require review before trading.
+            Receive a weekly portfolio summary around Sunday 10:00 Europe/Oslo, including no-change
+            updates, plus confirmed buy/sell review alerts. Summaries flag stale data; all suggestions
+            still require review before trading.
           </p>
           <p id="emailStatus" role="status">Loading email delivery status…</p>
           <button id="enableEmail" disabled>Enable email alerts</button>
@@ -341,9 +342,9 @@
             <button type="button" data-plan-settings>Set budget &amp; sizing rules</button>
           </div>
           <p>
-            Buy quantities share one total budget and include 79 kr per order. Sell quantities are
-            separate rule-based review scenarios before selling fees and tax. Recalculate after
-            trading.
+            Buy quantities share one total budget and use your saved buy fee. Sale proceeds include
+            your sell-fee assumption when entered; otherwise only gross proceeds are available.
+            Recalculate after trading.
           </p>
           <div id="quantityPlanMain" aria-live="polite">Loading share-count scenarios…</div>
         </details>
@@ -351,7 +352,7 @@
           <h2>Ranked opportunities</h2>
           <label
             >Show<select id="adviceFilter">
-              <option value="top20">Top 20 entry candidates</option>
+              <option value="top20">Primary recommendation candidates</option>
               <option value="all">All analysed stocks</option>
               <option value="held">My holdings</option>
               <option value="buy">Buy candidates</option>
@@ -749,6 +750,7 @@
             <button id="refreshPortfolioRisk" type="button">Refresh risk</button>
           </div>
           <p id="portfolioRiskStatus" role="status">Loading historical risk coverage…</p>
+          <div id="riskWarningStatus" role="status"></div>
           <div id="portfolioRiskMetrics" class="diagnosticgrid"></div>
           <div id="riskContributions" class="tablewrap"></div>
           <details>
@@ -854,6 +856,21 @@
                       step="any"
                       required /></label
                   ><label
+                    >Buy fee · NOK per order<input
+                      name="buy_fee_nok"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      step="any"
+                      required /></label
+                  ><label
+                    >Sell fee · NOK per order (leave blank if unknown)<input
+                      name="sell_fee_nok"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      step="any" /></label
+                  ><label
                     >Maximum per company · % incl. known share classes<input
                       name="max_stock_pct"
                       type="number"
@@ -882,6 +899,14 @@
                       name="max_buy_fee_pct"
                       type="number"
                       min="0.01"
+                      max="100"
+                      step="any"
+                      required /></label
+                  ><label
+                    >Portfolio risk warning level · %<input
+                      name="risk_warning_pct"
+                      type="number"
+                      min="1"
                       max="100"
                       step="any"
                       required /></label
@@ -927,8 +952,9 @@
                       required
                   /></label>
                   <p>
-                    Purchase fee: <b>79 kr per order</b>, regardless of share count, using your
-                    stated Nordnet fee. Budgets include this fee. Selling fees are not yet modelled.
+                    Buy fee defaults to <b>79 kr per order</b>, regardless of share count. Enter
+                    your confirmed fee assumptions; blank sell fee means unknown. Buy budgets
+                    include the buy fee. Estimates exclude tax, spread and execution differences.
                   </p>
                 </div>
                 <details>
@@ -1087,6 +1113,13 @@
           share. Selling commission is configured below; additional slippage applies in both
           directions.
         </p>
+        <p class="muted" id="validationBoundary">
+          These are experimental decision rules compared with the fixed 20-position monthly baseline.
+          Training and later holdout results, including poor results, are shown for review. Experiments do not
+          change the baseline automatically. Only explicit investor promotion applies a position count to primary
+          recommendations; promoting a model never changes holdings.
+          Free historical data cannot establish point-in-time or delisted-stock performance.
+        </p>
         <label
           >Starting capital · NOK<input
             id="validationCapital"
@@ -1145,6 +1178,7 @@
             OSEBX GR is a gross-return index, not an investable fund. Index costs are not modelled;
             missing benchmark dates are never filled with invented values.
           </p>
+          <p id="validationFund" class="muted">DNB OBX ETF comparison appears after a new experiment when adjusted NOK history covers the same dates.</p>
         </section>
         <p id="validationLimits" class="muted"></p>
         <details class="card" id="researchArchive">
@@ -1173,6 +1207,14 @@
         </p>
         <p id="paperMethod"></p>
         <div id="paperResults"></div>
+        <h3>Experimental recommendation model</h3>
+        <p>Historical candidates vary position count and rebalance interval. Promotion applies the candidate’s position count as a cap on primary recommendations; it does not change the shared stock entry signals. Review forward outcomes above before deciding. There is no automatic promotion or minimum observation period.</p>
+        <div class="researchtools">
+          <label>Candidate from latest experiment<select id="promotionModel"><option value="">Choose a completed candidate</option></select></label>
+          <button type="button" id="promoteModel">Promote candidate</button>
+          <button type="button" id="restoreBaseline">Use baseline recommendations</button>
+        </div>
+        <p id="promotionStatus" role="status"></p>
       </section>
       <footer>
         Built for patient ownership · Private portfolio storage · No broker credentials required
@@ -1215,6 +1257,7 @@
           ><label>Review below price<input name="below" type="number" min="0" step="any" /></label
           ><label>Review above price<input name="above" type="number" min="0" step="any" /></label>
         </div>
+        <label class="check"><input name="long_term" type="checkbox" /> Long-term holding · keep reviewing significant risks</label>
         <label
           >Why I own / follow this company<textarea
             name="thesis"
@@ -1233,20 +1276,20 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
       <script src="./app.js?v=12fe290aa44b"></script>
-      <script src="./portfolio.js?v=404d56ed8f08"></script>
+      <script src="./portfolio.js?v=56c52e71e214"></script>
       <script src="./navigation.js?v=324aa4928c88"></script>
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
-      <script src="./validation.js?v=689dd730b7a6"></script>
-      <script src="./portfolio-fit.js?v=7bb10180c347"></script>
+      <script src="./validation.js?v=098d62b0f747"></script>
+      <script src="./portfolio-fit.js?v=88a4ef36c5ea"></script>
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
-      <script src="./trade-plan.js?v=840332af5c55"></script>
+      <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
       <script src="./daily.js?v=611b46c289c3"></script>
-      <script src="./advice.js?v=296dcc117b94"></script>
-      <script src="./explorer.js?v=267c8c47f996"></script>
+      <script src="./advice.js?v=14f5b876ee6a"></script>
+      <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
-      <script src="./portfolio-risk.js?v=5038b4f3881a"></script>
+      <script src="./portfolio-risk.js?v=e75ae85395c7"></script>
       <script src="./stock-summary.js?v=9f8e720795e1"></script>
       <script src="./validation-view.js?v=54bf6067f20c"></script>
       <script src="./system-status.js?v=a12e1049a887"></script>

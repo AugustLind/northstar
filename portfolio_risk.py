@@ -41,9 +41,13 @@ def view(snapshot,profile,now=None,stock_shock=-20,fx_shock=-10):
                      'All held assets must have fresh prices and at least 60 exactly matching return intervals; at most 252 intervals are used. '
                      'USD prices require FX on both endpoints. Missing sessions are never filled. Contribution = weight × covariance with portfolio / portfolio variance; hedges can be negative. '
                      'Shocks are user assumptions, not predicted events. Excludes fees, tax and untracked accounts.'}
+    warning_level=profile.get('risk_warning_pct',20.)
+    result.update(risk_warning_pct=warning_level,risk_warnings=[])
     if not ctx['complete'] or not total:
         result['missing']=ctx['missing'] or ['Positive tracked value required.'];return result
     currencies={}
+    long_term_symbols={pf.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
+                       if p.get('long_term',False)}
     for p in snapshot['positions']:
         if p['shares']>0:currencies[pf.canonical(p['symbol'],p['currency'])]=p['currency']
     # Valuation-based shocks remain available even when historical risk is unavailable.
@@ -53,13 +57,22 @@ def view(snapshot,profile,now=None,stock_shock=-20,fx_shock=-10):
             e=equity/100 if sector is None or h['sector']==sector else 0
             f=fx/100 if currencies.get(h['symbol'])=='USD' else 0
             change=h['value_nok']*((1+e)*(1+f)-1)
-            rows.append({'symbol':h['symbol'],'change_nok':change})
+            is_long_term=h['symbol'] in long_term_symbols
+            rows.append({'symbol':h['symbol'],'change_nok':change,'change_pct':change/h['value_nok']*100 if h['value_nok'] else 0,
+                         'long_term':is_long_term})
         change=sum(r['change_nok'] for r in rows)
         return {'label':label,'change_nok':change,'change_pct':change/total*100,'after_nok':total+change,'holdings':rows}
     result['scenarios']=[scenario('All equities −20%; FX unchanged',-20,0),scenario('USD/NOK −10%; local stock prices unchanged',0,-10),
                          scenario('Custom: equities '+str(stock_shock)+'%, USD/NOK '+str(fx_shock)+'%',stock_shock,fx_shock)]
     sectors=[s for s in ctx['sectors'] if s['sector']!='Unclassified']
     if sectors:result['scenarios'].append(scenario('Largest classified sector −30%: '+sectors[0]['sector'],-30,0,sectors[0]['sector']))
+    result['risk_warnings']=[{'label':r['label'],'loss_pct':-r['change_pct']} for r in result['scenarios']
+                             if r['change_pct']<=-warning_level]
+    for scenario_row in result['scenarios']:
+        for holding in scenario_row['holdings']:
+            if holding['long_term'] and holding['change_pct']<=-warning_level:
+                result['risk_warnings'].append({'label':holding['symbol']+' long-term holding · '+scenario_row['label'],
+                                                'loss_pct':-holding['change_pct']})
     weights=[h['value_nok']/total for h in holdings]
     issuer_weights=[r['value_nok']/total for r in ctx['issuer_exposure']]
     invested=sum(weights)
@@ -87,9 +100,13 @@ def view(snapshot,profile,now=None,stock_shock=-20,fx_shock=-10):
     variance=max(0,covariance(portfolio,portfolio));vol=math.sqrt(variance*252)*100
     var,tail=tail_losses(portfolio)
     result.update(status='available',volatility_pct=vol,var95_pct=var,tail95_pct=tail)
+    for label,loss in [('Historical 95% daily VaR',var),('Historical 95% tail loss',tail)]:
+        if loss is not None and loss>=warning_level:
+            result['risk_warnings'].append({'label':label,'loss_pct':loss})
     for i,h in enumerate(holdings):
         individual=max(0,covariance(values[i],values[i]));contribution=weights[i]*covariance(values[i],portfolio)
-        result['risk_contributions'].append({'symbol':h['symbol'],'weight_pct':weights[i]*100,
+        long_term=h['symbol'] in long_term_symbols
+        result['risk_contributions'].append({'symbol':h['symbol'],'long_term':long_term,'weight_pct':weights[i]*100,
              'annual_volatility_pct':math.sqrt(individual*252)*100,
              'risk_share_pct':contribution/variance*100 if variance>1e-20 else None,
              'volatility_contribution_pct':contribution/math.sqrt(variance)*math.sqrt(252)*100 if variance>1e-20 else 0})
@@ -108,6 +125,8 @@ def view(snapshot,profile,now=None,stock_shock=-20,fx_shock=-10):
         equity*=1+value;peak=max(peak,equity);worst=min(worst,equity/peak-1)
         result['curve'].append({'time':day[1]*86400,'close':equity})
     result['proxy_drawdown_pct']=worst*100
+    if -result['proxy_drawdown_pct']>=warning_level:
+        result['risk_warnings'].append({'label':'Historical proxy drawdown','loss_pct':-result['proxy_drawdown_pct']})
     benchmark=intervals(daily_prices(snapshot['quotes'].get('OSEBX.OL')))
     shared=[(i,d) for i,d in enumerate(common) if d in benchmark]
     if len(shared)>=60:

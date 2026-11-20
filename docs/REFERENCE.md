@@ -131,7 +131,7 @@ Tests use temporary databases and mocked providers. They cover indicator actions
 
 ### Historical experiments and forward tracking
 
-Strategy lab uses the shared technical entry/exit signals on cached Oslo histories. Monthly decisions use only bars available through each decision date and execute at the next common session close. Holdings remain until the technical exit signal; vacant slots are filled by qualifying entries in score order, up to 20 positions. The experiment uses monthly equal-weight sizing, which can also trim retained holdings. Personal review prices, signal confirmation periods, cooldowns, portfolio allocation limits and personalized quantities are not simulated. Empty selections remain cash. Each buy order incurs the user-stated fixed 79 NOK fee, regardless of share count. Starting capital defaults to 100,000 NOK and is configurable because fixed costs depend on account size. Optional extra slippage defaults to zero and applies in both directions; selling commission is configurable (default zero, no assumed broker tariff). Results include return, drawdown, simulated weight changes, cost drag and daily strategy/benchmark values. The benchmark buys and holds the same complete-history stock basket. Neither side assumes terminal liquidation.
+Strategy lab uses the shared technical entry/exit signals on cached Oslo histories. Monthly decisions use only bars available through each decision date and execute at the next common session close. Holdings remain until the technical exit signal; vacant slots are filled by qualifying entries in score order, up to 20 positions. The experiment uses monthly equal-weight sizing, which can also trim retained holdings. Personal review prices, signal confirmation periods, cooldowns, portfolio allocation limits and personalized quantities are not simulated. Empty selections remain cash. Each buy order incurs the user-stated fixed 79 NOK fee, regardless of share count. Starting capital defaults to 100,000 NOK and is configurable because fixed costs depend on account size. Optional extra slippage defaults to zero and applies in both directions; selling commission is configurable (default zero, no assumed broker tariff). Strategy return includes these simulated costs. The primary comparison uses OSEBX gross-return index closes from the exact strategy start and end sessions; its return is `100 × (index_end / index_start − 1)`. Strategy return is measured over those same sessions, including costs already charged by the start session. Displayed excess is matched-period strategy net return minus index gross return in percentage points, not risk-adjusted alpha. Index costs are unavailable because this is not an investable fund. The comparison is withheld if any required index date is missing; no values are forward-filled. Results also retain the same-stock-basket series as a secondary comparator. Neither side assumes terminal liquidation.
 
 This is a survivor-biased, complete-case experiment on today's universe, not validated market performance or a point-in-time fundamental/news backtest. Adjusted historical prices can change; adjusted close times raw volume approximates historical turnover. Incomplete histories and missing common sessions are excluded. Taxes, cash interest and market impact are omitted; sale commissions use the entered experiment setting. The experiment uses fractional stock allocations; actual purchase previews use whole shares. Both strategy and benchmark enter at the next common close; the benchmark pays 79 NOK for each constituent. Rebalancing reserves fees for potential buys, only charges actual positive-value buy orders and leaves unused fee reserves as cash. Histories now request five years with a 200-observation warm-up and up to 756 dated test sessions. Stocks without complete reference-calendar coverage are explicitly excluded; recent IPOs do not shorten the entire test.
 
@@ -139,9 +139,11 @@ Every newly completed scan automatically appends an immutable recommendation coh
 
 ### Portfolio fit
 
-The Portfolio fit page evaluates the current technical top 20 against manually tracked cash, a purchase budget, maximum stock and sector weights, a cash reserve and the user-stated flat 79 NOK purchase fee. Allocation defaults are illustrative, not allocation advice. The fixed fee replaces the earlier illustrative percentage fee; it is not added on top and is not a claim about every Nordnet tariff. All settings and user-entered sector classifications are persisted privately in Oracle SQLite, included in notebook JSON exports, and preserved across deployments. An exact-symbol company-data worker attempts public sector lookup. Fresh sourced classifications apply automatically unless manually overridden; unavailable, expired or unknown sectors prevent sector clearance. The page supports cash-only starting portfolios. Legacy USD holdings require fresh USD/NOK for valuation but are excluded from correlation comparisons.
+Buy and sell costs are saved assumptions for trade guidance. The buy fee defaults to 79 NOK per order for existing and new profiles and can be edited; it is not a claim about every Nordnet tariff. The sell fee is blank/unknown until entered. Sale scenarios show estimated per-order fees and net proceeds only when that assumption is present; otherwise they show gross proceeds and state that the fee is unknown. For a buy of `n` whole shares at quote `P` with budget `B` and fee `F_buy`, shares are `max(0, floor((B - F_buy) / P))`, order cost is `n * P + F_buy`, fee drag is `100 * F_buy / (n * P)`, and fee-only break-even price is `P + F_buy / n` when `n > 0`. For a sale of `m` shares at `P` with entered fee `F_sell`, estimated net proceeds are `m * P - F_sell`; when `F_sell` is unknown, only gross proceeds `m * P` are shown. These estimates exclude tax, spread and execution differences.
 
-Purchase previews use whole shares, include assumed costs within the entered budget, and calculate weights using holdings plus cash after the fixed fee. They also show the fee as a percentage of stock value and the price rise needed to recover the purchase fee alone; selling fees are unknown. The displayed maximum purchase value is the pre-cost stock-value ceiling, not a suggested investment amount. Missing/stale prices block sizing. Existing exposure warnings, sector bars and each candidate's strongest measured correlation to another NOK holding are visible. Correlations require 60 matching daily return intervals (up to 126); unavailable or constant series remain unknown. They are historical context, not a diversification guarantee.
+The Portfolio fit page evaluates the current technical top 20 against manually tracked cash, a purchase budget, maximum stock and sector weights, a cash reserve and the saved buy-fee assumption. Allocation defaults are illustrative, not allocation advice. The editable fixed fee replaces the earlier illustrative percentage fee; it is not added on top and is not a claim about every Nordnet tariff. All settings and user-entered sector classifications are persisted privately in Oracle SQLite, included in notebook JSON exports, and preserved across deployments. An exact-symbol company-data worker attempts public sector lookup. Fresh sourced classifications apply automatically unless manually overridden; unavailable, expired or unknown sectors prevent sector clearance. The page supports cash-only starting portfolios. Legacy USD holdings require fresh USD/NOK for valuation but are excluded from correlation comparisons.
+
+Purchase previews use whole shares, include the entered buy-fee assumption within the entered budget, and calculate weights using holdings plus cash after that fee. They also show the fee as a percentage of stock value and the price rise needed to recover the purchase fee alone. Sale scenarios show net proceeds only when a sell-fee assumption is entered; otherwise proceeds remain gross and the fee is identified as unknown. The displayed maximum purchase value is the pre-cost stock-value ceiling, not a suggested investment amount. Missing/stale prices block sizing. Existing exposure warnings, sector bars and each candidate's strongest measured correlation to another NOK holding are visible. Correlations require 60 matching daily return intervals (up to 126); unavailable or constant series remain unknown. They are historical context, not a diversification guarantee.
 
 Market ranks, historical experiments and paper cohorts remain unchanged by these constraints. A candidate clears the page only if its current technical buy signal and its hypothetical purchase both pass. Previews do not place orders or change cash, shares or cost basis. Update these manually after Nordnet trades. Local AI receives bounded portfolio context and calculated allocation previews, with unknown-data limitations.
 
@@ -157,11 +159,13 @@ Uploads go only to the authenticated Oracle API; filenames are not sent and raw 
 
 ### Clear buy and sell quantities
 
-Recommendations and Portfolio fit show the same **Share-count plan**; Portfolio & watchlist has a shortcut to it. Buy quantities share the single saved purchase budget. Orders are allocated by technical rank, use whole shares, include 79 NOK once per buy, and respect the selected stock/sector/cash-reserve limits. Potential later order fees are reserved when sizing allocations. Cash from hypothetical sales is not available to this buy plan. Some budget may remain unused. Independent stock previews are labelled separately from the funded plan.
+Recommendations and Portfolio fit show the same **Share-count plan**; Portfolio & watchlist has a shortcut to it. Buy quantities share the single saved purchase budget. Orders are allocated by technical rank, use whole shares, include the saved buy fee once per buy, and respect the selected stock/sector/cash-reserve limits. Potential later order fees are reserved when sizing allocations. Cash from hypothetical sales is not available to this buy plan. Some budget may remain unused. Independent stock previews are labelled separately from the funded plan.
 
 The maximum purchase fee / stock-value setting starts at an illustrative 2%; small orders that exceed it receive a zero quantity and an explanation. This setting is editable in Portfolio fit and also applies to standalone previews. Existing holdings can receive additions when their Hold / monitor card meets the same strict technical buy screen as a new position. A holding with a sale-review quantity cannot receive a conflicting buy. Missing classification, stale reports, insufficient cash or unknown prices prevent clearance; fractional/duplicate holdings require manual review.
 
 Sale quantities are separate, gross review scenarios. A current sell/profit/price-level signal sizes an illustrative 25% review of held shares (editable 0–100%, rounded up, with 0 disabling that rule). Then position, sector and cash-reserve limits can require further reductions; the same shares are never counted twice and quantities never exceed the whole shares held. Sector and reserve trims use largest remaining holdings first. Allocation math can work without a current technical report when portfolio prices are usable; technical-signal sizing cannot. Sector trimming requires all holdings classified.
+
+Sell review shows a fee-inclusive break-even only for a supported fresh NOK quote, a positive saved average cost basis, and entered buy and sell fee assumptions. With average cost `C`, held shares `n`, estimated buy fee `F_buy` and sell fee `F_sell`, the reference is `C + (F_buy + F_sell) / n`; fees are spread over the current holding for illustration. Imported GAV is retained unchanged, so the editable buy fee is only an estimate of acquisition costs, not a reconstruction of historical charges. If either fee or the basis is unknown, break-even is withheld. This price does not predict recovery and is not a reason by itself to hold. The practical limit reference is the current quote, with provider, timestamp and age; it is not a promised execution price, and a limit order can remain unfilled. Stale or unsupported quotes withhold both precise references. A separate target appears only when the investor has saved an upper review level; the plan does not invent a target. Quantity remains governed by the existing technical review, portfolio constraints and ledger reconciliation rules. No order is placed; the investor chooses whether and how to trade.
 
 Each row shows shares owned, shares to consider buying/selling, shares remaining, reference quotes, order costs or gross proceeds, and the calculation reason. Sale quantities and proceeds exclude unknown selling fees and tax. They are rule-based scenarios, not optimal quantities, return forecasts or automatic orders. Buy and sale scenarios are separate: recalculate after trading and update holdings/cash. All calculations are read-only. Local AI receives calculated share quantities and is instructed not to invent sizes.
 
@@ -177,7 +181,7 @@ Each row shows shares owned, shares to consider buying/selling, shares remaining
 
 5. **Sourced identity/sector metadata.** A low-rate daily public exact-symbol Yahoo search attempts company names/sectors/industries; a public Stock Analysis company-profile fallback verifies the exact Oslo ticker/exchange and reads sector, industry and ISIN where available. Sources, dates and errors are retained. Each provider backs off when blocked or rate-limited; no login or access-control bypass is used. User sector overrides win; provider classifications expire after 30 days and unknown coverage is never guessed. Known WWI/WWIB and ODF/ODFB issuer mappings combine exposure for company limits across share classes. Other issuer relationships remain explicitly unverified. Public-provider failures leave the manual fallback available.
 
-6. **Daily overview and alerts.** The default hosted landing page shows three priority reviews, source-linked issuer notices/earnings dates, share-count changes, data problems and reconciliation issues. Alerts are deduplicated, can be marked read and retain up to 200 entries / 30 days. Optional desktop notifications require a user gesture and browser permission, are limited to three new reviews per refresh, and require an open signed-in dashboard tab. They are disabled by default. Optional server-side email sends confirmed share-count plan changes and withdrawals through your configured SMTP provider, without an open browser. See the setup below. SMS/Telegram delivery is not implemented.
+6. **Daily overview and alerts.** The default hosted landing page shows three priority reviews, source-linked issuer notices/earnings dates, share-count changes, data problems and reconciliation issues. Alerts are deduplicated, can be marked read and retain up to 200 entries / 30 days. Optional desktop notifications require a user gesture and browser permission, are limited to three new reviews per refresh, and require an open signed-in dashboard tab. They are disabled by default. Optional server-side email sends confirmed share-count plan changes, recent issuer and annual financial reviews, and significant historical or long-term holding risks through your configured SMTP provider, without an open browser. See the setup below. SMS/Telegram delivery is not implemented.
 
 Private ledger, classifications, previews and alerts live in Oracle SQLite and survive deployment; no broker files, account credentials or filenames are published. All new APIs use the existing access-key/origin protection.
 
@@ -191,7 +195,7 @@ python3 scripts/setup-email.py
 
 The helper asks for your provider's SMTP hostname, port, TLS mode, username, sending address, recipient and password/app password. Password entry is hidden. It installs a root-readable `/etc/northstar-email.env`, adds a systemd drop-in and restarts Northstar. It preserves `/etc/northstar.env` and the portfolio database. Never paste SMTP passwords into chat, GitHub variables, source files or the dashboard. Provider credentials and outbound SMTP connectivity are required; Northstar does not create an email account or choose a provider for you. SMTP authentication must be supported by your account; OAuth-only SMTP is not implemented.
 
-In **Daily overview → Email alerts**, select **Enable email alerts** if paused, then **Send test email**. Check the status, inbox and spam folder. Settings, pause and test controls require the existing Northstar access key. Pause persists across restarts; a message already in flight may still arrive. Status reports acceptance by the SMTP server, which does not guarantee inbox delivery.
+In **Daily overview → Email alerts**, select **Enable email alerts** if paused, then **Send test email**. Check the status, inbox and spam folder. Settings, pause and test controls require the existing Northstar access key. Pause persists across restarts; a message already in flight may still arrive. Review emails include source timestamps and supporting links. Long-term designations never suppress significant risk warnings; those emails explain that the designation does not itself recommend a sale. Missing or stale source data is withheld. Status reports acceptance by the SMTP server, which does not guarantee inbox delivery.
 
 The email worker checks once per minute and wakes after completed scans. It uses confirmed, nonzero quantities from the current shared-budget plan, including configured confirmation/cooldown rules, cash, allocation, reconciliation and fee constraints. Set those portfolio inputs before expecting stock alerts. A scan is still scheduled at your configured research interval; email polling does not create new market data. Notifications include ticker, direction, shares, quote/report dates and the sizing reason. They exclude your access key, SMTP credentials, full portfolio and AI commentary. Up to 50 updates are grouped into one email; tests are separate, take priority over stock updates, and can send even if research or plan generation fails. Identical change IDs and small sizing drift are deduplicated across scans and restarts. Important updates receive new IDs. Withdrawals are emailed only when the original suggestion was accepted by the mail server.
 
@@ -293,6 +297,12 @@ contributions, correlation matrix, concentration and equity/FX/sector shocks.
   classifications. Scenario controls never update holdings, cash or trade records.
 - Benchmark beta/correlation require 60 matching portfolio/OSEBX return intervals.
   Neither betas nor shocks are predicted future losses or diversification guarantees.
+- The adjustable risk warning level defaults to 20%. It flags historical 95% daily VaR,
+  worst-5% tail loss, proxy drawdown, portfolio shock losses, and long-term holding
+  shock losses at or above that percentage. These are review prompts, not guaranteed
+  loss limits; long-term designation never hides risk or removes a holding from review.
+  Long-term status is stored per position. The one-time schema migration assigns existing
+  rows `false`; later holdings imports update quantities and basis while preserving it.
 
 The covariance relationship is described in the [CFA Institute portfolio risk
 reading](https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/portfolio-risk-return-part-1).
@@ -490,6 +500,72 @@ percentage-point difference, not alpha. Stock returns include the cohort's saved
 model; the gross-return index has no trading costs and is not an investable fund.
 Provider revisions can still change measured outcomes; capture dates do not make
 future provider data immutable. Existing cohort records and fee assumptions are retained.
+
+## Experimental recommendation promotion
+
+Strategy Lab forward cohorts preserve the baseline top 20 on each completed scan. They
+also report the measurable, after-cost mean for the first 10 and first 20 ranked stocks,
+with a same-date OSEBX GR comparison for each breadth when available; an incomplete stock
+keeps that breadth's total pending. These are recommendation
+baskets, not separately rebalanced trading accounts. Per-stock entry uses the first
+later daily close, the saved NOK purchase budget and fixed purchase fee, with residual
+cash; the same limitations and OSEBX GR date matching described above apply.
+
+The historical robustness candidates vary position count (10 or 20) and monthly or
+quarterly rebalancing. The active baseline is the shared technical entry/exit policy with
+a 20-recommendation cap. The Strategy Lab shows the current active selection and lets the
+investor explicitly promote one of the distinct 10- or
+20-position recommendation caps after reviewing all historical variants and forward
+breadth outcomes. Promotion applies that count as the maximum primary recommendation
+rank and buy/portfolio-fit candidate count. It does not change the shared stock entry
+signals; the historical rebalance interval does not alter live portfolio handling.
+Promotion is not automatic and has no minimum observation period. The active selection
+is saved separately from experiment results; the baseline can be restored at any time.
+No candidate is offered until a robustness run provides the candidate list. Forward
+outcomes remain descriptive evidence: the current survivor universe, revised prices,
+and missing point-in-time/delisted coverage prevent unbiased performance claims.
+
+## Investor guidance completion notes
+
+New historical experiments retain the first execution's trading costs in the
+matched OSEBX strategy return. A flat NOK 100,000 strategy paying one NOK 79
+purchase fee returns −0.079% against a flat index, rather than zero. Existing
+saved experiments remain unchanged; rerun them for the corrected comparison.
+
+The additional investable comparator is **DNB OBX ETF**, provider symbol
+`OBXD.OL`, ISIN NO0010257801. [DNB's official description](https://www.dnb.no/en/markets/shares/exchange-traded-products/etf/dnb-obx)
+identifies the 25-stock OBX basket and a 0.2% management fee (checked 2026-11-20).
+OBX differs from the broader OSEBX GR index. The existing free Yahoo endpoint
+supplies NOK dividend/split-adjusted history; availability is checked per run.
+Every execution-period strategy session must exist in that history, with no
+date filling or shifting. Missing data withholds only the fund comparison.
+Fund expenses are embedded in observed fund prices, not charged again. The
+comparison invests fractional units after one NOK 79 entry fee and the entered
+experiment slippage; neither strategy nor fund is terminally liquidated. It
+omits taxes, market spread and premium/discount modelling. The published current
+management fee is not treated as a historical fee schedule. Provider data can
+be revised; these comparisons do not prove outperformance.
+
+Weekly candidates follow the active shared recommendation cap and require the
+same current report and quote checks as share planning. They include the recorded
+entry reasons; stale candidate evidence is disclosed and withheld. Candidates
+remain research prompts, subject to separate cash, fee, concentration and
+confirmation constraints. Pending weekly emails rebuild their summary and late
+label before retrying, while sent weekly slots remain deduplicated.
+The displayed completed-close date comes from historical bars before the current
+Oslo calendar day, conservatively excluding today's potentially unfinished bar.
+Candidate quote references carry their own dates and are not labelled as completed
+closes. A late catch-up retains the scheduled Sunday heading but dates its refreshed
+market references separately.
+
+Risk email episodes persist in SQLite. A loss estimate moving at least five
+percentage points from its last alert, a changed warning level, or a recurrence
+after a complete review found the warning resolved can generate another alert.
+Smaller changes keep the same alert identity, including across restarts. Missing
+risk evidence does not establish resolution. The first review after upgrading
+retains existing sent alert identities and establishes the new comparison baseline.
+Email and dashboard sale reviews state entered fees and net proceeds where known;
+an unknown fee is labelled rather than assumed.
 
 Independent accounting reference cases in `tests/test_account_reference.py` use
 explicit opening/current holdings and hand-calculated expected values, without the

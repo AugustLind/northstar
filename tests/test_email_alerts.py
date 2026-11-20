@@ -5,12 +5,14 @@ import smtplib
 import ssl
 import tempfile
 import unittest
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from unittest.mock import Mock, patch
 
 import app
 import decision_policy
 import email_alerts as mail
-from test_trade_plan import NOW
+from test_trade_plan import NOW, card
 
 
 def environment(**changes):
@@ -21,7 +23,97 @@ def environment(**changes):
             'NORTHSTAR_PAGES_ORIGIN': 'https://owner.github.io', **changes}
 
 
+class EmailPlanTests(unittest.TestCase):
+    def test_weekly_candidates_use_current_promoted_recommendations_with_reasons(self):
+        fresh=card('B.OL')
+        fresh['reasons']=['All four trend conditions and liquidity filters pass.']
+        held=[{**card('H'+str(i)+'.OL',i), 'held':True} for i in range(1,11)]
+        cases=[
+            ('fresh', [fresh], {}, NOW, ['B.OL']),
+            ('stale quote', [{**fresh,'asof':NOW-5*86400}], {}, NOW, []),
+            ('stale report', [fresh], {}, NOW-2*86400, []),
+            ('promoted cap', held+[card('B.OL',11)], {'max_positions':10}, NOW, []),
+            ('ineligible', [{**fresh,'rank_eligible':False}], {}, NOW, []),
+        ]
+        for name,cards,model,generated,expected in cases:
+            with self.subTest(name=name):
+                snapshot={'positions':[], 'quotes':{}, 'portfolio_preferences':{}}
+                report={'generated':generated,'policy_version':decision_policy.VERSION,
+                        'cards':cards,'promoted_model':model}
+                with patch.object(app,'state',return_value=snapshot), \
+                     patch.object(app,'read_meta',return_value=report), \
+                     patch.object(app.trade_plan,'build',return_value={'buys':[],'holdings':[]}), \
+                     patch.object(app.daily_board,'build',return_value={'reviews':[]}), \
+                     patch.object(app,'ledger_view',return_value={}), \
+                     patch.object(app.portfolio_risk,'view',return_value={}), \
+                     patch.object(app.time,'time',return_value=NOW):
+                    result,_=app.email_plan()
+                summary=result['weekly_summary']
+                self.assertEqual([item.split(' — ')[0] for item in summary['candidates']],expected)
+                if expected:
+                    self.assertIn(fresh['reasons'][0],summary['candidates'][0])
+                if name=='stale report':
+                    self.assertIn('Research report: stale or missing',summary['data_status'])
+                if name=='stale quote':
+                    self.assertIn('B.OL',summary['data_status'])
+
+    def test_collects_dashboard_reviews_and_only_material_risk_warnings(self):
+        snapshot={'positions':[{'symbol':'A.OL','currency':'NOK','shares':2,'long_term':True}],
+                  'quotes':{'A.OL':{'asof':NOW,'price':100,'currency':'NOK',
+                                     'history':[{'time':NOW-86400,'close':99},{'time':NOW,'close':100}]}},
+                  'portfolio_preferences':{'risk_warning_pct':20}}
+        report={'generated':NOW}
+        plan={'buys':[],'holdings':[{'symbol':'B'+str(i)+'.OL','sell_shares':1,
+                                     'technical_action':'Review sell threshold','reasons':[]}
+                                    for i in range(5)]}
+        board_review={'id':'issuer','kind':'announcement','symbol':'A.OL','title':'A.OL: issuer notice',
+                      'detail':'Read the notice.','url':'https://issuer.example/notice','source_asof':NOW,
+                      'priority':95}
+        risk={'status':'available','volatility_pct':12.3,'var95_pct':2.4,
+              'risk_warning_pct':20,'risk_warnings':[
+            {'label':'Historical 95% daily VaR','loss_pct':22},
+            {'label':'A.OL long-term holding · shock','loss_pct':20},
+            {'label':'All equities −20%','loss_pct':20}]}
+        with patch.object(app,'state',return_value=snapshot), \
+             patch.object(app,'read_meta',return_value={}), \
+             patch.object(app.trade_plan,'build',return_value=plan), \
+             patch.object(app.daily_board,'build',return_value={'reviews':[board_review]}), \
+             patch.object(app,'ledger_view',return_value={}), \
+             patch.object(app.portfolio_risk,'view',return_value=risk), \
+             patch.object(app.time,'time',return_value=NOW):
+            result, current_plan=app.email_plan()
+        self.assertIs(current_plan,plan)
+        self.assertEqual(result['long_term_symbols'],['A.OL'])
+        self.assertEqual([a['kind'] for a in result['review_alerts']],['announcement','risk','risk'])
+        self.assertEqual(result['review_alerts'][1]['source_asof'],NOW)
+        self.assertIn('Long-term designation',result['review_alerts'][2]['detail'])
+        self.assertEqual(result['weekly_summary']['last_close_date'],
+                         datetime.fromtimestamp(NOW-86400,timezone.utc).astimezone(ZoneInfo('Europe/Oslo')).date().isoformat())
+        self.assertIn('Historical 95% daily VaR',result['weekly_summary']['risk'])
+        self.assertIn('annualized historical volatility 12.3%',result['weekly_summary']['risk'])
+        self.assertEqual(len(result['weekly_summary']['holdings_attention']),5)
+        self.assertIn('A.OL: issuer notice',result['weekly_summary']['holdings_attention'][0])
+        self.assertIn('https://issuer.example/notice',result['weekly_summary']['holdings_attention'][0])
+        self.assertIn('Research report: stale or missing',result['weekly_summary']['data_status'])
+
+
 class ConfigurationTests(unittest.TestCase):
+    def test_dashboard_link_uses_pages_or_self_hosted_https_origin(self):
+        self.assertEqual(mail.dashboard_url({'NORTHSTAR_PAGES_ORIGIN':'https://owner.github.io'}),
+                         'https://owner.github.io/northstar/#recommendations')
+        self.assertEqual(mail.dashboard_url({'NORTHSTAR_PUBLIC_ORIGIN':'https://stocks.example'},'portfolio'),
+                         'https://stocks.example/recommendations#portfolio')
+        self.assertIsNone(mail.dashboard_url({'NORTHSTAR_PUBLIC_ORIGIN':'http://localhost:8000'}))
+
+    def test_weekly_slots_follow_oslo_wall_clock_across_dst(self):
+        oslo=ZoneInfo('Europe/Oslo')
+        spring=datetime(2026,3,29,10,tzinfo=oslo).timestamp()
+        autumn=datetime(2026,10,25,10,tzinfo=oslo).timestamp()
+        self.assertEqual(mail.weekly_slot(spring),('2026-03-29',spring))
+        self.assertEqual(mail.weekly_slot(autumn),('2026-10-25',autumn))
+        before=datetime(2026,3,29,9,59,tzinfo=oslo).timestamp()
+        self.assertEqual(mail.weekly_slot(before)[0],'2026-03-22')
+
     def test_disabled_and_incomplete_settings_cannot_send(self):
         config = mail.configuration({})
         self.assertFalse(config['enabled'])
@@ -105,6 +197,170 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('https://owner.github.io/northstar/#recommendations', message.get_content())
         self.assertNotIn('private-password', message.as_string())
         self.assertEqual(self.rows()[0]['status'], 'sent')
+
+    def test_weekly_summary_sends_without_changes_and_marks_late_catchup(self):
+        self.report.update(recommendation_changes=[],weekly_summary={
+            'last_close_date':'2027-01-14','holdings_attention':[],'candidates':[],
+            'risk':'Risk view unavailable.','data_status':'No stale or missing tracked quote data.'})
+        sunday=datetime(2027,1,17,10,tzinfo=ZoneInfo('Europe/Oslo')).timestamp()
+        self.worker.tick(sunday+3600)
+        self.assertEqual(self.send.call_count,1)
+        message=self.send.call_args.args[1]
+        self.assertIn('late weekly catch-up',message['Subject'].lower())
+        content=message.get_content()
+        self.assertIn('Last available close at summary refresh: 2027-01-14.',content)
+        self.assertIn('A fresh quote is needed before placing an order.',content)
+        self.assertIn('No holdings currently need attention.',content)
+        self.assertIn('No new holding or candidate changes were detected.',content)
+        self.assertIn('Recommendations: https://owner.github.io/northstar/#recommendations',content)
+        self.assertIn('Portfolio: https://owner.github.io/northstar/#portfolio',content)
+        self.worker.tick(sunday+7200)
+        self.assertEqual(self.send.call_count,1)
+
+    def test_weekly_retry_discards_missed_week_backlog_after_restart(self):
+        self.report.update(recommendation_changes=[],weekly_summary={
+            'last_close_date':'2027-01-14','holdings_attention':['A.OL — review sell signal.'],
+            'candidates':['B.OL — 2027-01-14 close'],
+            'risk':'Historical VaR warning: 22% loss.','data_status':'Stale or missing: B.OL quote stale.'})
+        sunday=datetime(2027,1,17,10,tzinfo=ZoneInfo('Europe/Oslo')).timestamp()
+        self.send.side_effect=TimeoutError()
+        self.worker.tick(sunday)
+        self.assertEqual(self.rows()[0]['kind'],'weekly')
+        self.send.side_effect=None
+        next_sunday=datetime(2027,2,7,10,tzinfo=ZoneInfo('Europe/Oslo')).timestamp()
+        self.new_worker().tick(next_sunday+3600)
+        weekly=[row for row in self.rows() if row['kind']=='weekly']
+        self.assertEqual(len(weekly),2)
+        self.assertEqual(sum(row['status']=='sent' for row in weekly),1)
+        self.assertEqual(sum(row['status']=='cancelled' for row in weekly),1)
+        self.assertEqual(self.send.call_count,2)
+        self.assertIn('late weekly catch-up',self.send.call_args.args[1]['Subject'].lower())
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('A.OL — review sell signal.',content)
+        self.assertIn('B.OL — 2027-01-14 close',content)
+        self.assertIn('Stale or missing: B.OL quote stale.',content)
+
+    def test_delayed_weekly_retry_refreshes_summary_and_late_label(self):
+        sunday=datetime(2027,1,17,10,tzinfo=ZoneInfo('Europe/Oslo')).timestamp()
+        self.report.update(recommendation_changes=[],weekly_summary={
+            'last_close_date':'2027-01-15','candidates':['B.OL — original candidate'],
+            'data_status':'No stale or missing tracked quote data.'})
+        self.send.side_effect=TimeoutError()
+        self.worker.tick(sunday)
+        self.report['weekly_summary'].update(last_close_date='2027-01-18',candidates=[],
+                                            data_status='B.OL quote stale; candidate withheld.')
+        self.send.side_effect=None
+        self.new_worker().tick(sunday+86400)
+        message=self.send.call_args.args[1]
+        self.assertIn('late weekly catch-up',message['Subject'].lower())
+        self.assertNotIn('original candidate',message.get_content())
+        self.assertIn('B.OL quote stale; candidate withheld.',message.get_content())
+        self.assertIn('Last available close at summary refresh: 2027-01-18.',message.get_content())
+        self.assertNotIn('close as of Sunday',message.get_content())
+        self.assertEqual(len([row for row in self.rows() if row['kind']=='weekly']),1)
+        self.new_worker().tick(sunday+86460)
+        self.assertEqual(self.send.call_count,2)
+
+    def test_recent_review_alerts_include_freshness_links_and_deduplicate(self):
+        self.report['review_alerts']=[{'id':'notice-1','kind':'announcement','symbol':'B.OL','priority':95,
+            'title':'B.OL: material update','detail':'Review the issuer notice.','source_asof':NOW,
+            'url':'https://issuer.example/notice'}]
+        self.worker.tick(NOW)
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('B.OL: material update',content)
+        self.assertIn('Urgency: High-priority review.',content)
+        self.assertIn('Source data: 2027-01-15 08:00 UTC.',content)
+        self.assertIn('https://issuer.example/notice',content)
+        self.worker.tick(NOW+60)
+        self.assertEqual(self.send.call_count,1)
+
+    def test_self_hosted_review_email_links_to_analysis(self):
+        self.env.pop('NORTHSTAR_PAGES_ORIGIN')
+        self.env['NORTHSTAR_PUBLIC_ORIGIN']='https://stocks.example'
+        self.worker.tick(NOW)
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('https://stocks.example/recommendations#recommendations',content)
+
+    def test_suggestion_email_discloses_the_actual_fee_assumptions(self):
+        self.plan['buys'][0].update(fee_nok=25,total_nok=925)
+        self.plan['holdings']=[{'symbol':'A.OL','sell_shares':4,'price':100,'quote_asof':NOW,
+                              'fee_nok':12,'net_proceeds_nok':388,'reasons':['Review concentration.']}]
+        self.report['recommendation_changes'].append({'symbol':'A.OL','direction':'sell',
+            'shares':4,'change_id':'sale','change':'New'})
+        self.worker.tick(NOW)
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('Estimated buy fee: 25 NOK',content)
+        self.assertIn('Estimated sell fee: 12 NOK',content)
+        self.assertIn('net proceeds before tax: 388 NOK',content)
+        self.assertNotIn('includes 79 NOK',content)
+        self.assertNotIn('exclude selling costs',content)
+
+    def test_stale_review_data_is_not_sent(self):
+        self.report['recommendation_changes']=[]
+        self.plan['buys']=[]
+        self.report['review_alerts']=[{'id':'old-risk','kind':'risk','title':'Old risk',
+            'detail':'Should be withheld.','source_asof':NOW-8*86400}]
+        self.worker.tick(NOW)
+        self.send.assert_not_called()
+        self.assertEqual(self.rows(),[])
+
+    def test_risk_changes_and_recurrence_send_but_unchanged_warnings_do_not(self):
+        self.report.update(recommendation_changes=[],risk_review_complete=True)
+        self.plan['buys']=[]
+        warning={'id':'var95','kind':'risk','title':'Review historical VaR','detail':'Risk review.',
+                 'source_asof':NOW,'loss_pct':21,'warning_pct':20}
+        self.report['review_alerts']=[warning]
+        self.worker.tick(NOW)
+        self.assertEqual(self.send.call_count,1)
+        warning['loss_pct']=22
+        self.new_worker().tick(NOW+60)
+        self.assertEqual(self.send.call_count,1)
+        warning['loss_pct']=50
+        self.new_worker().tick(NOW+120)
+        self.assertEqual(self.send.call_count,2)
+        self.report['review_alerts']=[]
+        self.new_worker().tick(NOW+180)
+        self.report['review_alerts']=[warning]
+        self.new_worker().tick(NOW+240)
+        self.assertEqual(self.send.call_count,3)
+        warning['warning_pct']=30
+        self.new_worker().tick(NOW+300)
+        self.assertEqual(self.send.call_count,4)
+        # Missing risk evidence must not reset an episode and repeat the same warning.
+        self.report.update(risk_review_complete=False,review_alerts=[])
+        self.new_worker().tick(NOW+360)
+        self.report.update(risk_review_complete=True,review_alerts=[warning])
+        self.new_worker().tick(NOW+420)
+        self.assertEqual(self.send.call_count,4)
+
+    def test_existing_sent_risk_warning_is_retained_when_change_tracking_starts(self):
+        self.report['recommendation_changes']=[]
+        self.plan['buys']=[]
+        warning={'id':'var95','kind':'risk','title':'Historical VaR review',
+                 'detail':'Review risk.','source_asof':NOW}
+        self.report['review_alerts']=[warning]
+        self.worker.tick(NOW)
+        self.assertEqual(self.send.call_count,1)
+        # Existing outbox records predate numerical risk-episode tracking.
+        warning.update(loss_pct=21,warning_pct=20)
+        self.report['risk_review_complete']=True
+        self.new_worker().tick(NOW+60)
+        self.assertEqual(self.send.call_count,1)
+        warning['loss_pct']=50
+        self.new_worker().tick(NOW+120)
+        self.assertEqual(self.send.call_count,2)
+
+    def test_long_term_designation_does_not_hide_or_recast_sale_review(self):
+        self.report['long_term_symbols']=['A.OL']
+        self.plan['holdings']=[{'symbol':'A.OL','sell_shares':4,'price':90,'quote_asof':NOW,
+                                'reasons':['Significant risk remains under review.']}]
+        self.report['recommendation_changes'].append({'symbol':'A.OL','direction':'sell',
+            'shares':4,'change_id':'long-term-risk','change':'New'})
+        self.worker.tick(NOW)
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('review sell of 4 shares',content)
+        self.assertIn('Change: New. Urgency: High-priority holding review.',content)
+        self.assertIn('Long-term designation noted; this is a review prompt and does not direct a sale.',content)
 
     def test_failure_retries_persistently_without_requiring_new_change(self):
         self.send.side_effect = smtplib.SMTPAuthenticationError(535, b'private-password echoed')

@@ -35,6 +35,20 @@ class PortfolioTests(unittest.TestCase):
             self.assertEqual(fetch.call_count, 2)
         self.assertEqual(app.state()['quotes']['KOG']['price'], 310)
         self.assertEqual(app.state()['positions'][0]['symbol'], 'KOG')
+
+    def test_promotion_requires_a_latest_historical_candidate_and_can_restore_baseline(self):
+        app.write_meta('validation_report',{'generated':123,'robustness':{'variants':[
+            {'label':'10 positions / 1 month(s)','max_positions':10,'rebalance_months':1}]}})
+        promoted=app.set_promoted_experiment_model({'max_positions':10})['promoted_model']
+        self.assertEqual(promoted['max_positions'],10)
+        self.assertEqual(promoted['label'],'10-position recommendation cap')
+        self.assertEqual(promoted['validation_generated'],123)
+        with self.assertRaises(ValueError):
+            app.set_promoted_experiment_model({'max_positions':15})
+        with self.assertRaises(ValueError):
+            app.set_promoted_experiment_model({})
+        self.assertEqual(app.read_meta('promoted_experiment_model')['label'],'10-position recommendation cap')
+        self.assertIsNone(app.set_promoted_experiment_model({'max_positions':None})['promoted_model'])
     def test_refresh_failure_preserves_quote(self):
         app.save_position(self.position())
         with app.connect() as db:
@@ -46,3 +60,17 @@ class PortfolioTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class LongTermMigrationTests(unittest.TestCase):
+    def test_existing_positions_migrate_and_designation_round_trips(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(app, 'DB', Path(tmp) / 'old.db'):
+            import sqlite3
+            with sqlite3.connect(app.DB) as db:
+                db.execute('CREATE TABLE positions (symbol TEXT PRIMARY KEY, currency TEXT, shares REAL, cost REAL, thesis TEXT, review TEXT, below REAL, above REAL)')
+                db.execute("INSERT INTO positions VALUES ('OLD.OL','NOK',1,10,'thesis','review',NULL,NULL)")
+            snapshot=app.state()
+            self.assertEqual(snapshot['positions'][0]['long_term'],0)
+            app.save_position({'symbol':'OLD.OL','currency':'NOK','shares':2,'cost':11,'thesis':'updated','review':'review','long_term':True})
+            saved=app.state()['positions'][0]
+            self.assertEqual(saved['shares'],2)
+            self.assertEqual(saved['long_term'],1)
