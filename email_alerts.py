@@ -126,6 +126,8 @@ def sync(db, report, plan, config, now):
             analysis_asof=source_asof
         payload={'title':str(alert.get('title','Review alert'))[:500],
                  'detail':str(alert.get('detail',''))[:2000],
+                 'priority':(max(0,min(100,alert.get('priority',50)))
+                             if isinstance(alert.get('priority',50),(int,float)) and not isinstance(alert.get('priority',50),bool) else 50),
                  'url':source_url,'source_asof':source_asof,'report_generated':analysis_asof}
         active.append(key)
         db.execute('''INSERT INTO email_outbox
@@ -170,14 +172,18 @@ def message(config, events, dashboard_url=None):
             continue
         if event['kind'] == 'withdrawn':
             lines.append(payload['symbol']+': previous '+payload['direction']+' suggestion withdrawn. Do not use the earlier quantity.')
+            lines.append('Change: Withdrawn. Priority: Elevated review.')
         elif event['kind'] == 'review':
             lines.append(payload['title'])
+            urgency='High-priority review' if payload.get('priority',50)>=90 else 'Priority review' if payload.get('priority',50)>=75 else 'Review'
+            lines.append('Urgency: '+urgency+'.')
             lines.append(payload['detail'])
             lines.append('Source data: '+time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(payload['source_asof']))+'.')
             if payload.get('url'):
                 lines.append('Supporting source: '+payload['url'])
         else:
             lines.append(payload['symbol']+': review '+payload['direction']+' of '+str(payload['shares'])+' shares at a quoted '+str(payload['price'])+' NOK.')
+            lines.append('Change: '+payload['change']+'. Urgency: '+('High-priority holding review.' if payload['direction']=='sell' else 'Candidate review.'))
             lines.append('Quote: '+time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(payload['quote_asof']))+'.')
             if payload.get('long_term'):
                 lines.append('Long-term designation noted; this is a review prompt and does not direct a sale.')

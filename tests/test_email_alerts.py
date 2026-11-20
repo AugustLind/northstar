@@ -139,6 +139,7 @@ class DeliveryTests(unittest.TestCase):
         self.worker.tick(NOW)
         content=self.send.call_args.args[1].get_content()
         self.assertIn('B.OL: material update',content)
+        self.assertIn('Urgency: High-priority review.',content)
         self.assertIn('Source data: 2027-01-15 08:00 UTC.',content)
         self.assertIn('https://issuer.example/notice',content)
         self.worker.tick(NOW+60)
@@ -162,6 +163,7 @@ class DeliveryTests(unittest.TestCase):
         self.worker.tick(NOW)
         content=self.send.call_args.args[1].get_content()
         self.assertIn('review sell of 4 shares',content)
+        self.assertIn('Change: New. Urgency: High-priority holding review.',content)
         self.assertIn('Long-term designation noted; this is a review prompt and does not direct a sale.',content)
 
     def test_failure_retries_persistently_without_requiring_new_change(self):
