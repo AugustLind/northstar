@@ -1,5 +1,6 @@
 """Authenticated browser flow against synthetic data using the real application code."""
 from pathlib import Path
+import json
 import sys
 import time
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -17,7 +18,8 @@ def run():
             browser.wait("document.querySelector('#connectionPanel') && !document.querySelector('#connectionPanel').hidden",'sign-in panel')
             browser.fill_key(fixture.key)
             browser.wait("document.querySelector('#connectionPanel').hidden && document.querySelector('#holdings').textContent.includes('SYNTH.OL') && document.querySelector('#accountStatus').textContent==='Connected'",'authenticated account context')
-            browser.wait("!document.querySelector('#buyCandidatesStatus').textContent.includes('Loading eligible candidates')",'buying-candidate API response')
+            browser.evaluate('loadDaily()')
+            browser.wait("document.querySelector('#dailyStatus').textContent.startsWith('Updated') && document.querySelector('#holdingAssessments').textContent.includes('Policy result:') && !document.querySelector('#buyCandidatesStatus').textContent.includes('Loading eligible candidates')",'authenticated holding assessment and buying-candidate response')
             if not browser.evaluate("document.querySelector('#workspaceTitle').textContent==='Overview' && document.querySelector('#overviewMetrics').parentElement.id==='daily' && document.querySelector('[data-tab][aria-current=page]').textContent.trim()==='Overview'"):
                 raise RuntimeError('Overview account/section orientation failed.')
             if width<600 and not browser.evaluate("getComputedStyle(document.querySelector('.workspace-nav')).gridTemplateColumns.split(' ').length===2"):
@@ -26,6 +28,38 @@ def run():
             browser.wait("!document.querySelector('#gettingStarted').hidden && document.querySelectorAll('#setupChecklist li').length===3",'consumer getting-started checklist')
             browser.evaluate("document.querySelector('#startLedger').click()")
             browser.wait("!document.querySelector('#portfolio').hidden && document.querySelector('#activityGroup').open",'guided activity shortcut')
+            if not browser.evaluate("document.querySelector('#holdingAssessments').textContent.includes('SYNTH.OL') && document.querySelector('#holdingAssessments').textContent.includes('Policy result:') && document.querySelector('#holdingAssessments').textContent.includes('Technical evidence does not')"):
+                raise RuntimeError('Holding assessment not loaded: '+str(browser.evaluate("document.querySelector('#dailyStatus').textContent+' | '+document.querySelector('#holdingAssessments').textContent"))+' | daily requests: '+str([r for r in fixture.requests if '/api/daily' in r[1]]))
+            def show_reviews(reviews):
+                payload={'generated':time.time(),'coverage':{'analysed':1,'requested':1},'announcement_status':'available','top3':reviews[:3],'reviews':reviews,'changes':[],'alerts':[],'email':{'configured':False,'enabled':False,'active':False,'pending':0},'method':'Synthetic review fixture'}
+                browser.evaluate('renderDaily('+json.dumps(payload)+')')
+            show_reviews([])
+            if not browser.evaluate("document.querySelector('#dailyTop').textContent.includes('No actionable review') && document.querySelector('#portfolioReviewEntry').textContent.includes('No actionable reviews')"):
+                raise RuntimeError('Successful quiet state was not explicit.')
+            missing={'id':'missing','kind':'data','title':'Refresh SYNTH.OL before sizing trades','detail':'Current portfolio valuation is incomplete.'}
+            show_reviews([missing])
+            if not browser.evaluate("document.querySelector('#dailyTop').innerHTML.includes('data-review-action')"):
+                raise RuntimeError('Missing evidence action was not rendered: '+str(browser.evaluate("document.querySelector('#dailyTop').innerHTML")))
+            stale={'id':'stale','kind':'data','title':'Refresh the market report','detail':'Current signal evidence is unavailable.'}
+            show_reviews([stale])
+            if not browser.evaluate("document.querySelector('#portfolioReviewEntry').textContent.includes('Review research status')"):
+                raise RuntimeError('Stale report did not prioritize research status.')
+            ledger={'id':'ledger','kind':'ledger','title':'Reconcile holdings and cash','detail':'Verify holdings and cash before using the transaction ledger.'}
+            show_reviews([ledger])
+            if not browser.evaluate("document.querySelector('#dailyTop [data-review-action=ledger]') && document.querySelector('#portfolioReviewEntry').textContent.includes('Fix reconciliation')"):
+                raise RuntimeError('Reconciliation blocker was not prominent.')
+            browser.evaluate("document.querySelector('#dailyTop [data-review-action=ledger]').focus()")
+            if width<600:
+                browser.call('Input.dispatchKeyEvent',{'type':'rawKeyDown','key':'Enter','code':'Enter','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
+                browser.call('Input.dispatchKeyEvent',{'type':'char','key':'Enter','code':'Enter','text':'\\r','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
+                browser.call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Enter','code':'Enter','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
+            else:
+                browser.evaluate("document.querySelector('#dailyTop [data-review-action=ledger]').click()")
+            browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#activityGroup').open",'review action opens reconciliation')
+            show_reviews([{'id':'sale','kind':'holding','title':'SYNTH.OL: review 1 share for sale','detail':'Technical sale review. Gross proceeds; sale fee unknown and tax excluded.','symbol':'SYNTH.OL'}])
+            browser.evaluate("document.querySelector('#portfolio').hidden=true;document.querySelector('#daily').hidden=false")
+            browser.evaluate("document.querySelector('#dailyTop [data-review-action=holding]').click()")
+            browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#holdingAssessments').textContent.includes('SYNTH.OL')",'holding review navigation')
             browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
             browser.evaluate("document.querySelector('[data-tab=\"recommendations\"]').focus()")
             if not browser.evaluate("document.activeElement===document.querySelector('[data-tab=\"recommendations\"]')"):

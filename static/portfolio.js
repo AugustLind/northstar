@@ -5,7 +5,8 @@ function render() {
   let total = 0,
     priced = 0;
   const values = {},
-    alerts = [];
+    alerts = [],
+    assessments = [];
   const held = positions.filter((p) => p.shares > 0);
   for (const p of positions) {
     const q = quotes[p.symbol];
@@ -103,6 +104,13 @@ function render() {
           )}% of tracked holdings plus cash, above your ${limit}% position limit.`
         );
     }
+    assessments.push(
+      `<article class="card" data-assessment-symbol="${esc(p.symbol)}"><h3>${esc(p.symbol)} · ${p.shares > 0 ? 'Holding' : 'Watchlist'}</h3>${
+        items.length
+          ? items.map((t) => `<p>${esc(t)}</p>`).join('')
+          : `<p>${p.shares > 0 ? 'No current price or concentration prompts are triggered by the available local rules.' : 'No shares are held; this watchlist entry has no holding assessment.'}</p>`
+      }<p><b>Your thesis:</b> ${esc(p.thesis || 'No thesis recorded.')}</p><p><b>Reconsider when:</b> ${esc(p.review || 'No conditions recorded.')}</p><p class="muted">Limitations: price and concentration prompts are rule based, may be unavailable when data is stale, and do not assess whether a business is suitable or tell you to trade. Fees and taxes are not included in these prompts.</p><a target="_blank" rel="noopener noreferrer" href="https://finance.yahoo.com/quote/${encodeURIComponent(p.symbol)}/news/">Research company news ↗</a><p class="muted">External research link; news is not analysed by this app.</p></article>`
+    );
     if (items.length) {
       alerts.push(
         `<article class="card"><h2>${esc(p.symbol)}</h2>${items
@@ -121,6 +129,35 @@ function render() {
   $('#alerts').innerHTML =
     alerts.join('') ||
     '<article class="card">No rules triggered. This does not establish that a stock is a good investment. Review company reports and your thesis regularly.</article>';
+  $('#holdingAssessments').innerHTML = assessments.join('') || '<p>No holdings or watchlist entries are recorded.</p>';
+}
+function renderHoldingAssessments(assessments) {
+  if (!$('#holdingAssessments') || !Array.isArray(assessments)) return;
+  const bySymbol = new Map(assessments.map((a) => [a.symbol, a]));
+  $('#holdingAssessments').innerHTML = state.positions.map((p) => {
+    const symbol = p.currency === 'NOK' && !p.symbol.includes('.') ? p.symbol + '.OL' : p.symbol;
+    const a = p.shares > 0 ? bySymbol.get(symbol) : null;
+    if (!p.shares) return `<article class="card"><h3>${esc(p.symbol)} · Watchlist</h3><p>No shares are held, so there is no holding assessment.</p><p><b>Your thesis:</b> ${esc(p.thesis || 'No thesis recorded.')}</p><p><b>Reconsider when:</b> ${esc(p.review || 'No conditions recorded.')}</p></article>`;
+    const category = a && a.sale_review
+      ? a.sale_review.technical ? 'Technical sell review' : 'Portfolio-limit sale scenario'
+      : a && a.action === 'Hold / monitor'
+      ? 'Existing technical hold assessment'
+      : a && a.action
+      ? 'Existing technical assessment'
+      : 'Assessment unavailable';
+    const reasons = a && a.reasons.length
+      ? '<ul>' + a.reasons.map((reason) => '<li>' + esc(reason) + '</li>').join('') + '</ul>'
+      : '<p>No policy reasons are available.</p>';
+    const freshness = !a || a.status === 'unavailable'
+      ? '<p role="status">No matching current assessment was returned. Missing evidence is not a hold verdict.</p>'
+      : a.status === 'stale'
+      ? '<p role="status">This assessment is based on a stale report and needs fresh evidence before use.</p>'
+      : '<p class="muted">Market report assessment · ' + esc(a.source_asof ? new Date(a.source_asof * 1000).toLocaleString() : 'source timestamp unavailable') + '</p>';
+    const sale = a && a.sale_review
+      ? '<p><b>Scenario:</b> Review ' + esc(a.sale_review.shares) + ' shares. ' + esc(a.sale_review.reasons.join(' ')) + '</p><p>' + (a.sale_review.fee_nok == null ? 'Sale fee unknown; gross estimate only.' : 'Entered sale fee: ' + esc(a.sale_review.fee_nok) + ' NOK.') + ' Tax is excluded. No trade is placed.</p>'
+      : '';
+    return `<article class="card" data-assessment-symbol="${esc(symbol)}"><h3>${esc(p.symbol)} · ${category}</h3>${a && a.action ? '<p><b>Policy result:</b> ' + esc(a.action) + (a.status === 'stale' ? ' · stale' : '') + '</p>' : ''}${freshness}${reasons}${sale}<p><b>Your thesis:</b> ${esc(p.thesis || 'No thesis recorded.')}</p><p><b>Reconsider when:</b> ${esc(p.review || 'No conditions recorded.')}</p><p class="muted">Technical evidence does not establish business value or suitability. A hold label is the existing screen result, not an investment verdict. Fees and taxes are excluded unless a fee is explicitly shown above.</p></article>`;
+  }).join('') || '<p>No holdings or watchlist entries are recorded.</p>';
 }
 async function load() {
   state = await api('state');

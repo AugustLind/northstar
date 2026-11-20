@@ -15,7 +15,7 @@ const importFixture={token:'preview-token',expires:now+900,valid:1,rows:[{id:2,n
 const importSelections=[];
 const planFixture={generated:now,report_generated:now,buy_budget_nok:1000,spent_nok:979,buy_fees_nok:79,unallocated_budget_nok:21,buys:[{symbol:'EXA.OL',name:'<untrusted>',buy_shares:9,price:100,quote_asof:now,total_nok:979,fee_nok:79,fee_pct:79/900*100,reason:'Shared budget'}],holdings:[{symbol:'HELD.OL',owned:10,sell_shares:4,remaining_shares:6,gross_proceeds_nok:400,reasons:['Position limit'],price:100,quote_asof:now}],blocked_buys:[],warnings:[],method:'Rule-based scenario; selling fees and tax unmodelled'};
 const emailFixture={configured:true,enabled:true,active:true,pending:0,sent:1,last_sent:now,error:null};
-const dailyFixture={generated:now,email:emailFixture,coverage:{analysed:1,requested:2},announcement_status:'available',top3:[{id:'review',kind:'holding',title:'Review <untrusted>',detail:'Inspect cash and size',symbol:'BOUV.OL',url:'javascript:alert(1)'}],changes:[{symbol:'BOUV.OL',change:'New',direction:'buy',shares:9}],alerts:[{id:'a',title:'Review',detail:'Test',first_seen:now,read:false}],method:'Dated review rules only'};
+const dailyFixture={generated:now,email:emailFixture,coverage:{analysed:1,requested:2},announcement_status:'available',top3:[{id:'review',kind:'holding',title:'Review <untrusted>',detail:'Inspect cash and size',symbol:'BOUV.OL',url:'javascript:alert(1)'}],reviews:[{id:'review',kind:'holding',title:'Review <untrusted>',detail:'Inspect cash and size',symbol:'BOUV.OL',url:'javascript:alert(1)'}],changes:[{symbol:'BOUV.OL',change:'New',direction:'buy',shares:9}],alerts:[{id:'a',title:'Review',detail:'Test',first_seen:now,read:false}],method:'Dated review rules only'};
 let notificationRequests=0,notificationCount=0;
 class FakeNotification{constructor(){notificationCount++;}static async requestPermission(){notificationRequests++;FakeNotification.permission='granted';return 'granted';}}FakeNotification.permission='default';
 const browserStorage=new Map([['northstar-key','test-access-key']]);
@@ -160,6 +160,8 @@ setImmediate(async()=>{
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Shared budget'));
  await vm.runInContext('loadDaily()',context);
  assert(nodes['#dailyTop'].innerHTML.includes('Review &lt;untrusted&gt;'));
+ assert(nodes['#dailyTop'].innerHTML.includes('data-review-action="holding"'));
+ assert(nodes['#portfolioReviewEntry'].innerHTML.includes('Review portfolio'));
  assert(!nodes['#dailyTop'].innerHTML.includes('javascript:'));
  const candidate=(i)=>({symbol:'CAND'+i+'.OL',name:'Candidate <'+i+'>',rank:i,buy_shares:2,total_nok:279,portfolio_reason:'Fits Energy limits <safe>'});
  for(let count=0;count<=3;count++){
@@ -192,6 +194,25 @@ setImmediate(async()=>{
  await nodes['#pauseEmail'].onclick();
  assert(nodes['#emailStatus'].textContent.includes('paused'));
  assert(nodes['#testEmail'].disabled);
+ vm.runInContext('renderDaily('+JSON.stringify({...dailyFixture,top3:[],reviews:[]})+')',context);
+ assert(nodes['#dailyTop'].innerHTML.includes('No actionable review'));
+ assert(nodes['#portfolioReviewEntry'].innerHTML.includes('No actionable reviews'));
+ const missingReview={id:'missing',kind:'data',title:'Refresh SYNTH.OL before sizing trades',detail:'Valuation is incomplete.'};
+ vm.runInContext('renderDaily('+JSON.stringify({...dailyFixture,top3:[missingReview],reviews:[missingReview]})+')',context);
+ assert(nodes['#portfolioReviewEntry'].innerHTML.includes('Refresh market data'));
+ const staleReview={id:'stale',kind:'data',title:'Refresh the market report',detail:'Evidence is stale.'};
+ vm.runInContext('renderDaily('+JSON.stringify({...dailyFixture,top3:[staleReview],reviews:[staleReview]})+')',context);
+ assert(nodes['#portfolioReviewEntry'].innerHTML.includes('Review research status'));
+ const ledgerReview={id:'ledger',kind:'ledger',title:'Reconcile holdings and cash',detail:'Verify ledger.'};
+ vm.runInContext('renderDaily('+JSON.stringify({...dailyFixture,top3:[ledgerReview],reviews:[ledgerReview]})+')',context);
+ assert(nodes['#portfolioReviewEntry'].innerHTML.includes('Fix reconciliation'));
+ vm.runInContext('renderDaily('+JSON.stringify(dailyFixture)+')',context);
+ const onlineFetch=context.fetch;
+ context.fetch=async()=>{throw Error('fixture disconnected')};
+ await vm.runInContext('loadDaily()',context);
+ assert(nodes['#dailyStatus'].textContent.includes('Reviews unavailable'));
+ assert(nodes['#portfolioReviewEntry'].textContent.includes('unavailable until the review request succeeds'));
+ context.fetch=onlineFetch;
  await nodes['#enableEmail'].onclick();
  assert(nodes['#emailStatus'].textContent.includes('enabled'));
  await nodes['#testEmail'].onclick();

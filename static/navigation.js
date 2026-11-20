@@ -53,6 +53,7 @@ function openWorkspace(target, updateHistory = true) {
     if (typeof loadSystemStatus === 'function') loadSystemStatus();
   }
   if (page === 'portfolio') {
+    if (typeof loadDaily === 'function') loadDaily();
     if (typeof loadAccountPerformance === 'function') loadAccountPerformance();
     if (typeof loadPortfolioRisk === 'function') loadPortfolioRisk();
     if (typeof loadPortfolioFit === 'function') loadPortfolioFit();

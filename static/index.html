@@ -99,7 +99,9 @@
         <details class="card">
           <summary>How to use Northstar</summary>
           <p>
-            <b>Overview:</b> review changes and check whether data is current. <b>Research:</b> explore
+            <b>Overview:</b> start with Needs attention to fix freshness or reconciliation blockers, then
+            open the linked holding or evidence review. A quiet state appears only after a successful
+            review load and is not a buy or hold recommendation. <b>Research:</b> explore
             companies and the reasons behind a score. <b>Portfolio:</b> record holdings, cash and
             transactions. <b>Strategy lab:</b> inspect experiments and saved forward results.
           </p>
@@ -150,6 +152,7 @@
             </details>
           </details>
         </section>
+        <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
         <div id="dailyTop"></div>
         <section class="card">
           <h2>What changed since the previous scan?</h2>
@@ -721,6 +724,11 @@
           *Price return in the stock’s currency. Excludes dividends, fees, tax and currency effects.
           Cost basis is entered manually.
         </p>
+        <section class="card" id="portfolioAssessments">
+          <h2>Holding assessments</h2>
+          <p class="muted">Existing technical policy results, price and concentration prompts, saved thesis notes, and sale review scenarios. These do not replace your decision policy or execute trades.</p>
+          <div id="holdingAssessments"></div>
+        </section>
         <section class="card" id="accountPerformance">
           <div class="sectionhead">
             <div>
@@ -1284,8 +1292,8 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
       <script src="./app.js?v=12fe290aa44b"></script>
-      <script src="./portfolio.js?v=56c52e71e214"></script>
-      <script src="./navigation.js?v=324aa4928c88"></script>
+      <script src="./portfolio.js?v=7e4ee7663f8c"></script>
+      <script src="./navigation.js?v=0e4df80195ed"></script>
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=098d62b0f747"></script>
@@ -1293,7 +1301,7 @@
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
       <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
-      <script src="./daily.js?v=a9394db02573"></script>
+      <script src="./daily.js?v=b5297f793f12"></script>
       <script src="./advice.js?v=14f5b876ee6a"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
