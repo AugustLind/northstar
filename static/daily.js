@@ -49,6 +49,51 @@ async function loadOverviewAccount() {
 function safeDailyLink(url) {
   return typeof officialNoticeUrl === 'function' ? officialNoticeUrl(url) : '';
 }
+function reviewPresentationFor(review) {
+  if (review.kind === 'data') {
+    if (review.title === 'Check announcement coverage')
+      return {
+        category: 'ISSUER COVERAGE WARNING',
+        action: 'announcements',
+        label: 'Check announcement coverage',
+      };
+    if (review.title === 'Refresh the market report')
+      return {
+        category: 'SIGNAL EVIDENCE UNCERTAINTY',
+        action: 'research',
+        label: 'Review research status',
+      };
+    if (/^Refresh .* before sizing trades/.test(review.title))
+      return {
+        category: 'VALUATION DATA WARNING',
+        action: 'freshness',
+        label: 'Refresh market data',
+      };
+    return { category: 'DATA WARNING', action: 'freshness', label: 'Refresh market data' };
+  }
+  const presentation = {
+    holding: {
+      category: review.review_type || 'technical sell review',
+      action: 'holding',
+      label: 'Review holding',
+    },
+    company: {
+      category: 'annual accounting evidence',
+      action: 'stock',
+      label: 'Review annual evidence',
+    },
+    ledger: {
+      category: 'ledger / reconciliation blocker',
+      action: 'ledger',
+      label: 'Open reconciliation',
+    },
+    announcement: { category: 'issuer notice', action: 'stock', label: 'Review company' },
+    calendar: { category: 'issuer date', action: 'stock', label: 'Review company' },
+    purchase: { category: 'purchase plan review', action: 'stock', label: 'Review company' },
+    change: { category: 'changed or withdrawn evidence', action: 'stock', label: 'Review company' },
+  }[review.kind] || { category: 'review', action: 'stock', label: 'Review company' };
+  return { ...presentation, category: presentation.category.toUpperCase() };
+}
 function renderEmailStatus(v) {
   if (!v) return;
   if (dailyView) dailyView.email = v;
@@ -74,6 +119,8 @@ function renderEmailStatus(v) {
 }
 function renderDaily(v) {
   dailyView = v;
+  if (typeof renderHoldingAssessments === 'function')
+    renderHoldingAssessments(v.holding_assessments);
   renderBuyCandidates(v);
   $('#dailyStatus').textContent =
     'Updated ' +
@@ -85,14 +132,28 @@ function renderDaily(v) {
     ' stocks analysed · Announcement feed ' +
     v.announcement_status +
     '.';
-  $('#dailyTop').innerHTML = v.top3.length
-    ? v.top3
-        .map(
-          (r, i) =>
+  const visibleReviews = Array.from(
+    new Map(
+      v.top3
+        .concat(
+          v.reviews.filter(
+            (r) =>
+              r.kind === 'ledger' ||
+              /^Refresh .* before sizing trades|^Refresh the market report/.test(r.title)
+          )
+        )
+        .map((r) => [r.id, r])
+    ).values()
+  );
+  $('#dailyTop').innerHTML = visibleReviews.length
+    ? visibleReviews
+        .map((r, i) => {
+          const presentation = reviewPresentationFor(r);
+          return (
             '<article class="card"><p class="eyebrow">REVIEW ' +
             (i + 1) +
             ' · ' +
-            esc(r.kind) +
+            esc(presentation.category) +
             '</p><h2>' +
             esc(r.title) +
             '</h2><p>' +
@@ -103,15 +164,60 @@ function renderDaily(v) {
                 safeDailyLink(r.url) +
                 '">Read issuer source ↗</a>'
               : '') +
-            (r.symbol
-              ? '<button type="button" data-daily-stock="' +
-                esc(r.symbol) +
-                '">Explore company</button>'
-              : '') +
+            (presentation.action === 'stock'
+              ? r.symbol
+                ? '<button type="button" data-daily-stock="' +
+                  esc(r.symbol) +
+                  '">' +
+                  esc(presentation.label) +
+                  '</button>'
+                : ''
+              : '<button type="button" data-review-action="' +
+                presentation.action +
+                '"' +
+                (presentation.action === 'holding'
+                  ? ' data-review-symbol="' + esc(r.symbol) + '"'
+                  : '') +
+                '>' +
+                esc(presentation.label) +
+                '</button>') +
             '</article>'
-        )
+          );
+        })
         .join('')
-    : '<p>No priority review was generated. Check coverage before treating an empty list as reassurance.</p>';
+    : '<p>No actionable review is currently generated. This is based on the successfully loaded review rules and available evidence; it is not a recommendation to buy or hold.</p>';
+  const blocker =
+    v.reviews.find((r) => r.kind === 'ledger') ||
+    v.reviews.find(
+      (r) =>
+        r.kind === 'data' &&
+        /^Refresh .* before sizing trades|^Refresh the market report/.test(r.title)
+    );
+  const blockerAction = !blocker
+    ? 'portfolio'
+    : blocker.kind === 'ledger'
+    ? 'ledger'
+    : blocker.title === 'Refresh the market report'
+    ? 'research'
+    : 'freshness';
+  $('#portfolioReviewEntry').innerHTML =
+    '<h2>Needs attention</h2><p>' +
+    (blocker
+      ? 'Resolve the current data or reconciliation blocker before relying on portfolio sizing or account results.'
+      : v.reviews.length
+      ? 'Review the prioritized items and their linked evidence. Each prompt has a specific evidence type.'
+      : 'No actionable reviews are available after a successful load. Check coverage above before relying on this quiet state.') +
+    '</p><button type="button" data-review-action="' +
+    blockerAction +
+    '">' +
+    (blockerAction === 'ledger'
+      ? 'Fix reconciliation'
+      : blockerAction === 'research'
+      ? 'Review research status'
+      : blockerAction === 'freshness'
+      ? 'Refresh market data'
+      : 'Review portfolio') +
+    '</button>';
   $('#dailyChanges').innerHTML = v.changes.length
     ? '<div class="tablewrap"><table><thead><tr><th>Stock</th><th>Change</th><th>Direction / shares</th></tr></thead><tbody>' +
       v.changes
@@ -230,7 +336,11 @@ async function loadDaily() {
     if (token === dailyRequest) renderDaily(v);
   } catch (e) {
     if (token === dailyRequest) {
-      $('#dailyStatus').textContent = e.message;
+      $('#dailyStatus').textContent = 'Reviews unavailable: ' + e.message;
+      $('#dailyTop').textContent =
+        'Review data is unavailable. Check the connection and try again.';
+      $('#portfolioReviewEntry').textContent =
+        'Needs attention is unavailable until the review request succeeds.';
       $('#buyCandidates').innerHTML = '';
       $('#buyCandidatesStatus').textContent = 'Buying candidates could not be loaded. ' + e.message;
       $('#buyCandidatesRecovery').textContent = 'Retry';
@@ -319,11 +429,35 @@ $('#testEmail').onclick = async () => {
     if (dailyView && dailyView.email) renderEmailStatus(dailyView.email);
   }
 };
+function openReviewAction(action, symbol) {
+  if (action === 'ledger') openWorkspace('activity');
+  else if (action === 'announcements') openWorkspace('announcements');
+  else if (action === 'freshness') {
+    openWorkspace('portfolio');
+    $('#refresh').click();
+  } else if (action === 'holding') {
+    openWorkspace('portfolio');
+    const target = Array.from(document.querySelectorAll('[data-assessment-symbol]')).find(
+      (node) => node.dataset.assessmentSymbol === symbol
+    );
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (action === 'research') openWorkspace('recommendations');
+  else openWorkspace('portfolio');
+}
 $('#dailyTop').onclick = (e) => {
+  const action = e.target.dataset.reviewAction;
+  if (action) {
+    openReviewAction(action, e.target.dataset.reviewSymbol || '');
+    return;
+  }
   const symbol = e.target.dataset.dailyStock;
   if (!symbol) return;
   document.querySelector('[data-tab="recommendations"]').click();
   if (typeof selectStock === 'function') selectStock(symbol, true);
+};
+$('#portfolioReviewEntry').onclick = (e) => {
+  const action = e.target.dataset.reviewAction;
+  if (action) openReviewAction(action, e.target.dataset.reviewSymbol || '');
 };
 $('#buyCandidates').onclick = (e) => {
   const symbol = e.target.dataset.candidateStock;
