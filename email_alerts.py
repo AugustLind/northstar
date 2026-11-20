@@ -65,6 +65,17 @@ def event_id(target, symbol, direction, change_id, kind):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def dashboard_url(env=None, workspace='recommendations'):
+    env=os.environ if env is None else env
+    pages=env.get('NORTHSTAR_PAGES_ORIGIN','').rstrip('/')
+    if pages.startswith('https://'):
+        return pages+'/northstar/#'+workspace
+    public=env.get('NORTHSTAR_PUBLIC_ORIGIN','').rstrip('/')
+    if public.startswith('https://'):
+        return public+'/recommendations#'+workspace
+    return None
+
+
 def sync(db, report, plan, config, now):
     """Recheck the live plan before queuing or retrying an old suggestion."""
     schema(db)
@@ -336,8 +347,7 @@ class Worker:
                         db.execute("UPDATE email_outbox SET status='cancelled',updated=? WHERE id=?", (now, event['id']))
                 return
             try:
-                origin = (os.environ if self.env is None else self.env).get('NORTHSTAR_PAGES_ORIGIN', '')
-                dashboard = origin+'/northstar/#recommendations' if origin.startswith('https://') else None
+                dashboard = dashboard_url(os.environ if self.env is None else self.env)
                 deliver(config, message(config, events, dashboard))
             except Exception as error:
                 failure = error_message(error)

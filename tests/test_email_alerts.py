@@ -48,6 +48,13 @@ class EmailPlanTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_dashboard_link_uses_pages_or_self_hosted_https_origin(self):
+        self.assertEqual(mail.dashboard_url({'NORTHSTAR_PAGES_ORIGIN':'https://owner.github.io'}),
+                         'https://owner.github.io/northstar/#recommendations')
+        self.assertEqual(mail.dashboard_url({'NORTHSTAR_PUBLIC_ORIGIN':'https://stocks.example'},'portfolio'),
+                         'https://stocks.example/recommendations#portfolio')
+        self.assertIsNone(mail.dashboard_url({'NORTHSTAR_PUBLIC_ORIGIN':'http://localhost:8000'}))
+
     def test_disabled_and_incomplete_settings_cannot_send(self):
         config = mail.configuration({})
         self.assertFalse(config['enabled'])
@@ -144,6 +151,13 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('https://issuer.example/notice',content)
         self.worker.tick(NOW+60)
         self.assertEqual(self.send.call_count,1)
+
+    def test_self_hosted_review_email_links_to_analysis(self):
+        self.env.pop('NORTHSTAR_PAGES_ORIGIN')
+        self.env['NORTHSTAR_PUBLIC_ORIGIN']='https://stocks.example'
+        self.worker.tick(NOW)
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('https://stocks.example/recommendations#recommendations',content)
 
     def test_stale_review_data_is_not_sent(self):
         self.report['recommendation_changes']=[]

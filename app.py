@@ -540,8 +540,7 @@ def email_plan():
                                 'Observed or hypothetical loss of '+str(round(warning['loss_pct'],1))+
                                 '% meets your '+str(risk['risk_warning_pct'])+'% warning level. Historical measures describe past data; scenario losses are hypothetical. This is not a guaranteed loss limit or a trade instruction.',
                        'kind':'risk','symbol':None,
-                       'url':((os.environ.get('NORTHSTAR_PAGES_ORIGIN','').rstrip('/')+'/northstar/#portfolio')
-                              if os.environ.get('NORTHSTAR_PAGES_ORIGIN','').startswith('https://') else None),
+                       'url':email_alerts.dashboard_url(workspace='portfolio'),
                        'source_asof':risk_source,'observed':now})
     long_term_symbols=[portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
                        if p['shares']>0 and p.get('long_term',False)]
