@@ -295,6 +295,12 @@ contributions, correlation matrix, concentration and equity/FX/sector shocks.
   classifications. Scenario controls never update holdings, cash or trade records.
 - Benchmark beta/correlation require 60 matching portfolio/OSEBX return intervals.
   Neither betas nor shocks are predicted future losses or diversification guarantees.
+- The adjustable risk warning level defaults to 20%. It flags historical 95% daily VaR,
+  worst-5% tail loss, proxy drawdown, portfolio shock losses, and long-term holding
+  shock losses at or above that percentage. These are review prompts, not guaranteed
+  loss limits; long-term designation never hides risk or removes a holding from review.
+  Long-term status is stored per position. The one-time schema migration assigns existing
+  rows `false`; later holdings imports update quantities and basis while preserving it.
 
 The covariance relationship is described in the [CFA Institute portfolio risk
 reading](https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/portfolio-risk-return-part-1).

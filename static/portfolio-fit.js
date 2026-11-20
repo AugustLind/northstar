@@ -86,12 +86,13 @@ function renderPortfolioFit(v) {
       'reserve_pct',
       'max_buy_fee_pct',
       'review_sell_pct',
+      'risk_warning_pct',
       'confirm_sessions',
       'signal_wait_hours',
       'trade_cooldown_days',
       'min_change_pct',
     ])
-      f.elements[k].value = v.profile[k];
+      f.elements[k].value = v.profile[k] == null && k === 'risk_warning_pct' ? 20 : v.profile[k];
     f.elements.sell_fee_nok.value = v.profile.sell_fee_nok == null ? '' : v.profile.sell_fee_nok;
     const symbols = Array.from(
       new Set(
@@ -197,6 +198,7 @@ $('#fitPreferences').onsubmit = async (e) => {
     'reserve_pct',
     'max_buy_fee_pct',
     'review_sell_pct',
+    'risk_warning_pct',
     'confirm_sessions',
     'signal_wait_hours',
     'trade_cooldown_days',

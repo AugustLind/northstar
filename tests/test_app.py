@@ -46,3 +46,17 @@ class PortfolioTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class LongTermMigrationTests(unittest.TestCase):
+    def test_existing_positions_migrate_and_designation_round_trips(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(app, 'DB', Path(tmp) / 'old.db'):
+            import sqlite3
+            with sqlite3.connect(app.DB) as db:
+                db.execute('CREATE TABLE positions (symbol TEXT PRIMARY KEY, currency TEXT, shares REAL, cost REAL, thesis TEXT, review TEXT, below REAL, above REAL)')
+                db.execute("INSERT INTO positions VALUES ('OLD.OL','NOK',1,10,'thesis','review',NULL,NULL)")
+            snapshot=app.state()
+            self.assertEqual(snapshot['positions'][0]['long_term'],0)
+            app.save_position({'symbol':'OLD.OL','currency':'NOK','shares':2,'cost':11,'thesis':'updated','review':'review','long_term':True})
+            saved=app.state()['positions'][0]
+            self.assertEqual(saved['shares'],2)
+            self.assertEqual(saved['long_term'],1)

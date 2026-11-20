@@ -153,7 +153,7 @@ def apply(db,items,selections,ledger,profile,positions):
         if row['type'] not in ('buy','sell','split'):continue
         matches=[p for p in working.values() if p['currency']=='NOK' and hi.oslo_symbol(p['symbol'])==row['symbol']]
         if len(matches)>1:raise ValueError('Resolve duplicate bare/.OL holdings before applying transactions.')
-        p=matches[0] if matches else {'symbol':row['symbol'],'currency':'NOK','shares':0.,'cost':0.,'thesis':'','review':'','below':None,'above':None}
+        p=matches[0] if matches else {'symbol':row['symbol'],'currency':'NOK','shares':0.,'cost':0.,'thesis':'','review':'','below':None,'above':None,'long_term':0}
         if row['type']=='split':
             ratio=row.get('split_ratio')
             if not isinstance(ratio,(int,float)) or not math.isfinite(ratio) or ratio<=0:raise ValueError('Verified split ratio required.')
@@ -169,7 +169,10 @@ def apply(db,items,selections,ledger,profile,positions):
     for row in selected:
         db.execute('INSERT INTO ledger_events VALUES (?,?,?)',(row['uid'],row['date'],json.dumps(row,allow_nan=False)))
     for p in working.values():
-        db.execute('INSERT OR REPLACE INTO positions VALUES (?,?,?,?,?,?,?,?)',tuple(p[k] for k in ('symbol','currency','shares','cost','thesis','review','below','above')))
+        db.execute('''INSERT OR REPLACE INTO positions
+                      (symbol,currency,shares,cost,thesis,review,below,above,long_term)
+                      VALUES (?,?,?,?,?,?,?,?,?)''',tuple(p.get(k,0 if k=='long_term' else None) for k in
+                      ('symbol','currency','shares','cost','thesis','review','below','above','long_term')))
     profile={**profile,'cash_nok':max(0,cash)}
     ledger={**ledger,'fingerprint':fingerprint(list(working.values()),profile['cash_nok']),'updated':time_now()}
     return {'imported':len(selected),'duplicates':len(selections)-len(selected),'profile':profile,'ledger':ledger,'last_trades':last_trades}
