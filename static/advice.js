@@ -174,7 +174,7 @@ function renderAdvice() {
       : filter === 'sell'
       ? c.held && /selling|sell threshold|taking profits/.test(c.action)
       : filter === 'top20'
-      ? c.rank_eligible && c.rank >= 1 && c.rank <= 20
+      ? c.rank_eligible && c.rank >= 1 && c.rank <= (r.recommendation_limit || 20)
       : true
   );
   filtered.sort(
@@ -189,7 +189,7 @@ function renderAdvice() {
     eligible.length
   } pass the entry policy · ${
     cards.filter((c) => c.score === null).length
-  } without sufficient data. Top-20 uses the complete buy screen; owned candidates may qualify for additions. Portfolio limits and signal confirmation still apply.`;
+  } without sufficient data. Primary recommendation cap: ${r.recommendation_limit || 20}; owned candidates may qualify for additions. Portfolio limits and signal confirmation still apply.`;
   $('#adviceCards').innerHTML = filtered.length
     ? '<div class="tablewrap"><table class="ranktable"><thead><tr><th>Entry rank</th><th>Stock</th><th>Overall</th><th>Trend</th><th>Momentum</th><th>Risk</th><th>Timing</th><th>Liquidity</th><th>Annual quality</th><th>Purchase fee drag*</th><th>Action</th><th></th></tr></thead><tbody>' +
       filtered

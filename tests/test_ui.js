@@ -2,7 +2,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const nodes={};
 const strategyLabHtml=fs.readFileSync('static/index.html','utf8');
-for(const disclosure of ['experimental decision rules','fixed 20-position monthly baseline','including poor results','never changes Research rankings, primary recommendations, or holdings','cannot establish point-in-time or delisted-stock performance'])assert(strategyLabHtml.includes(disclosure));
+for(const disclosure of ['experimental decision rules','fixed 20-position monthly baseline','including poor results','explicit investor promotion applies a position count to primary','cannot establish point-in-time or delisted-stock performance'])assert(strategyLabHtml.includes(disclosure));
 function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
 const form=element();for(const name of ['universe','interval_minutes','model','min_turnover_nok','llm_enabled'])form.elements[name]=element();nodes['#researchSettings']=form;
 nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rankBy']=element();nodes['#rankBy'].value='composite';

@@ -177,8 +177,10 @@ def capture(db, report, now=None):
     db.execute('CREATE TABLE IF NOT EXISTS paper_snapshots (generated REAL PRIMARY KEY, captured REAL NOT NULL, payload TEXT NOT NULL)')
     import json
     cards = {c['symbol']:c for c in report.get('cards',[])}
+    # Keep the same forward observations available for each historical candidate
+    # position count. This does not change the baseline recommendation cohort.
     payload = {'version':VERSION,'policy_version':report.get('policy_version'),'symbols':[{'symbol':s,'rank':cards[s].get('rank'),'action':cards[s].get('action'),
-               'composite':cards[s].get('composite'),'quote_asof':cards[s].get('asof')} for s in report.get('top20',[]) if s in cards]}
+               'composite':cards[s].get('composite'),'quote_asof':cards[s].get('asof')} for s in report.get('paper_top20',report.get('top20',[])) if s in cards]}
     budget=(report.get('portfolio_limits') or {}).get('purchase_nok',0)
     payload['share_plan_audit']={'buys':(report.get('trade_plan') or {}).get('buys',[]),'sales':(report.get('trade_plan') or {}).get('holdings',[])}
     payload.update(fee_model=FEE_MODEL,buy_fee_nok=BUY_FEE_NOK,
@@ -233,7 +235,15 @@ def paper_view(db, quotes, now=None):
                             'asof':h[-1]['time'] if h else None,'shares':shares,'budget_nok':budget,
                             'return_pct':gain})
         measured=[r['return_pct'] for r in results if r['return_pct'] is not None]
+        candidates=[]
+        for count in (10,20):
+            subset=results[:count]
+            values=[r['return_pct'] for r in subset if r['return_pct'] is not None]
+            candidates.append({'max_positions':count,'measured':len(values),
+                'return_pct':sum(values)/len(values) if values and len(values)==len(subset) else None,
+                'benchmark':paper_benchmark(subset,quotes)})
         out.append({'captured':row['captured'],'generated':row['generated'],'symbols':results,
+                    'candidate_results':candidates,
                     'policy_version':payload.get('policy_version'),'benchmark':paper_benchmark(results,quotes),
                     'fee_model':payload.get('fee_model','legacy-percentage'),
                     'cost_note':('79 NOK per purchase; selling fees unmodelled; budget '+str(payload['order_budget_nok'])+' NOK per stock, including fees; whole shares and residual cash.' if payload.get('fee_model')==FEE_MODEL else 'Legacy cohort: original 20 bps each way; preserved without retroactive changes.'),

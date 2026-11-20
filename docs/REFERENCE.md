@@ -501,6 +501,30 @@ model; the gross-return index has no trading costs and is not an investable fund
 Provider revisions can still change measured outcomes; capture dates do not make
 future provider data immutable. Existing cohort records and fee assumptions are retained.
 
+## Experimental recommendation promotion
+
+Strategy Lab forward cohorts preserve the baseline top 20 on each completed scan. They
+also report the measurable, after-cost mean for the first 10 and first 20 ranked stocks,
+with a same-date OSEBX GR comparison for each breadth when available; an incomplete stock
+keeps that breadth's total pending. These are recommendation
+baskets, not separately rebalanced trading accounts. Per-stock entry uses the first
+later daily close, the saved NOK purchase budget and fixed purchase fee, with residual
+cash; the same limitations and OSEBX GR date matching described above apply.
+
+The historical robustness candidates vary position count (10 or 20) and monthly or
+quarterly rebalancing. The active baseline is the shared technical entry/exit policy with
+a 20-recommendation cap. The Strategy Lab shows the current active selection and lets the
+investor explicitly promote one of the distinct 10- or
+20-position recommendation caps after reviewing all historical variants and forward
+breadth outcomes. Promotion applies that count as the maximum primary recommendation
+rank and buy/portfolio-fit candidate count. It does not change the shared stock entry
+signals; the historical rebalance interval does not alter live portfolio handling.
+Promotion is not automatic and has no minimum observation period. The active selection
+is saved separately from experiment results; the baseline can be restored at any time.
+No candidate is offered until a robustness run provides the candidate list. Forward
+outcomes remain descriptive evidence: the current survivor universe, revised prices,
+and missing point-in-time/delisted coverage prevent unbiased performance claims.
+
 Independent accounting reference cases in `tests/test_account_reference.py` use
 explicit opening/current holdings and hand-calculated expected values, without the
 production event-application helper. They cover end-of-day deposits/withdrawals,

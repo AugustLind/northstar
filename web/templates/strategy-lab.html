@@ -15,8 +15,9 @@
   </p>
   <p class="muted" id="validationBoundary">
     These are experimental decision rules compared with the fixed 20-position monthly baseline.
-    Training and later holdout results, including poor results, are shown for review. Running or
-    selecting an experiment never changes Research rankings, primary recommendations, or holdings.
+    Training and later holdout results, including poor results, are shown for review. Experiments do not
+    change the baseline automatically. Only explicit investor promotion applies a position count to primary
+    recommendations; promoting a model never changes holdings.
     Free historical data cannot establish point-in-time or delisted-stock performance.
   </p>
   <label
@@ -105,4 +106,12 @@
   </p>
   <p id="paperMethod"></p>
   <div id="paperResults"></div>
+  <h3>Experimental recommendation model</h3>
+  <p>Historical candidates vary position count and rebalance interval. Promotion applies the candidate’s position count as a cap on primary recommendations; it does not change the shared stock entry signals. Review forward outcomes above before deciding. There is no automatic promotion or minimum observation period.</p>
+  <div class="researchtools">
+    <label>Candidate from latest experiment<select id="promotionModel"><option value="">Choose a completed candidate</option></select></label>
+    <button type="button" id="promoteModel">Promote candidate</button>
+    <button type="button" id="restoreBaseline">Use baseline recommendations</button>
+  </div>
+  <p id="promotionStatus" role="status"></p>
 </section>

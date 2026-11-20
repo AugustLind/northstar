@@ -20,6 +20,7 @@ async function loadValidation() {
     else if (progress.error) $('#validationStatus').textContent = progress.error;
     const p = v.paper;
     $('#paperMethod').textContent = p.method;
+    renderPromotion(v.historical, v.promoted_model);
     $('#paperResults').innerHTML = p.snapshots.length
       ? p.snapshots
           .map(
@@ -38,6 +39,13 @@ async function loadValidation() {
                 : s.return_pct.toFixed(2) + '% after assumed costs') +
               '</p><p>' +
               escapeHtml(paperBenchmarkLabel(s.benchmark)) +
+              (s.candidate_results
+                ? '<br>Candidate breadths · ' +
+                  s.candidate_results.map((c) => c.max_positions + ' positions: ' +
+                    (c.return_pct == null ? 'pending / incomplete (' + c.measured + ' measured)' : c.return_pct.toFixed(2) + '% after assumed costs') +
+                    ' · ' + paperBenchmarkLabel(c.benchmark))
+                    .join(' · ')
+                : '') +
               '</p><div class="tablewrap"><table><thead><tr><th>Saved stock</th><th>Saved action</th><th>Later entry close</th><th>Return after costs</th></tr></thead><tbody>' +
               s.symbols
                 .map(
@@ -60,6 +68,21 @@ async function loadValidation() {
   } catch (e) {
     $('#validationStatus').textContent = e.message;
   }
+}
+function renderPromotion(historical, promoted) {
+  const select = $('#promotionModel');
+  const variants = (historical && historical.robustness && historical.robustness.variants) || [];
+  const current = promoted ? promoted.max_positions : null;
+  const breadths = [...new Set(variants.map((v) => v.max_positions))].sort((a,b) => a-b);
+  select.innerHTML = '<option value="">Choose a completed candidate</option>' +
+    breadths.map((count) => '<option value="' + count + '"' +
+      (count === current ? ' selected' : '') + '>' + count + '-position recommendation cap · ' +
+      variants.filter((v) => v.max_positions === count).length + ' historical variants</option>').join('');
+  $('#promoteModel').disabled = variants.length === 0;
+  $('#promotionStatus').textContent = promoted
+    ? 'Active model: ' + promoted.label + ' · recommendation cap ' + promoted.max_positions +
+      ' · promoted ' + new Date(promoted.promoted_at * 1000).toLocaleString() + '.'
+    : 'Baseline recommendations are active.';
 }
 function renderValidation(v) {
   if (!v) {
@@ -201,6 +224,30 @@ $('#runValidation').onclick = async () => {
     $('#validationStatus').textContent = e.message;
   } finally {
     b.disabled = validationPolling;
+  }
+};
+$('#promoteModel').onclick = async () => {
+  const max_positions = Number($('#promotionModel').value);
+  if (!max_positions) return;
+  $('#promoteModel').disabled = true;
+  try {
+    await api('validation/promotion', {max_positions});
+    await loadValidation();
+  } catch (e) {
+    $('#promotionStatus').textContent = e.message;
+  } finally {
+    $('#promoteModel').disabled = false;
+  }
+};
+$('#restoreBaseline').onclick = async () => {
+  $('#restoreBaseline').disabled = true;
+  try {
+    await api('validation/promotion', {max_positions: null});
+    await loadValidation();
+  } catch (e) {
+    $('#promotionStatus').textContent = e.message;
+  } finally {
+    $('#restoreBaseline').disabled = false;
   }
 };
 setInterval(() => {

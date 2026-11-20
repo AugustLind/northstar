@@ -29,10 +29,26 @@ def run():
                 raise RuntimeError('Research navigation/chart contract failed.')
             started=time.time()
             browser.evaluate("document.querySelector('[data-tab=\"validation\"]').click();document.querySelector('#validationRobustness').checked=true;document.querySelector('#runValidation').click()")
-            browser.wait("!validationPolling && !document.querySelector('#robustnessPanel').hidden",'completed synthetic experiment',45)
             import app
+            deadline=time.time()+120
+            while app.read_meta('validation_progress',{}).get('running') and time.time()<deadline:
+                time.sleep(.25)
+            if app.read_meta('validation_progress',{}).get('running'):
+                raise RuntimeError('Synthetic experiment timed out: '+str(app.read_meta('validation_progress',{})))
+            if app.read_meta('validation_progress',{}).get('error'):
+                raise RuntimeError('Synthetic experiment failed: '+str(app.read_meta('validation_progress',{})))
+            browser.evaluate('loadValidation()')
+            browser.wait("!document.querySelector('#robustnessPanel').hidden",'completed synthetic experiment')
             report=app.read_meta('validation_report',{})
-            if report.get('generated',0)<started:raise RuntimeError('Browser did not complete a new experiment.')
+            if report.get('generated',0)<started:
+                raise RuntimeError('Browser did not complete a new experiment: '+str(app.read_meta('validation_progress',{})))
+            browser.wait("document.querySelector('#promotionModel').options.length>1",'experimental promotion choices')
+            browser.evaluate("document.querySelector('#promotionModel').selectedIndex=1;document.querySelector('#promoteModel').click()")
+            browser.wait("document.querySelector('#promotionStatus').textContent.includes('Active model:')",'explicit experimental promotion')
+            if not app.read_meta('promoted_experiment_model'):raise RuntimeError('Promotion was not saved by the application.')
+            browser.evaluate("document.querySelector('#restoreBaseline').click()")
+            browser.wait("document.querySelector('#promotionStatus').textContent.includes('Baseline recommendations are active.')",'restore baseline recommendations')
+            if app.read_meta('promoted_experiment_model') is not None:raise RuntimeError('Baseline restoration did not clear promotion.')
             browser.wait("document.querySelector('#archiveRun').options.length>1",'archived research evidence')
             browser.evaluate("const select=document.querySelector('#archiveRun');select.selectedIndex=1;select.dispatchEvent(new Event('change'));document.querySelector('#replayArchive').click()")
             browser.wait("document.querySelector('#archiveReplayStatus').textContent.includes('0 ranking/action/score difference')",'recorded-input replay')

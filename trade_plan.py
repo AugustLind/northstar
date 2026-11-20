@@ -149,7 +149,7 @@ def build(snapshot,report,profile,now=None):
     cards={pf.canonical(c['symbol']):c for c in (report or {}).get('cards',[])}
     sells=sell_scenario(snapshot,cards,ctx,profile,report_ok,now)
     blocked_sales={r['symbol'] for r in sells if r['sell_shares']}
-    ranked=policy.entries(cards.values())
+    ranked=policy.recommendations(cards.values(),(report or {}).get('promoted_model'))
     buys=[];blocked=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
     left=profile['purchase_nok'];spent=0.;fees=0.;warnings=list(ctx['warnings'])
     buy_fee=profile['buy_fee_nok']

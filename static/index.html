@@ -345,7 +345,7 @@
           <h2>Ranked opportunities</h2>
           <label
             >Show<select id="adviceFilter">
-              <option value="top20">Top 20 entry candidates</option>
+              <option value="top20">Primary recommendation candidates</option>
               <option value="all">All analysed stocks</option>
               <option value="held">My holdings</option>
               <option value="buy">Buy candidates</option>
@@ -1108,8 +1108,9 @@
         </p>
         <p class="muted" id="validationBoundary">
           These are experimental decision rules compared with the fixed 20-position monthly baseline.
-          Training and later holdout results, including poor results, are shown for review. Running or
-          selecting an experiment never changes Research rankings, primary recommendations, or holdings.
+          Training and later holdout results, including poor results, are shown for review. Experiments do not
+          change the baseline automatically. Only explicit investor promotion applies a position count to primary
+          recommendations; promoting a model never changes holdings.
           Free historical data cannot establish point-in-time or delisted-stock performance.
         </p>
         <label
@@ -1198,6 +1199,14 @@
         </p>
         <p id="paperMethod"></p>
         <div id="paperResults"></div>
+        <h3>Experimental recommendation model</h3>
+        <p>Historical candidates vary position count and rebalance interval. Promotion applies the candidate’s position count as a cap on primary recommendations; it does not change the shared stock entry signals. Review forward outcomes above before deciding. There is no automatic promotion or minimum observation period.</p>
+        <div class="researchtools">
+          <label>Candidate from latest experiment<select id="promotionModel"><option value="">Choose a completed candidate</option></select></label>
+          <button type="button" id="promoteModel">Promote candidate</button>
+          <button type="button" id="restoreBaseline">Use baseline recommendations</button>
+        </div>
+        <p id="promotionStatus" role="status"></p>
       </section>
       <footer>
         Built for patient ownership · Private portfolio storage · No broker credentials required
@@ -1263,13 +1272,13 @@
       <script src="./navigation.js?v=1934af93c565"></script>
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
-      <script src="./validation.js?v=b6d1a4de2e68"></script>
+      <script src="./validation.js?v=0975148203df"></script>
       <script src="./portfolio-fit.js?v=88a4ef36c5ea"></script>
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
       <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
       <script src="./daily.js?v=611b46c289c3"></script>
-      <script src="./advice.js?v=24ad22860f8f"></script>
+      <script src="./advice.js?v=14f5b876ee6a"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
       <script src="./portfolio-risk.js?v=e75ae85395c7"></script>

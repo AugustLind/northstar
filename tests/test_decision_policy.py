@@ -61,6 +61,26 @@ class SharedPolicyTests(unittest.TestCase):
                                            'cards': watches+[candidate]}, profile(), NOW)
         self.assertEqual([r['symbol'] for r in plan['buys']], ['B.OL'])
 
+    def test_promoted_recommendation_breadth_caps_the_shared_ranked_entries(self):
+        ranked=[{'symbol':'A.OL','action':'Consider buying','rank_eligible':True,'composite':3},
+                {'symbol':'B.OL','action':'Consider buying','rank_eligible':True,'composite':2},
+                {'symbol':'C.OL','action':'Consider buying','rank_eligible':True,'composite':1}]
+        self.assertEqual([c['symbol'] for c in policy.recommendations(ranked)],
+                         ['A.OL','B.OL','C.OL'])
+        promoted={'max_positions':2}
+        self.assertEqual([c['symbol'] for c in policy.recommendations(ranked,promoted)],
+                         ['A.OL','B.OL'])
+        self.assertEqual(len(policy.recommendations(ranked,{'max_positions':True})),3)
+
+    def test_promoted_breadth_is_shared_by_trade_and_portfolio_sizing(self):
+        cards=[card('A.OL',1),card('B.OL',2)]
+        report={'generated':NOW,'policy_version':policy.VERSION,'cards':cards,
+                'promoted_model':{'max_positions':1}}
+        plan=trade_plan.build(snapshot(),report,profile(purchase_nok=2000),NOW)
+        fit=portfolio_fit.view(snapshot(),report,profile(purchase_nok=2000),NOW)
+        self.assertEqual([r['symbol'] for r in plan['buys']],['A.OL'])
+        self.assertEqual([r['symbol'] for r in fit['candidates']],['A.OL'])
+
     def test_report_ranks_only_real_entries_and_preserves_scores(self):
         up = quote(); up['currency'] = 'NOK'
         down = quote(False); down['currency'] = 'NOK'
