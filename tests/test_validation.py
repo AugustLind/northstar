@@ -100,6 +100,25 @@ class ValidationTests(unittest.TestCase):
         self.assertIsNotNone(r['return_pct'])
         self.assertEqual(v['snapshots'][0]['captured'],1600000000)
 
+    def test_paper_keeps_baseline_top_twenty_and_reports_candidate_breadths(self):
+        db=sqlite3.connect(':memory:');db.row_factory=sqlite3.Row
+        report={'generated':10,'top20':[],'paper_top20':['A.OL'],
+                'portfolio_limits':{'purchase_nok':1000},
+                'cards':[{'symbol':'A.OL','rank':1,'action':'Consider buying'}]}
+        validation.capture(db,report,1600000000)
+        market=quotes(3)
+        market['OSEBX.OL']={'currency':'NOK','history':[
+            {'time':1600000000+i*86400,'close':200+i*2} for i in range(3)]}
+        paper=validation.paper_view(db,market,1600000000+3*86400)['snapshots'][0]
+        self.assertEqual([r['max_positions'] for r in paper['candidate_results']],[10,20])
+        self.assertEqual(paper['symbols'][0]['symbol'],'A.OL')
+        # 9 shares at 100.1 plus NOK 79 fee; residual cash is 20.1.
+        # At 100.2 the ending value is 9*100.2 + 20.1 = 921.9 NOK.
+        self.assertAlmostEqual(paper['candidate_results'][0]['return_pct'],-7.81)
+        benchmark_return=(204/202-1)*100
+        self.assertAlmostEqual(paper['candidate_results'][0]['benchmark']['return_pct'],benchmark_return)
+        self.assertAlmostEqual(paper['candidate_results'][0]['benchmark']['excess_percentage_points'],-7.81-benchmark_return)
+
     def test_long_window_excludes_young_history_and_compares_index_without_filling(self):
         q=quotes(1100);q['B.OL']={'currency':'NOK','history':q['A.OL']['history'][-300:]}
         q['OSEBX.OL']={'currency':'NOK','history':[dict(p,close=200+i*.2) for i,p in enumerate(q['A.OL']['history'])]}

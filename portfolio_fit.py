@@ -223,7 +223,7 @@ def view(snapshot, report, profile, now=None):
     cards=(report or {}).get('cards',[])
     old=not trade_plan.current_report(report,now)
     candidates=[]
-    for card in policy.entries(cards):
+    for card in policy.recommendations(cards,(report or {}).get('promoted_model')):
         symbol=canonical(card['symbol'])
         simulation=preview(symbol,profile['purchase_nok'],snapshot,profile,ctx,now)
         actionable=not old and trade_plan.buy_signal(card) and fresh({'price':card.get('price'),'asof':card.get('asof')},now)

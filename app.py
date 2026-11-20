@@ -419,6 +419,28 @@ def start_validation(data):
         raise
 
 
+def set_promoted_experiment_model(data):
+    """Save only a model present in the most recent robustness experiment."""
+    if not isinstance(data,dict) or 'max_positions' not in data:
+        raise ValueError('Choose an available experimental model.')
+    count=data.get('max_positions')
+    if count is None:
+        write_meta('promoted_experiment_model',None)
+    else:
+        report=read_meta('validation_report',{}) or {}
+        variants=((report.get('robustness') or {}).get('variants') or [])
+        if (isinstance(count,bool) or not isinstance(count,int) or count not in (10,20)
+                or not any(v.get('max_positions')==count for v in variants)):
+            raise ValueError('That model is not available in the latest completed experiment. Run it again and review the results.')
+        write_meta('promoted_experiment_model',{
+            'label':str(count)+'-position recommendation cap','max_positions':count,
+            'validation_generated':report.get('generated'),
+            'promoted_at':time.time()})
+    if WORKER:
+        WORKER.trigger()
+    return {'promoted_model':read_meta('promoted_experiment_model')}
+
+
 def ledger_view():
     snapshot=state();profile=snapshot['manual_portfolio_preferences'];baseline=read_meta('ledger_state')
     with connect() as db:
@@ -668,7 +690,8 @@ class Handler(BaseHTTPRequestHandler):
                 paper = validation.paper_view(db, state()['quotes'])
             progress=read_meta('validation_progress',{})
             if progress.get('running') and not VALIDATION_LOCK.locked():progress={**progress,'running':False,'error':'Experiment interrupted by a server restart. Run it again.'}
-            return self.send_json({'historical':read_meta('validation_report'), 'paper':paper,'progress':progress})
+            return self.send_json({'historical':read_meta('validation_report'), 'paper':paper,'progress':progress,
+                                   'promoted_model':read_meta('promoted_experiment_model')})
         if self.path == '/api/research':
             return self.send_json(WORKER.view() if WORKER else {'report': read_meta('report'), 'settings': settings(), 'worker': {}})
         if self.path == '/api/state':
@@ -761,6 +784,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(portfolio_fit.preview(data.get('symbol',''),data.get('amount',0),snapshot,snapshot['portfolio_preferences']))
             elif self.path == '/api/validation':
                 return self.send_json(start_validation(data))
+            elif self.path == '/api/validation/promotion':
+                return self.send_json(set_promoted_experiment_model(data))
             elif self.path == '/api/analyze':
                 if not WORKER:
                     return self.send_json({'error': 'Background worker is not started.'}, 503)

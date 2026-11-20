@@ -69,3 +69,13 @@ def rank_key(card):
 
 def entries(cards, limit=MAX_CANDIDATES):
     return sorted((c for c in cards if buy_signal(c)), key=rank_key)[:limit]
+
+
+def recommendations(cards, model=None):
+    """Apply an explicitly promoted recommendation breadth to the shared entry screen."""
+    limit=MAX_CANDIDATES
+    if model is not None:
+        candidate=model.get('max_positions')
+        if isinstance(candidate,int) and not isinstance(candidate,bool) and 1<=candidate<=MAX_CANDIDATES:
+            limit=candidate
+    return entries(cards,limit=limit)
