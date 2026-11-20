@@ -335,9 +335,9 @@
             <button type="button" data-plan-settings>Set budget &amp; sizing rules</button>
           </div>
           <p>
-            Buy quantities share one total budget and include 79 kr per order. Sell quantities are
-            separate rule-based review scenarios before selling fees and tax. Recalculate after
-            trading.
+            Buy quantities share one total budget and use your saved buy fee. Sale proceeds include
+            your sell-fee assumption when entered; otherwise only gross proceeds are available.
+            Recalculate after trading.
           </p>
           <div id="quantityPlanMain" aria-live="polite">Loading share-count scenarios…</div>
         </details>
@@ -848,6 +848,21 @@
                       step="any"
                       required /></label
                   ><label
+                    >Buy fee · NOK per order<input
+                      name="buy_fee_nok"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      step="any"
+                      required /></label
+                  ><label
+                    >Sell fee · NOK per order (leave blank if unknown)<input
+                      name="sell_fee_nok"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      step="any" /></label
+                  ><label
                     >Maximum per company · % incl. known share classes<input
                       name="max_stock_pct"
                       type="number"
@@ -921,8 +936,9 @@
                       required
                   /></label>
                   <p>
-                    Purchase fee: <b>79 kr per order</b>, regardless of share count, using your
-                    stated Nordnet fee. Budgets include this fee. Selling fees are not yet modelled.
+                    Buy fee defaults to <b>79 kr per order</b>, regardless of share count. Enter
+                    your confirmed fee assumptions; blank sell fee means unknown. Buy budgets
+                    include the buy fee. Estimates exclude tax, spread and execution differences.
                   </p>
                 </div>
                 <details>
@@ -1232,9 +1248,9 @@
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=689dd730b7a6"></script>
-      <script src="./portfolio-fit.js?v=7bb10180c347"></script>
+      <script src="./portfolio-fit.js?v=641fec858981"></script>
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
-      <script src="./trade-plan.js?v=840332af5c55"></script>
+      <script src="./trade-plan.js?v=4f4d3bdd69e3"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
       <script src="./daily.js?v=611b46c289c3"></script>
       <script src="./advice.js?v=296dcc117b94"></script>

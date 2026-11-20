@@ -26,6 +26,7 @@ function renderQuantityPlan(plan) {
     ' · Unallocated ' +
     money(plan.unallocated_budget_nok) +
     '.</p>';
+  html += '<p>Sale fee impact: ' + (plan.sell_fees_nok == null ? 'Unknown; enter a sell fee assumption in Portfolio fit.' : money(plan.sell_fees_nok) + ' across planned sale orders.') + '</p>';
   html += buys.length
     ? '<div class="tablewrap"><table><thead><tr><th>Stock</th><th>Quantity to consider</th><th>Quote</th><th>Order total incl. fee</th><th>Why this quantity?</th></tr></thead><tbody>' +
       buys
@@ -88,8 +89,8 @@ function renderQuantityPlan(plan) {
             '</strong></td><td>' +
             esc(r.sell_shares == null ? 'Unavailable' : r.remaining_shares) +
             '</td><td>' +
-            (r.gross_proceeds_nok == null ? 'Unavailable' : money(r.gross_proceeds_nok)) +
-            '<small>Before selling fees and tax</small></td><td>' +
+            (r.gross_proceeds_nok == null ? 'Unavailable' : money(r.net_proceeds_nok == null ? r.gross_proceeds_nok : r.net_proceeds_nok)) +
+            '<small>' + (r.fee_nok == null ? 'Gross proceeds · sell fee unknown' : money(r.gross_proceeds_nok) + ' gross · ' + money(r.fee_nok) + ' estimated fee') + ' · before tax</small></td><td>' +
             r.reasons.map(esc).join(' ') +
             '</td></tr>'
         )
