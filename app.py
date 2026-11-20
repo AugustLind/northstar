@@ -609,7 +609,7 @@ def email_plan():
             detail=(holding['symbol']+' — review '+str(holding.get('technical_action') or 'holding risk')+
                     (('; '+str(holding['sell_shares'])+' shares in the current review scenario') if holding.get('sell_shares') else '')+
                     ('. '+reasons if reasons else '.'))
-            holdings_attention.append(detail[:700])
+            holdings_attention.append((90,detail[:700]))
     held_symbols={portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions'] if p['shares']>0}
     for alert in alerts:
         if alert.get('kind') not in ('announcement','company') or alert.get('symbol') not in held_symbols:
@@ -630,7 +630,11 @@ def email_plan():
         if (isinstance(source_url,str) and len(source_url)<=2000 and source_url.startswith('https://')
                 and not any(c in source_url for c in '\r\n\x00')):
             detail+=' Source: '+source_url
-        holdings_attention.append(detail[:700])
+        priority=alert.get('priority',80)
+        if not isinstance(priority,(int,float)) or isinstance(priority,bool) or not math.isfinite(priority):
+            priority=80
+        holdings_attention.append((priority,detail[:700]))
+    holdings_attention=[detail for _,detail in sorted(holdings_attention,key=lambda item:-item[0])[:5]]
     candidates=[]
     for card in (report or {}).get('cards',[]):
         if card.get('action')!='Consider buying' or card.get('held'):continue
