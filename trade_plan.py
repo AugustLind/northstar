@@ -5,7 +5,6 @@ import time
 import portfolio_fit as pf
 import company_data
 import decision_policy as policy
-from broker_costs import BUY_FEE_NOK
 
 VERSION='share-count-scenarios-v1'
 SELL_SIGNALS=policy.SELL_SIGNALS
@@ -32,6 +31,7 @@ buy_signal = policy.buy_signal
 
 def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
     import advice_state
+    sell_fee=profile['sell_fee_nok']
     rows=[]
     for h in ctx['holdings']:
         card=cards.get(h['symbol']);q=quote_for(snapshot,h['symbol'])
@@ -99,15 +99,21 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
                 excess-=(row['sell_shares']-before)*row['price']
     # Sales to meet the cash reserve are a separate scenario; proceeds never fund the buy plan.
     need=total*profile['reserve_pct']/100-ctx['cash_nok']-sum(r['gross_proceeds_nok'] or 0 for r in rows)
+    if sell_fee is not None:
+        need+=sell_fee*sum(bool(r['sell_shares']) for r in rows)
     for row in sorted((r for r in rows if r['sell_shares'] is not None),key=lambda r:(-r['remaining_shares']*r['price'],r['symbol'])):
         if need<=1e-8:
             break
         before=row['sell_shares']
-        add(row,ceil_shares(need,row['price']), 'Restore your '+str(profile['reserve_pct'])+'% cash reserve before selling costs.')
+        add(row,ceil_shares(need,row['price']), 'Restore your '+str(profile['reserve_pct'])+'% cash reserve after estimated selling fees.' if sell_fee is not None else 'Restore your '+str(profile['reserve_pct'])+'% cash reserve before selling costs.')
         need-=(row['sell_shares']-before)*row['price']
+        if sell_fee is not None and row['sell_shares']>before:
+            need-=sell_fee if before==0 else 0
     for row in rows:
         if row['sell_shares']==0:
             row['reasons'].append('No whole-share reduction is required by the active sizing rules.')
+        row['estimated_sell_fee_nok']=(sell_fee if row['sell_shares'] and sell_fee is not None else 0 if row['sell_shares']==0 else None)
+        row['net_proceeds_nok']=(row['gross_proceeds_nok']-sell_fee if row['sell_shares'] and sell_fee is not None else row['gross_proceeds_nok'] if row['sell_shares']==0 else None)
         if row['price']:
             row['after_stock_pct']=row['remaining_shares']*row['price']/total*100
     return rows
@@ -125,8 +131,10 @@ def build(snapshot,report,profile,now=None):
     ranked=policy.entries(cards.values())
     buys=[];blocked=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
     left=profile['purchase_nok'];spent=0.;fees=0.;warnings=list(ctx['warnings'])
-    minimum_order=BUY_FEE_NOK*(1+100/profile['max_buy_fee_pct'])
-    max_orders=min(len(ranked),int(min(left,ctx['cash_nok'])/minimum_order))
+    buy_fee=profile['buy_fee_nok'];sell_fee=profile['sell_fee_nok']
+    minimum_order=buy_fee*(1+100/profile['max_buy_fee_pct'])
+    max_orders=(len(ranked) if minimum_order==0 else
+                min(len(ranked),int(min(left,ctx['cash_nok'])/minimum_order)))
     if not report_ok:
         warnings.append('Refresh the market report before generating buy quantities or signal-based sale quantities.')
     if snapshot.get('ledger_reconciled') is False:warnings.append('Ledger reconciliation is required; buy and sale quantities are withheld.')
@@ -159,24 +167,24 @@ def build(snapshot,report,profile,now=None):
             reason='Classify this stock and every holding to confirm sector capacity.'
         if reason is None:
             # Reserve all possible later buy fees so the entire plan respects final weights.
-            reserve_fees=max(0,max_orders-len(buys)-1)*BUY_FEE_NOK
-            final_total=current['total_nok']-BUY_FEE_NOK-reserve_fees
+            reserve_fees=max(0,max_orders-len(buys)-1)*buy_fee
+            final_total=current['total_nok']-buy_fee-reserve_fees
             held=sum(h['value_nok'] for h in current['holdings'] if h['issuer']==company_data.issuer(symbol))
             sector_value=sum(h['value_nok'] for h in current['holdings'] if h['sector']==profile['sectors'][symbol])
-            capacity=min(left-BUY_FEE_NOK,profile['max_stock_pct']/100*final_total-held,
+            capacity=min(left-buy_fee,profile['max_stock_pct']/100*final_total-held,
                          profile['max_sector_pct']/100*final_total-sector_value,
-                         working_profile['cash_nok']-BUY_FEE_NOK-reserve_fees-profile['reserve_pct']/100*final_total)
+                         working_profile['cash_nok']-buy_fee-reserve_fees-profile['reserve_pct']/100*final_total)
             n=max(0,math.floor(capacity/q['price']))
-            value=n*q['price'];fee_pct=BUY_FEE_NOK/value*100 if value else None
+            value=n*q['price'];fee_pct=buy_fee/value*100 if value else None
             if not n or fee_pct>profile['max_buy_fee_pct']+1e-8:
                 reason='No whole-share purchase fits your remaining budget, allocation limits, reserve and purchase-fee limit.'
             else:
-                total=value+BUY_FEE_NOK
+                total=value+buy_fee
                 buys.append({'symbol':symbol,'name':card.get('name',symbol),'buy_shares':n,'sell_shares':0,
-                             'price':q['price'],'quote_asof':q['asof'],'value_nok':value,'fee_nok':BUY_FEE_NOK,
+                             'price':q['price'],'quote_asof':q['asof'],'value_nok':value,'fee_nok':buy_fee,
                              'total_nok':total,'fee_pct':fee_pct,'rank':card.get('rank'),
                              'reason':'Meets the technical buy screen; sized in rank order within one shared budget and your limits.'})
-                left-=total;spent+=total;fees+=BUY_FEE_NOK;working_profile['cash_nok']-=total
+                left-=total;spent+=total;fees+=buy_fee;working_profile['cash_nok']-=total
                 old=next((p for p in working['positions'] if p['currency']=='NOK' and pf.canonical(p['symbol'])==symbol),None)
                 if old:
                     old['shares']+=n
@@ -189,17 +197,22 @@ def build(snapshot,report,profile,now=None):
             blocked.append({'symbol':symbol,'buy_shares':0,'reason':reason})
     result_ctx=pf.context(working,working_profile,now)
     sale_proceeds=sum(r['gross_proceeds_nok'] or 0 for r in sells)
+    sale_orders=sum(bool(r['sell_shares']) for r in sells)
+    sale_quantities_complete=all(r['sell_shares'] is not None for r in sells)
+    sale_fees=((sell_fee*sale_orders if sell_fee is not None else None) if sale_orders else 0.) if sale_quantities_complete else None
     return {'version':VERSION,'policy_version':policy.VERSION,'generated':now,'report_generated':(report or {}).get('generated'),
             'buy_budget_nok':profile['purchase_nok'],'spent_nok':spent,'unallocated_budget_nok':left,
             'buy_fees_nok':fees,'cash_after_buys_nok':working_profile['cash_nok'],
             'cash_after_sell_scenario_nok':profile['cash_nok']+sale_proceeds,
+            'cash_after_sell_scenario_after_fees_nok':profile['cash_nok']+sale_proceeds-sale_fees if sale_fees is not None else None,
+            'sell_fees_nok':sale_fees,'sell_fee_assumption_nok':sell_fee,
             'after_buys':result_ctx,'buys':buys,'holdings':sells,'blocked_buys':blocked,'warnings':warnings,
             'max_buy_fee_pct':profile['max_buy_fee_pct'],'review_sell_pct':profile['review_sell_pct'],
             'post_buy_warnings':result_ctx['warnings'],
-            'method':'Rule-based share-count scenarios, not optimal trade amounts or forecasts. Buys share one budget and use current cash only; '
-                     'each order includes 79 NOK and follows technical rank, whole-share, position, sector, reserve and fee limits. '
-                     'Remaining budget can stay unused. Sales first apply your signal-review percentage, then position, sector and reserve rules '
-                     'without counting the same shares twice. Sector/reserve trims use largest holdings first. '
-                     'Sale counts and proceeds are before selling fees and tax, which are unknown. The sale scenario is separate from the buy plan; '
-                     'sale proceeds do not fund purchases. Recalculate after any real trade. Missing data means no quantity, not zero risk. '
-                     'Signal-review percentage and fee limits are illustrative user-adjustable settings; no order is placed.'}
+            'method':('Rule-based share-count scenarios, not optimal trade amounts or forecasts. Buys share one budget and use current cash only; '
+                      f'Each buy order includes your estimated {buy_fee:g} NOK fee and follows technical rank, whole-share, position, sector, reserve and fee limits. '
+                      'Remaining budget can stay unused. Sales first apply your signal-review percentage, then position, sector and reserve rules '
+                      'without counting the same shares twice. Sector/reserve trims use largest holdings first. '
+                      + (f'Sale proceeds include your estimated {sell_fee:g} NOK fee per order; tax is excluded. ' if sell_fee is not None else 'Selling fees are unknown because no estimate is entered; gross sale proceeds exclude fees and tax. ')+ 'The sale scenario is separate from the buy plan; '
+                      'sale proceeds do not fund purchases. Recalculate after any real trade. Missing data means no quantity, not zero risk. '
+                      'Signal-review percentage and fee limits are illustrative user-adjustable settings; no order is placed.')}

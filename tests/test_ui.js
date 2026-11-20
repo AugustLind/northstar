@@ -106,9 +106,10 @@ setImmediate(async()=>{
  assert(!nodes['#fitCandidates'].innerHTML.includes('<untrusted>'));
  assert(nodes['#fitCandidateCount'].textContent===0);
  assert(nodes['#fitCandidates'].innerHTML.includes('7.9%'));
- assert(nodes['#fitCandidates'].innerHTML.includes('79 kr per purchase'));
+ assert(nodes['#fitCandidates'].innerHTML.includes('per purchase'));
  assert(nodes['#adviceCards'].innerHTML.includes('Purchase fee drag'));
- assert(nodes['#stockFeeImpact'].textContent.includes('79 kr per order'));
+ assert(nodes['#stockFeeImpact'].textContent.includes('purchase fee is'));
+ assert(nodes['#stockFeeImpact'].textContent.includes('per order'));
  assert(nodes['#fitMethod'].textContent==='Illustrative limits only');
  assert(nodes['#fitPreferences'].elements.cash_nok.value===10000);
  vm.runInContext('fitDirty=true',context);nodes['#fitPreferences'].elements.cash_nok.value=123;
@@ -136,7 +137,7 @@ setImmediate(async()=>{
  await vm.runInContext('loadQuantityPlan()',context);
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Buy 9 shares'));
  assert(nodes['#quantityPlanFit'].innerHTML.includes('Sell 4 shares'));
- assert(nodes['#quantityPlanMain'].innerHTML.includes('Before selling fees and tax'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('Selling fee unknown; enter estimate in Portfolio fit'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#quantityPlanMain'].innerHTML.includes('<untrusted>'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Shared budget'));

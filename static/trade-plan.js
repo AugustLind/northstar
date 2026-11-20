@@ -21,7 +21,7 @@ function renderQuantityPlan(plan) {
     money(plan.buy_budget_nok) +
     ' · Planned spend ' +
     money(plan.spent_nok) +
-    ' · Purchase fees ' +
+    ' · Estimated purchase fees ' +
     money(plan.buy_fees_nok) +
     ' · Unallocated ' +
     money(plan.unallocated_budget_nok) +
@@ -60,6 +60,8 @@ function renderQuantityPlan(plan) {
       plan.post_buy_warnings.map(esc).join(' ') +
       '</p>';
   html += '<h3>Your holdings · sale-review scenario</h3>';
+  html += '<p>Estimated sell fees ' + (plan.sell_fees_nok == null ? 'Unavailable; enter fee assumption in Portfolio fit.' : money(plan.sell_fees_nok)) +
+    ' · Cash after hypothetical sales ' + (plan.cash_after_sell_scenario_after_fees_nok == null ? 'Unavailable after fees' : money(plan.cash_after_sell_scenario_after_fees_nok)) + '.</p>';
   html += holdings.length
     ? '<div class="tablewrap"><table><thead><tr><th>Stock / held shares</th><th>Quantity to consider</th><th>Shares remaining</th><th>Gross sale value</th><th>Why this quantity?</th></tr></thead><tbody>' +
       holdings
@@ -89,7 +91,15 @@ function renderQuantityPlan(plan) {
             esc(r.sell_shares == null ? 'Unavailable' : r.remaining_shares) +
             '</td><td>' +
             (r.gross_proceeds_nok == null ? 'Unavailable' : money(r.gross_proceeds_nok)) +
-            '<small>Before selling fees and tax</small></td><td>' +
+            '<small>' +
+            (r.sell_shares == null
+              ? 'Fee effect unavailable with missing quantity'
+              : r.sell_shares === 0
+              ? 'No sale fee'
+              : r.net_proceeds_nok == null
+              ? 'Selling fee unknown; enter estimate in Portfolio fit'
+              : money(r.estimated_sell_fee_nok) + ' estimated fee · ' + money(r.net_proceeds_nok) + ' after fee, before tax') +
+            '</small></td><td>' +
             r.reasons.map(esc).join(' ') +
             '</td></tr>'
         )

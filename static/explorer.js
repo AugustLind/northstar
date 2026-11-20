@@ -135,8 +135,8 @@ function renderStockDetail(c) {
     .join('');
   const fee = c.portfolio_fit;
   $('#stockFeeImpact').textContent =
-    fee && fee.fee_model === 'fixed-buy-79-v1' && fee.shares
-      ? 'Purchase fee: 79 kr once for ' +
+    fee && fee.shares
+      ? 'Estimated purchase fee: ' + money(fee.buy_fee_nok) + ' once for ' +
         fee.shares +
         ' shares · ' +
         fee.fee_pct.toFixed(2) +
@@ -144,8 +144,9 @@ function renderStockDetail(c) {
         money(fee.break_even_price, c.currency) +
         ' (+' +
         fee.break_even_gain_pct.toFixed(2) +
-        '%). Selling fees are not included.'
-      : 'Your purchase fee is 79 kr per order. Open Portfolio fit to calculate its impact for your budget.';
+        '%). Selling fee estimate: ' +
+        (fee.sell_fee_nok == null ? 'unknown' : money(fee.sell_fee_nok) + ' per order') + '.'
+      : 'Your estimated purchase fee is ' + money(fee && fee.buy_fee_nok != null ? fee.buy_fee_nok : 79) + ' per order. Open Portfolio fit to calculate its impact for your budget.';
   $('#stockObservations').innerHTML =
     '<ul>' +
     [...c.reasons, ...(c.observations || [])].map((t) => '<li>' + esc(t) + '</li>').join('') +

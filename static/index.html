@@ -335,8 +335,10 @@
             <button type="button" data-plan-settings>Set budget &amp; sizing rules</button>
           </div>
           <p>
-            Buy quantities share one total budget and include 79 kr per order. Sell quantities are
-            separate rule-based review scenarios before selling fees and tax. Recalculate after
+            Buy quantities share one total budget and use your saved purchase-fee estimate (79 kr
+            default) per order. Sell quantities are separate rule-based review scenarios. Enter a
+            sell-fee estimate in Portfolio fit to see its effect; otherwise fees remain unknown.
+            Recalculate after
             trading.
           </p>
           <div id="quantityPlanMain" aria-live="polite">Loading share-count scenarios…</div>
@@ -376,7 +378,7 @@
         <p id="rankingCoverage" class="muted"></p>
         <div id="adviceCards"></div>
         <p class="muted">
-          *Purchase fee drag uses the saved purchase budget at report generation: 79 kr per order
+          *Purchase fee drag uses the saved purchase budget and estimated fee (79 kr default) per order
           divided by the resulting stock value. Set a budget in Portfolio fit for a current
           calculation. Technical scores do not predict returns after fees.
         </p>
@@ -880,6 +882,23 @@
                       step="any"
                       required /></label
                   ><label
+                    >Estimated purchase fee · NOK per order<input
+                      name="buy_fee_nok"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      step="any"
+                      required /></label
+                  ><label
+                    >Estimated selling fee · NOK per order<input
+                      name="sell_fee_nok"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      step="any"
+                      placeholder="Unknown"
+                  /></label
+                  ><label
                     >Technical sale-review size · % of holding<input
                       name="review_sell_pct"
                       type="number"
@@ -921,8 +940,8 @@
                       required
                   /></label>
                   <p>
-                    Purchase fee: <b>79 kr per order</b>, regardless of share count, using your
-                    stated Nordnet fee. Budgets include this fee. Selling fees are not yet modelled.
+                    Purchase fee defaults to <b>79 kr per order</b>, regardless of share count.
+                    Enter your own estimates. Leave selling fee blank when unknown; no sale fee is assumed.
                   </p>
                 </div>
                 <details>
@@ -1018,7 +1037,7 @@
               <h3>2. Import a transaction-history CSV</h3>
               <p>
                 This is a different file from the holdings export. Map the columns once. Net cash
-                must be signed and include actual broker charges; the estimated 79 kr purchase fee
+                must be signed and include actual broker charges; the estimated purchase fee
                 is never added again. Only NOK cash and Oslo stock transactions are supported.
                 Transfers and unsupported events require reconciliation. A split needs a separate
                 mapped split-ratio column (for example 2:1), zero net cash, and a confirmed ticker;
@@ -1232,13 +1251,13 @@
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=689dd730b7a6"></script>
-      <script src="./portfolio-fit.js?v=7bb10180c347"></script>
+      <script src="./portfolio-fit.js?v=69f6bc9be1f9"></script>
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
-      <script src="./trade-plan.js?v=840332af5c55"></script>
+      <script src="./trade-plan.js?v=39a893754660"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
       <script src="./daily.js?v=611b46c289c3"></script>
-      <script src="./advice.js?v=296dcc117b94"></script>
-      <script src="./explorer.js?v=267c8c47f996"></script>
+      <script src="./advice.js?v=24ad22860f8f"></script>
+      <script src="./explorer.js?v=6de3354efae6"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
       <script src="./portfolio-risk.js?v=5038b4f3881a"></script>
       <script src="./stock-summary.js?v=9f8e720795e1"></script>

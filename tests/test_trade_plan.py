@@ -48,6 +48,21 @@ class TradePlanTests(unittest.TestCase):
         self.assertIn('4029.0 NOK',v['blocked_buys'][0]['reason'])
         self.assertTrue(self.plan(p=profile(max_buy_fee_pct=10))['buys'])
 
+    def test_custom_fees_and_missing_sale_fee_are_explicit(self):
+        s=snapshot(10)
+        cards=[card('A.OL',action='Consider taking profits')]
+        unknown=self.plan(s,cards,profile(cash_nok=0,buy_fee_nok=20))
+        row=unknown['holdings'][0]
+        self.assertEqual(unknown['buy_fees_nok'],0)
+        self.assertIsNone(row['net_proceeds_nok'])
+        self.assertEqual(unknown['cash_after_sell_scenario_nok'],300)
+        self.assertIsNone(unknown['cash_after_sell_scenario_after_fees_nok'])
+        custom=self.plan(s,cards,profile(cash_nok=0,buy_fee_nok=20,sell_fee_nok=15))
+        row=custom['holdings'][0]
+        self.assertEqual(custom['sell_fees_nok'],15)
+        self.assertEqual(row['estimated_sell_fee_nok'],15)
+        self.assertEqual(row['net_proceeds_nok'],row['gross_proceeds_nok']-15)
+
     def test_ceil_sale_size_and_merge_reasons_without_double_selling(self):
         s=snapshot(10);p=profile(cash_nok=0,purchase_nok=10000,max_stock_pct=60,review_sell_pct=25)
         v=self.plan(s,[card('A.OL',action='Consider reducing / selling')],p)
@@ -93,6 +108,8 @@ class TradePlanTests(unittest.TestCase):
         s['quotes']['A']['asof']-=5*86400
         v=self.plan(s)
         self.assertIsNone(v['holdings'][0]['sell_shares'])
+        self.assertIsNone(v['sell_fees_nok'])
+        self.assertIsNone(v['cash_after_sell_scenario_after_fees_nok'])
         self.assertEqual(v['buys'],[])
         v=self.plan(snapshot(.5),[card('A.OL',action='Hold / monitor')])
         self.assertIsNone(v['holdings'][0]['sell_shares'])

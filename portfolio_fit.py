@@ -3,12 +3,13 @@ import math
 import re
 import time
 import company_data
-from broker_costs import BUY_FEE_NOK, FEE_MODEL
+from broker_costs import BUY_FEE_NOK
 
 SECTORS = ['Energy', 'Materials', 'Industrials', 'Consumer discretionary', 'Consumer staples',
            'Health care', 'Financials', 'Information technology', 'Communication services',
            'Utilities', 'Real estate']
-DEFAULTS = {'cash_nok': 0., 'purchase_nok': 0., 'max_stock_pct': 20., 'max_sector_pct': 35.,
+FEE_MODEL = 'user-fixed-order-v1'
+DEFAULTS = {'cash_nok': 0., 'purchase_nok': 0., 'buy_fee_nok': BUY_FEE_NOK, 'sell_fee_nok': None, 'max_stock_pct': 20., 'max_sector_pct': 35.,
             'reserve_pct': 10., 'max_buy_fee_pct': 2., 'review_sell_pct': 25., 'confirm_sessions':2., 'signal_wait_hours':24., 'trade_cooldown_days':7., 'min_change_pct':20., 'sectors': {}}
 
 
@@ -32,7 +33,8 @@ def canonical(symbol, currency='NOK'):
 
 
 def preferences(data):
-    out = {k:number(data.get(k,DEFAULTS[k]),k,1e9 if k in ('cash_nok','purchase_nok') else 720 if k=='signal_wait_hours' else 100)
+    out = {k:(None if k=='sell_fee_nok' and data.get(k,DEFAULTS[k]) is None else
+              number(data.get(k,DEFAULTS[k]),k,10000 if k in ('buy_fee_nok','sell_fee_nok') else 1e9 if k in ('cash_nok','purchase_nok') else 720 if k=='signal_wait_hours' else 100))
            for k in DEFAULTS if k != 'sectors'}
     if out['max_stock_pct'] == 0 or out['max_sector_pct'] == 0 or out['max_buy_fee_pct']==0:
         raise ValueError('Position, sector and purchase-fee limits must be greater than zero.')
@@ -151,14 +153,15 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
     result={'symbol':symbol,'sector':sector,'budget_nok':amount,'ready':False,'warnings':[],
             'max_purchase_nok':None,'shares':None,'purchase_nok':None,'fees_nok':None,
             'after_stock_pct':None,'after_sector_pct':None,'after_cash_nok':None,'after_cash_pct':None,
-            'current_stock_pct':None,'current_sector_pct':None,'fee_model':FEE_MODEL,'buy_fee_nok':BUY_FEE_NOK,
+            'current_stock_pct':None,'current_sector_pct':None,'fee_model':FEE_MODEL,'buy_fee_nok':profile['buy_fee_nok'],
             'fee_pct':None,'break_even_price':None,'break_even_gain_pct':None,'quote_asof':q.get('asof') if q else None}
     if not fresh(q,now) or q.get('currency')!='NOK':
         result['warnings'].append('Fresh NOK price required for purchase preview.')
         return result
     # Order costs depend on this quote and budget even when portfolio valuation is incomplete.
-    shares=max(0,math.floor((amount-BUY_FEE_NOK)/q['price']))
-    purchase=shares*q['price'];fee=BUY_FEE_NOK if shares else 0.
+    buy_fee=profile['buy_fee_nok']
+    shares=max(0,math.floor((amount-buy_fee)/q['price']))
+    purchase=shares*q['price'];fee=buy_fee if shares else 0.
     result.update(shares=shares,purchase_nok=purchase,fees_nok=fee,price=q['price'],
                   fee_pct=fee/purchase*100 if purchase else None,
                   break_even_price=(purchase+fee)/shares if shares else None,
@@ -166,7 +169,7 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
     if not ctx['complete'] or not ctx['total_nok']:
         result['warnings'].append('Complete holdings prices and a positive tracked portfolio value are required.')
         return result
-    total=ctx['total_nok'];fixed=BUY_FEE_NOK
+    total=ctx['total_nok'];fixed=buy_fee
     existing=sum(h['value_nok'] for h in ctx['holdings'] if h['issuer']==company_data.issuer(symbol))
     sector_value=sum(h['value_nok'] for h in ctx['holdings'] if sector and h['sector']==sector)
     result['current_stock_pct']=existing/total*100
@@ -242,10 +245,10 @@ def view(snapshot, report, profile, now=None):
     return {'manual_sectors':snapshot.get('manual_portfolio_preferences',{}).get('sectors',profile['sectors']),
             'sector_sources':snapshot.get('portfolio_preferences',{}).get('sector_sources',{}),
             'companies':snapshot.get('companies',{}), 'trade_plan':trade_plan.build(snapshot,report,profile,now),'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
-            'report_generated':(report or {}).get('generated'),'report_stale':old,'buy_fee_nok':BUY_FEE_NOK,
+            'report_generated':(report or {}).get('generated'),'report_stale':old,'buy_fee_nok':profile['buy_fee_nok'],'sell_fee_nok':profile['sell_fee_nok'],
             'fee_model':FEE_MODEL,
             'method':'Your limits are screening constraints, not a measure of investment suitability. Defaults are illustrative. '
-                     'Preview uses whole shares at the cached quote and your fixed 79 NOK fee per purchase, regardless of share count. '
-                     'Selling fees, tax, spread, price movement and real execution are not modelled. Classifications are entered by you; '
+                     'Preview uses whole shares at the cached quote and your entered fixed fee per purchase, regardless of share count. '
+                     'Selling fees use your entered fixed fee per order; a blank estimate means unknown. Tax, spread, price movement and real execution are not modelled. Classifications are entered by you; '
                      'unclassified holdings block sector clearance. Correlations use 60–126 matching historical daily returns '
                      'in NOK, omit USD holdings, and do not predict future relationships. Purchases do not change saved holdings or cash.'}
