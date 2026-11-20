@@ -220,8 +220,13 @@ After manual edits, restart the service. `GET /api/email` exposes only configura
 ## Research workspace and expanded diagnostics
 
 The dashboard has four workspaces: **Overview**, **Research**, **Portfolio**, and
-**Strategy lab**. Overview groups priority reviews, email, issuer notices and
-methodology. Portfolio groups holdings, allocation and transaction reconciliation.
+**Strategy lab**. Overview separates its mixed priority reviews from up to three
+buying candidates taken from the current shared-budget trade plan. Candidates
+follow the existing technical, quote freshness, holdings, cash, purchase fee,
+sector, reserve and reconciliation checks; no eligible candidate is hidden behind
+a placeholder. Each candidate links to its Research analysis. Overview groups
+these lists with email, issuer notices and methodology. Portfolio groups holdings,
+allocation and transaction reconciliation.
 Legacy hashes such as `#fit`, `#activity` and `#announcements` still open the
 appropriate workspace and expand their section.
 
