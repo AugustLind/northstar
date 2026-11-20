@@ -108,8 +108,11 @@ python3 scripts/setup-email.py
 The helper prompts privately for SMTP settings, installs the server configuration
 and restarts Northstar. Open **Daily overview → Email alerts → Send test email**
 after setup. Keep passwords out of source files, GitHub and chat. Email works
-without an open browser. Stock alerts require valid confirmed share-plan quantities;
-test emails work independently of research and plan generation.
+without an open browser. Emails include confirmed share-plan changes, recent issuer
+and annual financial reviews, and significant historical or designated long-term
+holding risks. Risk emails include the configured warning level, relevant source
+freshness and supporting analysis. Unchanged conditions are deduplicated; test emails
+work independently of research and plan generation.
 See the [email reference](docs/REFERENCE.md#email-alerts) for delivery behavior,
 manual settings, and limitations.
 

@@ -21,6 +21,32 @@ def environment(**changes):
             'NORTHSTAR_PAGES_ORIGIN': 'https://owner.github.io', **changes}
 
 
+class EmailPlanTests(unittest.TestCase):
+    def test_collects_dashboard_reviews_and_only_material_risk_warnings(self):
+        snapshot={'positions':[{'symbol':'A.OL','currency':'NOK','shares':2,'long_term':True}],
+                  'quotes':{'A.OL':{'asof':NOW,'price':100,'currency':'NOK'}},
+                  'portfolio_preferences':{'risk_warning_pct':20}}
+        report={'generated':NOW}
+        plan={'buys':[],'holdings':[]}
+        board_review={'id':'issuer','kind':'announcement','source_asof':NOW}
+        risk={'risk_warning_pct':20,'risk_warnings':[
+            {'label':'Historical 95% daily VaR','loss_pct':22},
+            {'label':'A.OL long-term holding · shock','loss_pct':20},
+            {'label':'All equities −20%','loss_pct':20}]}
+        with patch.object(app,'state',return_value=snapshot), \
+             patch.object(app,'read_meta',return_value={}), \
+             patch.object(app.trade_plan,'build',return_value=plan), \
+             patch.object(app.daily_board,'build',return_value={'reviews':[board_review]}), \
+             patch.object(app,'ledger_view',return_value={}), \
+             patch.object(app.portfolio_risk,'view',return_value=risk):
+            result, current_plan=app.email_plan()
+        self.assertIs(current_plan,plan)
+        self.assertEqual(result['long_term_symbols'],['A.OL'])
+        self.assertEqual([a['kind'] for a in result['review_alerts']],['announcement','risk','risk'])
+        self.assertEqual(result['review_alerts'][1]['source_asof'],NOW)
+        self.assertIn('Long-term designation',result['review_alerts'][2]['detail'])
+
+
 class ConfigurationTests(unittest.TestCase):
     def test_disabled_and_incomplete_settings_cannot_send(self):
         config = mail.configuration({})
@@ -105,6 +131,38 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('https://owner.github.io/northstar/#recommendations', message.get_content())
         self.assertNotIn('private-password', message.as_string())
         self.assertEqual(self.rows()[0]['status'], 'sent')
+
+    def test_recent_review_alerts_include_freshness_links_and_deduplicate(self):
+        self.report['review_alerts']=[{'id':'notice-1','kind':'announcement','symbol':'B.OL','priority':95,
+            'title':'B.OL: material update','detail':'Review the issuer notice.','source_asof':NOW,
+            'url':'https://issuer.example/notice'}]
+        self.worker.tick(NOW)
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('B.OL: material update',content)
+        self.assertIn('Source data: 2027-01-15 08:00 UTC.',content)
+        self.assertIn('https://issuer.example/notice',content)
+        self.worker.tick(NOW+60)
+        self.assertEqual(self.send.call_count,1)
+
+    def test_stale_review_data_is_not_sent(self):
+        self.report['recommendation_changes']=[]
+        self.plan['buys']=[]
+        self.report['review_alerts']=[{'id':'old-risk','kind':'risk','title':'Old risk',
+            'detail':'Should be withheld.','source_asof':NOW-8*86400}]
+        self.worker.tick(NOW)
+        self.send.assert_not_called()
+        self.assertEqual(self.rows(),[])
+
+    def test_long_term_designation_does_not_hide_or_recast_sale_review(self):
+        self.report['long_term_symbols']=['A.OL']
+        self.plan['holdings']=[{'symbol':'A.OL','sell_shares':4,'price':90,'quote_asof':NOW,
+                                'reasons':['Significant risk remains under review.']}]
+        self.report['recommendation_changes'].append({'symbol':'A.OL','direction':'sell',
+            'shares':4,'change_id':'long-term-risk','change':'New'})
+        self.worker.tick(NOW)
+        content=self.send.call_args.args[1].get_content()
+        self.assertIn('review sell of 4 shares',content)
+        self.assertIn('Long-term designation noted; this is a review prompt and does not direct a sale.',content)
 
     def test_failure_retries_persistently_without_requiring_new_change(self):
         self.send.side_effect = smtplib.SMTPAuthenticationError(535, b'private-password echoed')

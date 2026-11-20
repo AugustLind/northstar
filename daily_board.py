@@ -13,9 +13,9 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
     now=time.time() if now is None else now
     held={pf.canonical(p['symbol'],p['currency']) for p in snapshot['positions'] if p['shares']>0}
     reviews=[]
-    def add(key,priority,title,detail,kind,symbol=None,url=None):
+    def add(key,priority,title,detail,kind,symbol=None,url=None,source_asof=None):
         reviews.append({'id':hashlib.sha256(key.encode()).hexdigest()[:24],'priority':priority,'title':title,
-                        'detail':detail,'kind':kind,'symbol':symbol,'url':url,'observed':now})
+                        'detail':detail,'kind':kind,'symbol':symbol,'url':url,'source_asof':source_asof,'observed':now})
     for symbol in snapshot['portfolio_context']['missing']:
         add('missing:'+symbol,100,'Refresh '+symbol+' before sizing trades','Current portfolio valuation is incomplete.','data',symbol)
     if ledger and not ledger.get('reconciled',True):
@@ -34,7 +34,7 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
         priority=(n.get('classification') or {}).get('priority',0)
         if priority>=3 or (n.get('classification') or {}).get('kind')=='earnings':
             add('notice:'+n['id'],95 if n['symbol'] in held else 75,n['symbol']+': '+n['title'],
-                'New official issuer notice; read the linked source. Headline label is not a trade signal.','announcement',n['symbol'],n['url'])
+                'New official issuer notice; read the linked source. Headline label is not a trade signal.','announcement',n['symbol'],n['url'],n['published'])
     if notices.get('status') in ('unavailable','stale','degraded'):
         add('announcement-feed-status',85,'Check announcement coverage','Official notice feed: '+str(notices.get('status'))+'. An empty feed is not evidence that nothing happened.','data')
     for symbol in held:
@@ -44,7 +44,7 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
         for check in assessment['checks']:
             if not check['passes'] and check['metric'] in ('free_cash_flow','net_income'):
                 add('annual:'+symbol+':'+check['metric']+':'+check['period'],80,symbol+': review annual '+check['metric'].replace('_',' '),
-                    'Non-positive reported value for fiscal period '+check['period']+'. Annual accounting evidence is not a sell signal.','company',symbol,financial.get('source_url'))
+                    'Non-positive reported value for fiscal period '+check['period']+'. Annual accounting evidence is not a sell signal.','company',symbol,financial.get('source_url'),(record or {}).get('fetched'))
     for e in notices.get('events',[]):
         try:days=(dt.date.fromisoformat(e['date'])-dt.datetime.fromtimestamp(now,dt.timezone.utc).date()).days
         except ValueError:continue
@@ -65,7 +65,7 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
     return {'generated':now,'top3':ordered[:3],'reviews':ordered,'changes':changes,
             'plan':plan,'announcement_status':notices.get('status'),'ledger':ledger,
             'coverage':(report or {}).get('coverage',{}),
-            'method':'Priorities are review rules, not probabilities. Browser notifications require opt-in and an open dashboard. Optional server-side email sends confirmed share-plan changes when SMTP is configured and enabled.'}
+            'method':'Priorities are review rules, not probabilities. Browser notifications require opt-in and an open dashboard. Optional server-side email sends confirmed share-plan changes, recent issuer and annual financial reviews, and significant historical or long-term holding risks when SMTP is configured and enabled.'}
 
 
 def merge_alerts(old,reviews,now=None):
