@@ -102,12 +102,20 @@ class ValidationTests(unittest.TestCase):
 
     def test_long_window_excludes_young_history_and_compares_index_without_filling(self):
         q=quotes(1100);q['B.OL']={'currency':'NOK','history':q['A.OL']['history'][-300:]}
-        q['OSEBX.OL']={'currency':'NOK','history':q['A.OL']['history']}
+        q['OSEBX.OL']={'currency':'NOK','history':[dict(p,close=200+i*.2) for i,p in enumerate(q['A.OL']['history'])]}
         v=validation.evaluate(q,['A.OL','B.OL'])
         self.assertEqual(v['sessions'],756);self.assertEqual(v['stocks'],1)
         self.assertGreaterEqual(len(v['folds']),3)
         self.assertEqual(v['oslo_index']['status'],'available')
         self.assertEqual(len(v['oslo_index']['curve']),756)
+        first=next(p['close'] for p in q['OSEBX.OL']['history'] if int(p['time']//86400)*86400==v['oslo_index']['from'])
+        last=next(p['close'] for p in q['OSEBX.OL']['history'] if int(p['time']//86400)*86400==v['oslo_index']['to'])
+        self.assertAlmostEqual(v['oslo_index']['return_pct'],(last/first-1)*100)
+        self.assertEqual(v['oslo_index']['from'],v['curve'][1]['time'])
+        self.assertEqual(v['oslo_index']['to'],v['curve'][-1]['time'])
+        matched_strategy=(v['curve'][-1]['close']/v['curve'][1]['close']-1)*100
+        self.assertAlmostEqual(v['oslo_index']['strategy_return_pct'],matched_strategy)
+        self.assertAlmostEqual(v['oslo_index']['excess_percentage_points'],matched_strategy-(last/first-1)*100)
         q['OSEBX.OL']={'currency':'NOK','history':q['A.OL']['history'][:-5]}
         v=validation.evaluate(q,['A.OL'])
         self.assertIsNone(v['oslo_index']['return_pct'])
