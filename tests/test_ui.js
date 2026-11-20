@@ -8,7 +8,7 @@ const fitForm=element();for(const name of ['cash_nok','purchase_nok','buy_fee_no
 const now=Date.now()/1000;
 const history=Array.from({length:250},(_,i)=>({time:now-(249-i)*86400,close:100+i/10}));
 const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV.OL',name:'Bouvet',currency:'NOK',price:125,asof:now,source:'test',held:false,rank_eligible:true,rank:1,action:'Consider buying',score:100,reasons:['Test measured evidence'],history,history_basis:'Adjusted close',metrics:{ma200:110,momentum3m:5,drawdown:-2,volatility:20,turnover20:1000000}}]};
-const fitFixture={generated:now,report_generated:now,report_stale:false,profile:{cash_nok:10000,purchase_nok:1000,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,max_buy_fee_pct:2,review_sell_pct:25,confirm_sessions:2,signal_wait_hours:24,trade_cooldown_days:7,min_change_pct:20,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
+const fitFixture={generated:now,report_generated:now,report_stale:false,buy_fee_nok:79,profile:{cash_nok:10000,purchase_nok:1000,buy_fee_nok:79,sell_fee_nok:null,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,max_buy_fee_pct:2,review_sell_pct:25,confirm_sessions:2,signal_wait_hours:24,trade_cooldown_days:7,min_change_pct:20,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
 const importFixture={token:'preview-token',expires:now+900,valid:1,rows:[{id:2,name:'Example <untrusted> ASA',currency:'NOK',shares:5,cost:306,symbol:'EXA.OL',selected:true,error:null,match:'Name match; confirm',existing:null}],companies:[{symbol:'EXA.OL',name:'Example <untrusted> ASA'}],existing_holdings:[{symbol:'EXA',currency:'NOK',shares:1,cost:100}],method:'Preview only. Preserve notes.'};
 const importSelections=[];
 const planFixture={generated:now,report_generated:now,buy_budget_nok:1000,spent_nok:979,buy_fees_nok:79,unallocated_budget_nok:21,buys:[{symbol:'EXA.OL',name:'<untrusted>',buy_shares:9,price:100,quote_asof:now,total_nok:979,fee_nok:79,fee_pct:79/900*100,reason:'Shared budget'}],holdings:[{symbol:'HELD.OL',owned:10,sell_shares:4,remaining_shares:6,gross_proceeds_nok:400,reasons:['Position limit'],price:100,quote_asof:now}],blocked_buys:[],warnings:[],method:'Rule-based scenario; selling fees and tax unmodelled'};
@@ -106,7 +106,8 @@ setImmediate(async()=>{
  assert(!nodes['#fitCandidates'].innerHTML.includes('<untrusted>'));
  assert(nodes['#fitCandidateCount'].textContent===0);
  assert(nodes['#fitCandidates'].innerHTML.includes('7.9%'));
- assert(nodes['#fitCandidates'].innerHTML.includes('79 kr per purchase'));
+ assert(nodes['#fitCandidates'].innerHTML.includes('79'));
+ assert(nodes['#fitCandidates'].innerHTML.includes('per purchase order'));
  assert(nodes['#adviceCards'].innerHTML.includes('Purchase fee drag'));
  assert(nodes['#stockFeeImpact'].textContent.includes('79 kr per order'));
  assert(nodes['#fitMethod'].textContent==='Illustrative limits only');
@@ -136,7 +137,7 @@ setImmediate(async()=>{
  await vm.runInContext('loadQuantityPlan()',context);
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Buy 9 shares'));
  assert(nodes['#quantityPlanFit'].innerHTML.includes('Sell 4 shares'));
- assert(nodes['#quantityPlanMain'].innerHTML.includes('Before selling fees and tax'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('Gross proceeds · sell fee unknown'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#quantityPlanMain'].innerHTML.includes('<untrusted>'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Shared budget'));
