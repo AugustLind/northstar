@@ -96,6 +96,7 @@
       <button id="refreshPortfolioRisk" type="button">Refresh risk</button>
     </div>
     <p id="portfolioRiskStatus" role="status">Loading historical risk coverage…</p>
+    <div id="riskWarningStatus" role="status"></div>
     <div id="portfolioRiskMetrics" class="diagnosticgrid"></div>
     <div id="riskContributions" class="tablewrap"></div>
     <details>
@@ -244,6 +245,14 @@
                 name="max_buy_fee_pct"
                 type="number"
                 min="0.01"
+                max="100"
+                step="any"
+                required /></label
+            ><label
+              >Portfolio risk warning level · %<input
+                name="risk_warning_pct"
+                type="number"
+                min="1"
                 max="100"
                 step="any"
                 required /></label

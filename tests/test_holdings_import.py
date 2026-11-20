@@ -99,6 +99,13 @@ class ImportTransactionTests(unittest.TestCase):
             self.assertEqual(row[key],before[0][key])
         self.assertEqual(app.read_meta('holdings_import_status')['updated'],1)
 
+    def test_import_preserves_long_term_designation(self):
+        app.save_position({'symbol':'EXA','currency':'NOK','shares':1,'cost':12,'long_term':True})
+        self.apply(self.preview())
+        row=app.state()['positions'][0]
+        self.assertEqual(row['shares'],5)
+        self.assertEqual(row['long_term'],1)
+
     def test_repeat_upload_replaces_instead_of_adds_and_remembers_ticker(self):
         self.apply(self.preview())
         p=self.preview()

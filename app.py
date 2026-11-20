@@ -74,6 +74,8 @@ def connect():
     for action in ('UPDATE','DELETE'):
         db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_account_baselines_{action.lower()} BEFORE {action} ON account_baselines BEGIN SELECT RAISE(ABORT,'Opening checkpoints are append-only'); END")
     db.execute('CREATE TABLE IF NOT EXISTS positions (symbol TEXT PRIMARY KEY, currency TEXT, shares REAL, cost REAL, thesis TEXT, review TEXT, below REAL, above REAL)')
+    if 'long_term' not in {r['name'] for r in db.execute('PRAGMA table_info(positions)')}:
+        db.execute('ALTER TABLE positions ADD COLUMN long_term INTEGER NOT NULL DEFAULT 0')
     db.execute('CREATE TABLE IF NOT EXISTS quotes (symbol TEXT PRIMARY KEY, payload TEXT)')
     db.execute('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, payload TEXT)')
     return db
@@ -139,11 +141,18 @@ def save_position(data):
     currency = data.get('currency')
     if currency not in ('USD', 'NOK'):
         raise ValueError('Choose USD or NOK.')
+    long_term=data.get('long_term',False)
+    if not isinstance(long_term,bool):
+        raise ValueError('Long-term designation must be true or false.')
     values = (symbol, currency, positive(data.get('shares')), positive(data.get('cost')),
               str(data.get('thesis', ''))[:5000], str(data.get('review', ''))[:5000],
-              positive(data.get('below'), True), positive(data.get('above'), True))
+              positive(data.get('below'), True), positive(data.get('above'), True), int(long_term))
     with connect() as db:
-        db.execute('INSERT OR REPLACE INTO positions VALUES (?,?,?,?,?,?,?,?)', values)
+        db.execute('''INSERT INTO positions(symbol,currency,shares,cost,thesis,review,below,above,long_term)
+                      VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol) DO UPDATE SET
+                      currency=excluded.currency,shares=excluded.shares,cost=excluded.cost,
+                      thesis=excluded.thesis,review=excluded.review,below=excluded.below,
+                      above=excluded.above,long_term=excluded.long_term''', values)
 
 def fetch_quote(symbol):
     # Unofficial public endpoint: errors are surfaced, never replaced with sample prices.
