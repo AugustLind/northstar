@@ -84,6 +84,7 @@ Do not put access keys or portfolio data in `static/config.js`.
 | Goal | Instructions |
 |---|---|
 | Explain signals and review data limitations | [Technical reference](docs/REFERENCE.md) |
+| Read the mathematical models | [Short guide](docs/MATHEMATICS.md) · [LaTeX paper (PDF)](docs/strategy-mathematics.pdf) · [LaTeX source](docs/strategy-mathematics.tex) |
 | Configure server-side email alerts | [Email setup](#email-alerts) |
 | Enable local AI or a Linux user service | [Local services](docs/LOCAL-SERVICES.md) |
 | Run on an Oracle Ubuntu server, with private SSH access | [Oracle deployment](DEPLOY.md) |
