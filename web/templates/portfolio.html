@@ -201,6 +201,21 @@
                 step="any"
                 required /></label
             ><label
+              >Buy fee · NOK per order<input
+                name="buy_fee_nok"
+                type="number"
+                min="0"
+                max="10000"
+                step="any"
+                required /></label
+            ><label
+              >Sell fee · NOK per order (leave blank if unknown)<input
+                name="sell_fee_nok"
+                type="number"
+                min="0"
+                max="10000"
+                step="any" /></label
+            ><label
               >Maximum per company · % incl. known share classes<input
                 name="max_stock_pct"
                 type="number"
@@ -274,8 +289,9 @@
                 required
             /></label>
             <p>
-              Purchase fee: <b>79 kr per order</b>, regardless of share count, using your
-              stated Nordnet fee. Budgets include this fee. Selling fees are not yet modelled.
+              Buy fee defaults to <b>79 kr per order</b>, regardless of share count. Enter
+              your confirmed fee assumptions; blank sell fee means unknown. Buy budgets
+              include the buy fee. Estimates exclude tax, spread and execution differences.
             </p>
           </div>
           <details>

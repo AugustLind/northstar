@@ -34,7 +34,19 @@ class TradePlanTests(unittest.TestCase):
         self.assertEqual(v['spent_nok'],979)
         self.assertEqual(v['unallocated_budget_nok'],21)
         self.assertEqual(v['cash_after_buys_nok'],9021)
-        self.assertTrue(any(r['symbol']=='C.OL' and r['buy_shares']==0 for r in v['blocked_buys']))
+        self.assertIsNone(v['cash_after_sell_scenario_nok'])
+        self.assertIn('unknown until you enter',v['method'])
+
+    def test_entered_fee_assumptions_change_buy_and_sale_guidance(self):
+        p=profile(buy_fee_nok=25,sell_fee_nok=12)
+        v=self.plan(snapshot(10),[card('A.OL',action='Consider taking profits'),card('B.OL',2)],p)
+        self.assertEqual(v['buys'][0]['fee_nok'],25)
+        sale=next(r for r in v['holdings'] if r['symbol']=='A.OL')
+        self.assertEqual(sale['gross_proceeds_nok'],300)
+        self.assertEqual(sale['fee_nok'],12)
+        self.assertEqual(sale['net_proceeds_nok'],288)
+        self.assertEqual(v['sell_fees_nok'],12)
+        self.assertEqual(v['cash_after_sell_scenario_nok'],10288)
 
     def test_budget_above_cash_does_not_reserve_unaffordable_orders(self):
         v=self.plan(cards=[card(),card('C.OL',2)],p=profile(cash_nok=5000,purchase_nok=100000,max_buy_fee_pct=2))
@@ -48,6 +60,11 @@ class TradePlanTests(unittest.TestCase):
         self.assertIn('4029.0 NOK',v['blocked_buys'][0]['reason'])
         self.assertTrue(self.plan(p=profile(max_buy_fee_pct=10))['buys'])
 
+    def test_zero_buy_fee_is_a_valid_explicit_assumption(self):
+        v=self.plan(p=profile(buy_fee_nok=0))
+        self.assertEqual(v['buys'][0]['fee_nok'],0)
+        self.assertEqual(v['buy_fees_nok'],0)
+
     def test_ceil_sale_size_and_merge_reasons_without_double_selling(self):
         s=snapshot(10);p=profile(cash_nok=0,purchase_nok=10000,max_stock_pct=60,review_sell_pct=25)
         v=self.plan(s,[card('A.OL',action='Consider reducing / selling')],p)
@@ -55,9 +72,11 @@ class TradePlanTests(unittest.TestCase):
         self.assertEqual(row['sell_shares'],4)  # max(ceil(25%*10), 10-6), not 3+4.
         self.assertEqual(row['remaining_shares'],6)
         self.assertEqual(row['gross_proceeds_nok'],400)
+        self.assertIsNone(row['fee_nok'])
+        self.assertIsNone(row['net_proceeds_nok'])
         self.assertEqual(v['buys'],[])  # Neither hypothetical sale proceeds nor the same ticker can fund a buy.
         self.assertEqual(v['cash_after_buys_nok'],0)
-        self.assertEqual(v['cash_after_sell_scenario_nok'],400)
+        self.assertIsNone(v['cash_after_sell_scenario_nok'])
 
     def test_sale_never_exceeds_owned_and_zero_review_is_explicit(self):
         s=snapshot(1)
@@ -74,7 +93,7 @@ class TradePlanTests(unittest.TestCase):
                   sectors={'A.OL':'Energy','B.OL':'Energy'})
         v=self.plan(s,[],p)
         self.assertEqual(sum(r['sell_shares'] for r in v['holdings']),9)
-        self.assertEqual(v['cash_after_sell_scenario_nok'],900)
+        self.assertIsNone(v['cash_after_sell_scenario_nok'])
         self.assertTrue(all(0<=r['sell_shares']<=r['owned'] for r in v['holdings']))
         self.assertTrue(any('sector' in reason for r in v['holdings'] for reason in r['reasons']))
         self.assertTrue(any('cash reserve' in reason for r in v['holdings'] for reason in r['reasons']))
@@ -129,7 +148,7 @@ class TradePlanTests(unittest.TestCase):
                       max_stock_pct=20,max_sector_pct=35,reserve_pct=10,max_buy_fee_pct=5,sectors=sectors)
             v=self.plan(s,cards,p)
             self.assertLessEqual(v['spent_nok'],p['purchase_nok']+1e-6)
-            self.assertAlmostEqual(v['buy_fees_nok'],79*len(v['buys']))
+            self.assertAlmostEqual(v['buy_fees_nok'],p['buy_fee_nok']*len(v['buys']))
             after=v['after_buys']
             self.assertGreaterEqual(after['cash_pct'],p['reserve_pct']-1e-8)
             self.assertTrue(all(h['weight_pct']<=20+1e-8 for h in after['holdings']))

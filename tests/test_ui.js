@@ -4,7 +4,7 @@ const nodes={};
 function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
 const form=element();for(const name of ['universe','interval_minutes','model','min_turnover_nok','llm_enabled'])form.elements[name]=element();nodes['#researchSettings']=form;
 nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rankBy']=element();nodes['#rankBy'].value='composite';
-const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct','confirm_sessions','signal_wait_hours','trade_cooldown_days','min_change_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
+const fitForm=element();for(const name of ['cash_nok','purchase_nok','buy_fee_nok','sell_fee_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct','confirm_sessions','signal_wait_hours','trade_cooldown_days','min_change_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
 const now=Date.now()/1000;
 const history=Array.from({length:250},(_,i)=>({time:now-(249-i)*86400,close:100+i/10}));
 const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV.OL',name:'Bouvet',currency:'NOK',price:125,asof:now,source:'test',held:false,rank_eligible:true,rank:1,action:'Consider buying',score:100,reasons:['Test measured evidence'],history,history_basis:'Adjusted close',metrics:{ma200:110,momentum3m:5,drawdown:-2,volatility:20,turnover20:1000000}}]};

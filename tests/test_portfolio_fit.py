@@ -90,9 +90,21 @@ class PortfolioFitTests(unittest.TestCase):
             self.assertEqual(r['fees_nok'],0)
             self.assertFalse(r['ready'])
         # Previous illustrative percentage settings must not be charged on top.
-        migrated=profile(cost_bps=20,buy_fee_nok=999)
+        migrated=profile(cost_bps=20)
         self.assertNotIn('cost_bps',migrated)
         self.assertEqual(pf.preview('B',1079,snapshot(),migrated,now=NOW)['fees_nok'],79)
+
+    def test_fee_assumptions_default_compatibly_and_remain_explicit(self):
+        old=pf.preferences({'cash_nok':10,'purchase_nok':20})
+        self.assertEqual(old['buy_fee_nok'],79)
+        self.assertIsNone(old['sell_fee_nok'])
+        entered=profile(buy_fee_nok=25,sell_fee_nok=12.5)
+        preview=pf.preview('B',1025,snapshot(),entered,now=NOW)
+        self.assertEqual(preview['fees_nok'],25)
+        self.assertAlmostEqual(preview['break_even_gain_pct'],25/1000*100)
+        for invalid in (-1,float('nan'),10001):
+            with self.assertRaises(ValueError): profile(buy_fee_nok=invalid)
+        with self.assertRaises(ValueError): profile(sell_fee_nok=float('inf'))
 
     def test_unknown_sector_never_clears(self):
         for sectors in ({'A.OL':'Energy'},{'B.OL':'Industrials'},{}):
