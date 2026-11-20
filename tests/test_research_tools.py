@@ -33,6 +33,20 @@ def snapshot(a=None,b=None,cash=200):
             'quotes':{'A.OL':a,'B.OL':b},'portfolio_preferences':pf.preferences({'cash_nok':cash,'sectors':{'A.OL':'Energy','B.OL':'Industrials'}})}
 
 class PortfolioRiskTests(unittest.TestCase):
+    def test_warning_level_and_long_term_shock_warning(self):
+        s=snapshot();s['positions'][0]['long_term']=True
+        p={**s['portfolio_preferences'],'risk_warning_pct':25,'sectors':{'A.OL':'Energy','B.OL':'Energy'}}
+        v=risk.view(s,p,NOW,stock_shock=-30,fx_shock=0)
+        self.assertEqual(v['risk_warning_pct'],25)
+        long_term_warning=next(row for row in v['risk_warnings'] if 'long-term holding' in row['label'])
+        self.assertAlmostEqual(long_term_warning['loss_pct'],30)
+        self.assertTrue(v['risk_contributions'][0]['long_term'])
+        self.assertTrue(any('Largest classified sector' in row['label'] and 'long-term holding' in row['label']
+                            for row in v['risk_warnings']))
+        v=risk.view(s,p,NOW,stock_shock=-20,fx_shock=0)
+        self.assertFalse(any('long-term holding' in row['label'] and 'Custom:' in row['label']
+                             for row in v['risk_warnings']))
+
     def test_exact_covariance_contributions_and_cash_weights(self):
         s=snapshot();v=risk.view(s,s['portfolio_preferences'],NOW)
         self.assertEqual(v['status'],'available');self.assertEqual(v['observations'],120)

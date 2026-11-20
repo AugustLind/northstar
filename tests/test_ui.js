@@ -1,14 +1,16 @@
 // DOM contract smoke checks without installing a browser or packages.
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const nodes={};
+const strategyLabHtml=fs.readFileSync('static/index.html','utf8');
+for(const disclosure of ['experimental decision rules','fixed 20-position monthly baseline','including poor results','never changes Research rankings, primary recommendations, or holdings','cannot establish point-in-time or delisted-stock performance'])assert(strategyLabHtml.includes(disclosure));
 function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
 const form=element();for(const name of ['universe','interval_minutes','model','min_turnover_nok','llm_enabled'])form.elements[name]=element();nodes['#researchSettings']=form;
 nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rankBy']=element();nodes['#rankBy'].value='composite';
-const fitForm=element();for(const name of ['cash_nok','purchase_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct','confirm_sessions','signal_wait_hours','trade_cooldown_days','min_change_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
+const fitForm=element();for(const name of ['cash_nok','purchase_nok','buy_fee_nok','sell_fee_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct','risk_warning_pct','confirm_sessions','signal_wait_hours','trade_cooldown_days','min_change_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
 const now=Date.now()/1000;
 const history=Array.from({length:250},(_,i)=>({time:now-(249-i)*86400,close:100+i/10}));
 const report={generated:now,errors:[],llm_status:'disabled',cards:[{symbol:'BOUV.OL',name:'Bouvet',currency:'NOK',price:125,asof:now,source:'test',held:false,rank_eligible:true,rank:1,action:'Consider buying',score:100,reasons:['Test measured evidence'],history,history_basis:'Adjusted close',metrics:{ma200:110,momentum3m:5,drawdown:-2,volatility:20,turnover20:1000000}}]};
-const fitFixture={generated:now,report_generated:now,report_stale:false,profile:{cash_nok:10000,purchase_nok:1000,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,max_buy_fee_pct:2,review_sell_pct:25,confirm_sessions:2,signal_wait_hours:24,trade_cooldown_days:7,min_change_pct:20,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
+const fitFixture={generated:now,report_generated:now,report_stale:false,buy_fee_nok:79,profile:{cash_nok:10000,purchase_nok:1000,buy_fee_nok:79,sell_fee_nok:null,max_stock_pct:20,max_sector_pct:35,reserve_pct:10,max_buy_fee_pct:2,review_sell_pct:25,risk_warning_pct:20,confirm_sessions:2,signal_wait_hours:24,trade_cooldown_days:7,min_change_pct:20,sectors:{}},sector_choices:['Energy'],portfolio:{total_nok:10000,cash_nok:10000,cash_pct:100,holdings:[],sectors:[],warnings:[],scope:'Tracked assets only'},candidates:[{symbol:'BOUV.OL',name:'<untrusted>',technical_action:'Consider buying',buy_candidate:false,rank:1,status:'Review',warnings:['Classify sector'],max_purchase_nok:null,fee_pct:7.9}],method:'Illustrative limits only'};
 const importFixture={token:'preview-token',expires:now+900,valid:1,rows:[{id:2,name:'Example <untrusted> ASA',currency:'NOK',shares:5,cost:306,symbol:'EXA.OL',selected:true,error:null,match:'Name match; confirm',existing:null}],companies:[{symbol:'EXA.OL',name:'Example <untrusted> ASA'}],existing_holdings:[{symbol:'EXA',currency:'NOK',shares:1,cost:100}],method:'Preview only. Preserve notes.'};
 const importSelections=[];
 const planFixture={generated:now,report_generated:now,buy_budget_nok:1000,spent_nok:979,buy_fees_nok:79,unallocated_budget_nok:21,buys:[{symbol:'EXA.OL',name:'<untrusted>',buy_shares:9,price:100,quote_asof:now,total_nok:979,fee_nok:79,fee_pct:79/900*100,reason:'Shared budget'}],holdings:[{symbol:'HELD.OL',owned:10,sell_shares:4,remaining_shares:6,gross_proceeds_nok:400,reasons:['Position limit'],price:100,quote_asof:now}],blocked_buys:[],warnings:[],method:'Rule-based scenario; selling fees and tax unmodelled'};
@@ -97,18 +99,23 @@ setImmediate(async()=>{
  assert.strictEqual(nodes['#askButton'].disabled,true);
  assert(nodes['#commentary'].textContent.includes('Ollama is writing'));
  assert(!nodes['#commentary'].textContent.includes('Install Ollama'));
- vm.runInContext("renderValidation({generated:1,stocks:1,requested:2,sessions:2,decisions:1,trades:1,return_pct:2,benchmark_pct:3,max_drawdown_pct:-1,cost_pct_initial:.2,limits:'Limited coverage',curve:[{time:1600000000,close:1,benchmark:1},{time:1600086400,close:1.02,benchmark:1.03}]})",context);
+ vm.runInContext("renderValidation({generated:1,stocks:1,requested:2,sessions:2,decisions:1,trades:1,return_pct:2,benchmark_pct:3,max_drawdown_pct:-1,cost_pct_initial:.2,limits:'Limited coverage',curve:[{time:1600000000,close:1,benchmark:1},{time:1600086400,close:1.02,benchmark:1.03}],oslo_index:{status:'available',return_pct:1,strategy_return_pct:.9,excess_percentage_points:-.1,from:1600000000,to:1600086400,curve:[{time:1600000000,close:1},{time:1600086400,close:1.01}]}})",context);
+ assert(nodes['#validationSummary'].textContent.includes('OSEBX GR 1.00% gross return'));
+ assert(nodes['#validationSummary'].textContent.includes('Excess -0.10 percentage points'));
  assert(nodes['#validationChart'].innerHTML.includes('<svg'));
  assert(nodes['#validationLimits'].textContent==='Limited coverage');
  assert(nodes['#validationPoints'].innerHTML.includes('102.00'));
  await vm.runInContext('loadPortfolioFit()',context);
+ assert(nodes['#fitPreferences'].elements.risk_warning_pct.value===20);
  assert(nodes['#fitCandidates'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#fitCandidates'].innerHTML.includes('<untrusted>'));
  assert(nodes['#fitCandidateCount'].textContent===0);
  assert(nodes['#fitCandidates'].innerHTML.includes('7.9%'));
- assert(nodes['#fitCandidates'].innerHTML.includes('79 kr per purchase'));
+ assert(nodes['#fitCandidates'].innerHTML.includes('79'));
+ assert(nodes['#fitCandidates'].innerHTML.includes('per purchase order'));
  assert(nodes['#adviceCards'].innerHTML.includes('Purchase fee drag'));
- assert(nodes['#stockFeeImpact'].textContent.includes('79 kr per order'));
+ assert(nodes['#stockFeeImpact'].textContent.includes('purchase fee is'));
+ assert(nodes['#stockFeeImpact'].textContent.includes('per order'));
  assert(nodes['#fitMethod'].textContent==='Illustrative limits only');
  assert(nodes['#fitPreferences'].elements.cash_nok.value===10000);
  vm.runInContext('fitDirty=true',context);nodes['#fitPreferences'].elements.cash_nok.value=123;
@@ -136,7 +143,8 @@ setImmediate(async()=>{
  await vm.runInContext('loadQuantityPlan()',context);
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Buy 9 shares'));
  assert(nodes['#quantityPlanFit'].innerHTML.includes('Sell 4 shares'));
- assert(nodes['#quantityPlanMain'].innerHTML.includes('Before selling fees and tax'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('Gross proceeds · sell fee unknown'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('before tax'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#quantityPlanMain'].innerHTML.includes('<untrusted>'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Shared budget'));
