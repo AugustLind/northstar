@@ -32,7 +32,9 @@ function renderPortfolioRisk(v) {
       : '') +
     '. ' +
     (v.missing || []).join(' ');
-  $('#riskWarningStatus').textContent = (v.risk_warnings || []).length
+  $('#riskWarningStatus').textContent = v.portfolio && !v.portfolio.complete
+    ? 'Risk warning check unavailable until all holdings have fresh prices. Your warning level is ' + v.risk_warning_pct + '%. This is not a loss limit.'
+    : (v.risk_warnings || []).length
     ? 'Warning level ' + v.risk_warning_pct + '% reached: ' + v.risk_warnings.map((r) => r.label + ' (' + r.loss_pct.toFixed(1) + '% modeled loss)').join('; ')
     : 'No displayed historical measure or current shock reaches your ' + v.risk_warning_pct + '% warning level. This is not a loss limit.';
   const c = v.concentration || {},
