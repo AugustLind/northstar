@@ -45,6 +45,7 @@ $('#disconnect').onclick = () => {
   } catch (e) {}
   $('#accessKey').value = '';
   state = { positions: [], quotes: {} };
+  $('#accountStatus').textContent = 'Not connected';
   render();
   $('#adviceCards').innerHTML = '';
   $('#commentary').textContent = '';

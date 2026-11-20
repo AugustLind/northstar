@@ -41,31 +41,23 @@
           <p id="connectionMessage" role="status"></p>
         </form>
       </section>
-      <p class="eyebrow">YOUR DAILY INVESTMENT NOTEBOOK</p>
-      <h1>Your investment workspace.</h1>
-      <p class="intro">
-        Research Oslo companies, understand risk, and keep your portfolio decisions in one place.
-      </p>
       <div id="message" role="status"></div>
-      <section class="metrics">
-        <article>
-          <small>Priced holdings · NOK</small><strong id="value">—</strong
-          ><small id="coverage">Add holdings to begin</small>
-        </article>
-        <article>
-          <small>Companies held</small><strong id="count">0</strong
-          ><small>Watchlist positions have zero shares</small>
-        </article>
-        <article>
-          <small>Items to review</small><strong id="alertsCount">0</strong
-          ><small>Rule-based prompts, not trade instructions</small>
-        </article>
+      <section class="workspace-context" aria-label="Current account and workspace">
+        <div class="account-context">
+          <p class="eyebrow">ACCOUNT</p>
+          <strong id="accountName">Northstar account</strong>
+          <span id="accountStatus" role="status">Not connected</span>
+        </div>
+        <div class="section-context">
+          <p class="eyebrow">CURRENT WORKSPACE</p>
+          <h1 id="workspaceTitle">Overview</h1>
+        </div>
       </section>
       <nav class="workspace-nav" aria-label="Main workspace">
-        <button data-tab="daily" class="active" aria-current="page">Overview</button
-        ><button data-tab="recommendations">Research</button
-        ><button data-tab="portfolio">Portfolio</button
-        ><button data-tab="validation">Strategy lab</button>
+        <button type="button" data-tab="daily" class="active" aria-current="page">Overview</button
+        ><button type="button" data-tab="recommendations">Research</button
+        ><button type="button" data-tab="portfolio">Portfolio</button
+        ><button type="button" data-tab="validation">Strategy lab</button>
       </nav>
       {{include:overview.html}}
       {{include:research.html}}

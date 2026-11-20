@@ -35,6 +35,8 @@ Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company 
 a watchlist entry. For actual account returns, verify cash and an opening snapshot
 in **Portfolio → Activity & cash**, then import later transactions and reconcile
 with your broker. Strategy lab keeps hypothetical experiments separate from your account.
+The shell keeps the Northstar account connection and current workspace visible; direct
+tool links and browser back/forward restore the matching section.
 
 ## What it does
 

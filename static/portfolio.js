@@ -122,6 +122,7 @@ function render() {
 }
 async function load() {
   state = await api('state');
+  $('#accountStatus').textContent = 'Connected';
   render();
   renderGettingStarted();
 }

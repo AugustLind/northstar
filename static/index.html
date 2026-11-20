@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Northstar · Investment notebook</title>
-    <link rel="stylesheet" href="./style.css?v=dc6a5dc77d7d" />
+    <link rel="stylesheet" href="./style.css?v=0c7fda159c78" />
   </head>
   <body>
     <header>
@@ -42,33 +42,39 @@
           <p id="connectionMessage" role="status"></p>
         </form>
       </section>
-      <p class="eyebrow">YOUR DAILY INVESTMENT NOTEBOOK</p>
-      <h1>Your investment workspace.</h1>
-      <p class="intro">
-        Research Oslo companies, understand risk, and keep your portfolio decisions in one place.
-      </p>
       <div id="message" role="status"></div>
-      <section class="metrics">
-        <article>
-          <small>Priced holdings · NOK</small><strong id="value">—</strong
-          ><small id="coverage">Add holdings to begin</small>
-        </article>
-        <article>
-          <small>Companies held</small><strong id="count">0</strong
-          ><small>Watchlist positions have zero shares</small>
-        </article>
-        <article>
-          <small>Items to review</small><strong id="alertsCount">0</strong
-          ><small>Rule-based prompts, not trade instructions</small>
-        </article>
+      <section class="workspace-context" aria-label="Current account and workspace">
+        <div class="account-context">
+          <p class="eyebrow">ACCOUNT</p>
+          <strong id="accountName">Northstar account</strong>
+          <span id="accountStatus" role="status">Not connected</span>
+        </div>
+        <div class="section-context">
+          <p class="eyebrow">CURRENT WORKSPACE</p>
+          <h1 id="workspaceTitle">Overview</h1>
+        </div>
       </section>
       <nav class="workspace-nav" aria-label="Main workspace">
-        <button data-tab="daily" class="active" aria-current="page">Overview</button
-        ><button data-tab="recommendations">Research</button
-        ><button data-tab="portfolio">Portfolio</button
-        ><button data-tab="validation">Strategy lab</button>
+        <button type="button" data-tab="daily" class="active" aria-current="page">Overview</button
+        ><button type="button" data-tab="recommendations">Research</button
+        ><button type="button" data-tab="portfolio">Portfolio</button
+        ><button type="button" data-tab="validation">Strategy lab</button>
       </nav>
       <section id="daily" class="tab">
+        <section class="metrics overview-metrics" id="overviewMetrics" aria-label="Overview account summary">
+          <article>
+            <small>Priced holdings · NOK</small><strong id="value">—</strong
+            ><small id="coverage">Add holdings to begin</small>
+          </article>
+          <article>
+            <small>Companies held</small><strong id="count">0</strong
+            ><small>Watchlist positions have zero shares</small>
+          </article>
+          <article>
+            <small>Items to review</small><strong id="alertsCount">0</strong
+            ><small>Rule-based prompts, not trade instructions</small>
+          </article>
+        </section>
         <div class="sectionhead">
           <div>
             <p class="eyebrow">YOUR THREE PRIORITY REVIEWS</p>
@@ -1226,9 +1232,9 @@
     </dialog>
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
-      <script src="./app.js?v=6827b192653d"></script>
-      <script src="./portfolio.js?v=7eae70f0ed50"></script>
-      <script src="./navigation.js?v=1934af93c565"></script>
+      <script src="./app.js?v=12fe290aa44b"></script>
+      <script src="./portfolio.js?v=404d56ed8f08"></script>
+      <script src="./navigation.js?v=c50132bbedd4"></script>
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=689dd730b7a6"></script>

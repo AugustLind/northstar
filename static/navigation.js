@@ -10,9 +10,17 @@ const workspaceRoutes = {
   activity: 'portfolio',
   validation: 'validation',
 };
-function openWorkspace(target, updateHash = true) {
+const workspaceTitles = {
+  daily: 'Overview',
+  recommendations: 'Research',
+  portfolio: 'Portfolio',
+  validation: 'Strategy lab',
+};
+let lastWorkspaceHash = location.hash;
+function openWorkspace(target, updateHistory = true) {
   if (!Object.prototype.hasOwnProperty.call(workspaceRoutes, target)) target = 'daily';
   const page = workspaceRoutes[target] || 'daily';
+  $('#workspaceTitle').textContent = workspaceTitles[page];
   for (const section of document.querySelectorAll('.tab')) section.hidden = section.id !== page;
   for (const button of document.querySelectorAll('[data-tab]')) {
     const active = button.dataset.tab === page;
@@ -27,8 +35,12 @@ function openWorkspace(target, updateHash = true) {
     if (section && section.scrollIntoView)
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  if (updateHash && typeof history !== 'undefined' && history.replaceState)
-    history.replaceState({}, '', '#' + target);
+  if (updateHistory && typeof history !== 'undefined' && history.pushState) {
+    const nextUrl = location.pathname + location.search + '#' + target;
+    if (location.pathname + location.search + location.hash !== nextUrl)
+      history.pushState({ workspace: target }, '', nextUrl);
+    lastWorkspaceHash = '#' + target;
+  }
   if (page === 'daily') {
     if (typeof loadDaily === 'function') loadDaily();
     if (typeof loadSystemStatus === 'function') loadSystemStatus();
@@ -47,5 +59,13 @@ function openWorkspace(target, updateHash = true) {
 }
 for (const button of document.querySelectorAll('[data-tab]'))
   button.onclick = () => openWorkspace(button.dataset.tab);
-if (window.addEventListener)
-  window.addEventListener('hashchange', () => openWorkspace(location.hash.slice(1), false));
+function restoreWorkspaceFromLocation() {
+  if (location.hash === lastWorkspaceHash) return;
+  lastWorkspaceHash = location.hash;
+  const pathWorkspace = location.pathname === '/recommendations' ? 'recommendations' : 'daily';
+  openWorkspace(location.hash.slice(1) || pathWorkspace, false);
+}
+if (window.addEventListener) {
+  window.addEventListener('popstate', restoreWorkspaceFromLocation);
+  window.addEventListener('hashchange', restoreWorkspaceFromLocation);
+}
