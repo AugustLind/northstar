@@ -10,7 +10,7 @@ SECTORS = ['Energy', 'Materials', 'Industrials', 'Consumer discretionary', 'Cons
            'Utilities', 'Real estate']
 DEFAULTS = {'cash_nok': 0., 'purchase_nok': 0., 'buy_fee_nok': BUY_FEE_NOK, 'sell_fee_nok': None,
             'max_stock_pct': 20., 'max_sector_pct': 35.,
-            'reserve_pct': 10., 'max_buy_fee_pct': 2., 'review_sell_pct': 25., 'confirm_sessions':2., 'signal_wait_hours':24., 'trade_cooldown_days':7., 'min_change_pct':20., 'sectors': {}}
+            'reserve_pct': 10., 'max_buy_fee_pct': 2., 'review_sell_pct': 25., 'risk_warning_pct':20., 'confirm_sessions':2., 'signal_wait_hours':24., 'trade_cooldown_days':7., 'min_change_pct':20., 'sectors': {}}
 
 
 def number(value, name, maximum):
@@ -39,6 +39,8 @@ def preferences(data):
     out['sell_fee_nok']=None if raw_sell_fee is None or raw_sell_fee=='' else number(raw_sell_fee,'sell_fee_nok',10000)
     if out['max_stock_pct'] == 0 or out['max_sector_pct'] == 0 or out['max_buy_fee_pct']==0:
         raise ValueError('Position, sector and purchase-fee limits must be greater than zero.')
+    if out['risk_warning_pct']==0:
+        raise ValueError('Risk warning level must be greater than zero.')
     if out['confirm_sessions']<1 or out['confirm_sessions']!=int(out['confirm_sessions']):
         raise ValueError('Confirmation sessions must be an integer from 1 to 100.')
     sectors = data.get('sectors',{})

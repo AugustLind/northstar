@@ -743,6 +743,7 @@
             <button id="refreshPortfolioRisk" type="button">Refresh risk</button>
           </div>
           <p id="portfolioRiskStatus" role="status">Loading historical risk coverage…</p>
+          <div id="riskWarningStatus" role="status"></div>
           <div id="portfolioRiskMetrics" class="diagnosticgrid"></div>
           <div id="riskContributions" class="tablewrap"></div>
           <details>
@@ -891,6 +892,14 @@
                       name="max_buy_fee_pct"
                       type="number"
                       min="0.01"
+                      max="100"
+                      step="any"
+                      required /></label
+                  ><label
+                    >Portfolio risk warning level · %<input
+                      name="risk_warning_pct"
+                      type="number"
+                      min="1"
                       max="100"
                       step="any"
                       required /></label
@@ -1225,6 +1234,7 @@
           ><label>Review below price<input name="below" type="number" min="0" step="any" /></label
           ><label>Review above price<input name="above" type="number" min="0" step="any" /></label>
         </div>
+        <label class="check"><input name="long_term" type="checkbox" /> Long-term holding · keep reviewing significant risks</label>
         <label
           >Why I own / follow this company<textarea
             name="thesis"
@@ -1243,12 +1253,12 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
       <script src="./app.js?v=6827b192653d"></script>
-      <script src="./portfolio.js?v=7eae70f0ed50"></script>
+      <script src="./portfolio.js?v=dec1d2129091"></script>
       <script src="./navigation.js?v=1934af93c565"></script>
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=689dd730b7a6"></script>
-      <script src="./portfolio-fit.js?v=641fec858981"></script>
+      <script src="./portfolio-fit.js?v=88a4ef36c5ea"></script>
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
       <script src="./trade-plan.js?v=4f4d3bdd69e3"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
@@ -1256,7 +1266,7 @@
       <script src="./advice.js?v=296dcc117b94"></script>
       <script src="./explorer.js?v=267c8c47f996"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
-      <script src="./portfolio-risk.js?v=5038b4f3881a"></script>
+      <script src="./portfolio-risk.js?v=4245abbad4e3"></script>
       <script src="./stock-summary.js?v=9f8e720795e1"></script>
       <script src="./validation-view.js?v=54bf6067f20c"></script>
       <script src="./system-status.js?v=a12e1049a887"></script>

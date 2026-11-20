@@ -32,6 +32,9 @@ function renderPortfolioRisk(v) {
       : '') +
     '. ' +
     (v.missing || []).join(' ');
+  $('#riskWarningStatus').textContent = (v.risk_warnings || []).length
+    ? 'Warning level ' + v.risk_warning_pct + '% reached: ' + v.risk_warnings.map((r) => r.label + ' (' + r.loss_pct.toFixed(1) + '% modeled loss)').join('; ')
+    : 'No displayed historical measure or current shock reaches your ' + v.risk_warning_pct + '% warning level. This is not a loss limit.';
   const c = v.concentration || {},
     b = v.benchmark || {};
   $('#portfolioRiskMetrics').innerHTML = [
@@ -85,7 +88,7 @@ function renderPortfolioRisk(v) {
           .slice()
           .sort((a, b) => (b.risk_share_pct || 0) - (a.risk_share_pct || 0))
           .map((r) => [
-            esc(r.symbol),
+            esc(r.symbol + (r.long_term ? ' · long-term' : '')),
             esc(toolNumber(r.weight_pct, '%')),
             esc(toolNumber(r.annual_volatility_pct, '%')),
             esc(toolNumber(r.risk_share_pct, '%')),
