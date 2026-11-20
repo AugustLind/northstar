@@ -138,7 +138,7 @@ setImmediate(async()=>{
  await vm.runInContext('loadQuantityPlan()',context);
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Buy 9 shares'));
  assert(nodes['#quantityPlanFit'].innerHTML.includes('Sell 4 shares'));
- assert(nodes['#quantityPlanMain'].innerHTML.includes('sell fee unknown'));
+ assert(nodes['#quantityPlanMain'].innerHTML.includes('Gross proceeds · sell fee unknown'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('before tax'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#quantityPlanMain'].innerHTML.includes('<untrusted>'));
