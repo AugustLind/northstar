@@ -212,11 +212,10 @@ function renderAdvice() {
               c.quality ? c.quality.label : 'Awaiting financial data'
             )}</td><td>${
               c.portfolio_fit &&
-              c.portfolio_fit.fee_model === 'fixed-buy-79-v1' &&
               c.portfolio_fit.fee_pct != null
                 ? c.portfolio_fit.fee_pct.toFixed(2) + '%'
                 : '—'
-            }<small>79 kr / purchase</small></td><td><span class="signal ${
+            }<small>${money(c.portfolio_fit && c.portfolio_fit.buy_fee_nok != null ? c.portfolio_fit.buy_fee_nok : 79)} / purchase</small></td><td><span class="signal ${
               c.action === 'Consider buying' ? 'buy' : ''
             }">${esc(c.action)}</span></td><td><button data-inspect="${esc(
               c.symbol
