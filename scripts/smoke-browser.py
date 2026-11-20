@@ -31,9 +31,12 @@ def run():
             browser.evaluate("document.querySelector('[data-tab=\"validation\"]').click();document.querySelector('#validationRobustness').checked=true;document.querySelector('#runValidation').click()")
             import app
             deadline=time.time()+120
-            while app.read_meta('validation_progress',{}).get('running') and time.time()<deadline:
+            while time.time()<deadline:
+                progress=app.read_meta('validation_progress',{})
+                if progress.get('started',0)>=started and not progress.get('running'):
+                    break
                 time.sleep(.25)
-            if app.read_meta('validation_progress',{}).get('running'):
+            if progress.get('started',0)<started or progress.get('running'):
                 raise RuntimeError('Synthetic experiment timed out: '+str(app.read_meta('validation_progress',{})))
             if app.read_meta('validation_progress',{}).get('error'):
                 raise RuntimeError('Synthetic experiment failed: '+str(app.read_meta('validation_progress',{})))
@@ -42,6 +45,7 @@ def run():
             report=app.read_meta('validation_report',{})
             if report.get('generated',0)<started:
                 raise RuntimeError('Browser did not complete a new experiment: '+str(app.read_meta('validation_progress',{})))
+            browser.wait("document.querySelector('#validationFund').textContent.includes('Fund ') && document.querySelector('#validationFund').textContent.includes('after entry costs')",'matched investable fund comparison')
             browser.wait("document.querySelector('#promotionModel').options.length>1",'experimental promotion choices')
             browser.evaluate("document.querySelector('#promotionModel').selectedIndex=1;document.querySelector('#promoteModel').click()")
             browser.wait("document.querySelector('#promotionStatus').textContent.includes('Active model:')",'explicit experimental promotion')

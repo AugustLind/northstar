@@ -26,7 +26,10 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
         if row.get('sell_shares'):
             change=changed.get((row['symbol'],'sell'),{}).get('change','Review')
             add('sale:'+row['symbol']+':'+str(changed.get((row['symbol'],'sell'),{}).get('change_id','active')),90,row['symbol']+': review '+str(row['sell_shares'])+' shares for sale',
-                change+'. '+' '.join(row['reasons'])+' Gross sale estimate; selling fees and tax are not included.','holding',row['symbol'])
+                change+'. '+' '.join(row['reasons'])+
+                (' Entered sale fee: '+str(row['fee_nok'])+' NOK; estimated net proceeds before tax: '+str(row['net_proceeds_nok'])+' NOK.'
+                 if row.get('fee_nok') is not None and row.get('net_proceeds_nok') is not None else
+                 ' Gross sale estimate; sale fee unknown until entered. Tax is excluded.'),'holding',row['symbol'])
     focused=held|set((report or {}).get('top20',[]))
     notices=announcements.view(feed,list(focused),now=now)
     for n in notices.get('items',[]):

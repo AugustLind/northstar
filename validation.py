@@ -6,7 +6,7 @@ import research
 import decision_policy as policy
 from broker_costs import BUY_FEE_NOK, FEE_MODEL
 
-VERSION = 'technical-policy-robustness-v4'
+VERSION = 'technical-policy-robustness-v5'
 LIMITS = ('Exploratory, not an unbiased market backtest: today’s configured universe excludes '
           'unknown delisted stocks. Adjusted prices may be revised. Financials and news are excluded. '
           'Benchmark is the same complete-history basket bought and held, not an Oslo index. '
@@ -23,6 +23,30 @@ def history(q):
         if all(isinstance(p.get(k), (float, int)) and math.isfinite(p[k]) and p[k] > 0 for k in ('time','close')):
             points[int(p['time']//86400)] = p
     return [points[d] for d in sorted(points)]
+
+
+def fund_comparison(quotes,days,initial_capital,cost_bps,strategy_return):
+    """Investable OBX reference, requiring the same adjusted NOK sessions as the strategy."""
+    fund=quotes.get('OBXD.OL',{})
+    prices={int(p['time']//86400):p['close'] for p in history(fund)}
+    available=(fund.get('history_basis')=='Dividend/split adjusted close'
+               and all(day in prices for day in days[1:]))
+    fraction=(1-BUY_FEE_NOK/initial_capital)/(1+cost_bps/10000)
+    curve=([{'time':day*86400,'close':1. if i==0 else fraction*prices[day]/prices[days[1]]}
+            for i,day in enumerate(days)] if available else [])
+    gain=(curve[-1]['close']-1)*100 if available else None
+    return {'symbol':'OBXD.OL','name':'DNB OBX ETF',
+            'source_url':'https://www.dnb.no/en/markets/shares/exchange-traded-products/etf/dnb-obx',
+            'status':'available' if available else 'unavailable / adjusted NOK history or matching dates missing',
+            'return_pct':gain,'strategy_return_pct':strategy_return if available else None,
+            'excess_percentage_points':strategy_return-gain if available else None,
+            'curve':curve,'from':days[1]*86400 if available else None,'to':days[-1]*86400 if available else None,
+            'method':'DNB OBX ETF tracks the 25-stock OBX basket, which differs from OSEBX GR. '
+                     'Provider dividend/split-adjusted market closes; fund operating expenses are embedded, not deducted again. '
+                     'DNB lists a 0.2% management fee (source checked 2026-11-20); this is not a historical fee schedule. '
+                     'One 79 NOK purchase fee and the experiment entry slippage are applied to the initial capital. '
+                     'Fractional units; no terminal sale, tax, spread or premium/discount model. '
+                     'Exact strategy sessions only; no date filling or shifting. Unofficial provider data may be revised.'}
 
 
 def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000, progress=None,
@@ -156,11 +180,13 @@ def evaluate(quotes, universe, cost_bps=0, floor=250000, initial_capital=100000,
            'status':'available' if comparable else 'unavailable / incomplete date coverage',
            'return_pct':(index_curve[-1]['close']-1)*100 if index_curve else None,'curve':index_curve,
            'from':start*86400 if comparable else None,'to':common[-1]*86400 if comparable else None,
-           'strategy_return_pct':(curve[-1]['close']/curve[1]['close']-1)*100 if comparable else None,
-           'excess_percentage_points':((curve[-1]['close']/curve[1]['close']-1)*100-(index_curve[-1]['close']-1)*100) if comparable else None,
-           'method':'Provider series for the OSEBX gross-return benchmark. Index is not investable; no fund fees or transaction costs applied. Never forward-filled.'}
+           'strategy_return_pct':(equity-1)*100 if comparable else None,
+           'excess_percentage_points':((equity-1)*100-(index_curve[-1]['close']-1)*100) if comparable else None,
+           'method':'Provider series for the OSEBX gross-return benchmark. Strategy return includes costs from the first execution close; initial capital is measured before entry costs. Index is not investable; no fund fees or transaction costs applied. Never forward-filled.'}
     return {'generated':time.time(),'version':VERSION,'policy_version':policy.VERSION,'cost_bps':cost_bps,'limits':LIMITS,'fee_model':FEE_MODEL,
-            'folds':folds,'oslo_index':index,'test_protocol':str(max_positions)+'-position cap; '+str(rebalance_months)+'-month rebalance interval. '+'Shared technical entry/exit signals, 200-session warm-up, scheduled decisions and next-common-close execution. Retain holdings until a technical exit; fill vacant slots with qualifying entries in score order, up to 20 positions. Scheduled equal-weight sizing is an experiment overlay and can trim retained positions. Personal review prices, confirmation periods, cooldowns, sector/position limits and personalized quantities are not simulated. Chronological calendar-year slices for this fixed configuration; optional robustness selection is reported separately. Point-in-time delisted coverage unavailable.',
+            'folds':folds,'oslo_index':index,
+            'oslo_fund':fund_comparison(quotes,common,initial_capital,cost_bps,(equity-1)*100),
+            'test_protocol':str(max_positions)+'-position cap; '+str(rebalance_months)+'-month rebalance interval. '+'Shared technical entry/exit signals, 200-session warm-up, scheduled decisions and next-common-close execution. Retain holdings until a technical exit; fill vacant slots with qualifying entries in score order, up to 20 positions. Scheduled equal-weight sizing is an experiment overlay and can trim retained positions. Personal review prices, confirmation periods, cooldowns, sector/position limits and personalized quantities are not simulated. Chronological calendar-year slices for this fixed configuration; optional robustness selection is reported separately. Point-in-time delisted coverage unavailable.',
             'initial_capital':initial_capital,'buy_fee_nok':BUY_FEE_NOK,'buy_orders':buy_orders,
             'fixed_fees_nok':fixed_fees*initial_capital,'total_costs_nok':fees*initial_capital,
             'sell_orders':sell_orders,'selling_fee_nok':selling_fee_nok,'selling_fees_nok':sell_fees*initial_capital,

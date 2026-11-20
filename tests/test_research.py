@@ -184,7 +184,8 @@ class PersistenceTests(unittest.TestCase):
         app.save_position(dict(symbol='KOG', currency='NOK', shares=5, cost=306))
         with patch.object(app, 'fetch_quote', return_value={'price': 310, 'currency': 'NOK', 'asof': time.time()}) as fetch:
             self.assertEqual(app.refresh(['KOG.OL']), [])
-        self.assertEqual(fetch.call_count, 3)  # KOG.OL, FX and Oslo benchmark, no duplicate KOG request
+        self.assertCountEqual([call.args[0] for call in fetch.call_args_list],
+                              ['KOG.OL','NOK=X','OSEBX.OL','OBXD.OL'])
         self.assertEqual(app.state()['quotes']['KOG'], app.state()['quotes']['KOG.OL'])
 
     def test_quote_parser_preserves_timestamp_price_pairs(self):
