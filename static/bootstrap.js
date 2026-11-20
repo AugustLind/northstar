@@ -1,14 +1,7 @@
 /* Start requests only after every view and controller has been defined. */
 initExplorer();
 initChartTools();
-openWorkspace(
-  location.hash
-    ? location.hash.slice(1)
-    : location.pathname === '/recommendations'
-    ? 'recommendations'
-    : 'daily',
-  false
-);
+openWorkspace(workspaceFromLocation(), false);
 load().catch((e) => ($('#message').textContent = e.message));
 loadResearch();
 loadSystemStatus();

@@ -57,6 +57,12 @@ setImmediate(async()=>{
  assert(nodes['#financialTrendCharts'].innerHTML.includes('2024'));
  assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
  assert.strictEqual(nodes['#recommendations'].hidden,false);
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'recommendations');
+ context.location.hash='#fit';
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'fit');
+ context.location.hash='';context.location.pathname='/';
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'daily');
+ context.location.pathname='/recommendations';
  for(const [target,page] of [['unrecognised:hash','daily'],['fit','portfolio'],['activity','portfolio'],['announcements','daily'],['method','daily'],['validation','validation']]){
   vm.runInContext("openWorkspace('"+target+"')",context);
   assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);

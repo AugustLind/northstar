@@ -16,7 +16,14 @@ const workspaceTitles = {
   portfolio: 'Portfolio',
   validation: 'Strategy lab',
 };
-let lastWorkspaceHash = location.hash;
+let lastWorkspaceLocation = location.pathname + location.search + location.hash;
+function workspaceFromLocation() {
+  return location.hash
+    ? location.hash.slice(1)
+    : location.pathname === '/recommendations'
+    ? 'recommendations'
+    : 'daily';
+}
 function openWorkspace(target, updateHistory = true) {
   if (!Object.prototype.hasOwnProperty.call(workspaceRoutes, target)) target = 'daily';
   const page = workspaceRoutes[target] || 'daily';
@@ -39,7 +46,7 @@ function openWorkspace(target, updateHistory = true) {
     const nextUrl = location.pathname + location.search + '#' + target;
     if (location.pathname + location.search + location.hash !== nextUrl)
       history.pushState({ workspace: target }, '', nextUrl);
-    lastWorkspaceHash = '#' + target;
+    lastWorkspaceLocation = nextUrl;
   }
   if (page === 'daily') {
     if (typeof loadDaily === 'function') loadDaily();
@@ -60,10 +67,10 @@ function openWorkspace(target, updateHistory = true) {
 for (const button of document.querySelectorAll('[data-tab]'))
   button.onclick = () => openWorkspace(button.dataset.tab);
 function restoreWorkspaceFromLocation() {
-  if (location.hash === lastWorkspaceHash) return;
-  lastWorkspaceHash = location.hash;
-  const pathWorkspace = location.pathname === '/recommendations' ? 'recommendations' : 'daily';
-  openWorkspace(location.hash.slice(1) || pathWorkspace, false);
+  const currentLocation = location.pathname + location.search + location.hash;
+  if (currentLocation === lastWorkspaceLocation) return;
+  lastWorkspaceLocation = currentLocation;
+  openWorkspace(workspaceFromLocation(), false);
 }
 if (window.addEventListener) {
   window.addEventListener('popstate', restoreWorkspaceFromLocation);
