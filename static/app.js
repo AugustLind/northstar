@@ -43,6 +43,7 @@ $('#disconnect').onclick = () => {
   try {
     sessionStorage.removeItem('northstar-key');
   } catch (e) {}
+  if (typeof clearWorkspaceUiState === 'function') clearWorkspaceUiState();
   $('#accessKey').value = '';
   state = { positions: [], quotes: {} };
   $('#accountStatus').textContent = 'Not connected';

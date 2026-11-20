@@ -257,13 +257,20 @@ function edit(
   $('#editor').showModal();
 }
 $('#add').onclick = () => edit();
-$('#close').onclick = () => $('#editor').close();
+$('#close').onclick = () => {
+  if (typeof clearWorkspaceUiFormState === 'function') clearWorkspaceUiFormState('positionForm');
+  $('#editor').close();
+};
+$('#editor').addEventListener('close', () => {
+  if (typeof clearWorkspaceUiFormState === 'function') clearWorkspaceUiFormState('positionForm');
+});
 $('#positionForm').onsubmit = async (e) => {
   e.preventDefault();
   try {
     const data = Object.fromEntries(new FormData(e.target));
     data.long_term = e.target.elements.long_term.checked;
     await api('position', data);
+    if (typeof clearWorkspaceUiFormState === 'function') clearWorkspaceUiFormState('positionForm');
     $('#editor').close();
     await load();
   } catch (e) {
