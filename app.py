@@ -4,6 +4,7 @@ import math
 import re
 import sqlite3
 import time
+from datetime import datetime, timezone
 import threading
 import os
 import hashlib
@@ -37,6 +38,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote, urlsplit, parse_qs
 from urllib.error import HTTPError, URLError
 from concurrent.futures import ThreadPoolExecutor
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).parent
 STARTED_AT=time.time()
@@ -575,7 +577,95 @@ def email_plan():
                        'source_asof':risk_source,'observed':now})
     long_term_symbols=[portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions']
                        if p['shares']>0 and p.get('long_term',False)]
-    return {**(report or {}),'review_alerts':alerts,'long_term_symbols':long_term_symbols},plan
+    oslo=ZoneInfo('Europe/Oslo')
+    def oslo_date(timestamp):
+        if (isinstance(timestamp,(int,float)) and not isinstance(timestamp,bool)
+                and math.isfinite(timestamp) and 0<=timestamp<=now+300):
+            return datetime.fromtimestamp(timestamp,timezone.utc).astimezone(oslo).date().isoformat()
+        return None
+    quote_times=[q['asof'] for symbol,q in snapshot['quotes'].items()
+                 if symbol!='NOK=X' and isinstance(q.get('asof'),(int,float))
+                 and not isinstance(q.get('asof'),bool) and math.isfinite(q['asof'])
+                 and 0<=q['asof']<=now+300]
+    last_close_date=oslo_date(max(quote_times)) if quote_times else None
+    stale=[]
+    for position in snapshot['positions']:
+        if position['shares']<=0:continue
+        symbol=portfolio_fit.canonical(position['symbol'],position['currency'])
+        quote=trade_plan.quote_for(snapshot,symbol)
+        if not quote:stale.append(symbol+': quote missing')
+        elif not portfolio_fit.fresh(quote,now):stale.append(symbol+': quote stale')
+        if position['currency']=='USD':
+            fx=snapshot['quotes'].get('NOK=X')
+            if not fx:stale.append('NOK/USD conversion quote missing')
+            elif not portfolio_fit.fresh(fx,now):stale.append('NOK/USD conversion quote stale')
+    report_generated=(report or {}).get('generated')
+    if (not isinstance(report_generated,(int,float)) or isinstance(report_generated,bool)
+            or not math.isfinite(report_generated) or not -300<=now-report_generated<4*86400):
+        stale.append('Research report: stale or missing')
+    coverage=(report or {}).get('coverage',{})
+    if coverage.get('unavailable'):
+        stale.append(str(coverage['unavailable'])+' research entries have missing or inadequate data')
+    holdings_attention=[]
+    for holding in plan.get('holdings',[]):
+        if holding.get('sell_shares') or holding.get('technical_action') in trade_plan.SELL_SIGNALS:
+            reasons=' '.join(holding.get('reasons',[]))
+            detail=(holding['symbol']+' — review '+str(holding.get('technical_action') or 'holding risk')+
+                    (('; '+str(holding['sell_shares'])+' shares in the current review scenario') if holding.get('sell_shares') else '')+
+                    ('. '+reasons if reasons else '.'))
+            holdings_attention.append((90,detail[:700]))
+    held_symbols={portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions'] if p['shares']>0}
+    for alert in alerts:
+        if alert.get('kind') not in ('announcement','company') or alert.get('symbol') not in held_symbols:
+            continue
+        source_asof=alert.get('source_asof')
+        source_date=oslo_date(source_asof)
+        detail=str(alert.get('title','Holding review'))+'. '+str(alert.get('detail',''))
+        if source_date:
+            detail+=' Source date: '+source_date+'.'
+        else:
+            detail+=' Source date unavailable.'
+            stale.append(str(alert['symbol'])+': review source date missing')
+        if isinstance(source_asof,(int,float)) and now-source_asof>7*86400:
+            stale.append(str(alert['symbol'])+': review source is stale')
+        source_url=alert.get('url')
+        if (isinstance(source_url,str) and len(source_url)<=2000 and source_url.startswith('https://')
+                and not any(c in source_url for c in '\r\n\x00')):
+            detail+=' Source: '+source_url
+        priority=alert.get('priority',80)
+        if not isinstance(priority,(int,float)) or isinstance(priority,bool) or not math.isfinite(priority):
+            priority=80
+        holdings_attention.append((priority,detail[:700]))
+    holdings_attention=[detail for _,detail in sorted(holdings_attention,key=lambda item:-item[0])[:5]]
+    candidates=[]
+    for card in (report or {}).get('cards',[]):
+        if card.get('action')!='Consider buying' or card.get('held'):continue
+        quote_date=oslo_date(card.get('asof')) or 'quote date unavailable'
+        candidates.append((card.get('rank',9999),str(card['symbol'])+' — '+quote_date+' close'))
+    candidates=[text for _,text in sorted(candidates)[:5]]
+    warnings=risk.get('risk_warnings',[])
+    measures=[]
+    for label,key in (('annualized historical volatility','volatility_pct'),('daily 95% VaR','var95_pct')):
+        value=risk.get(key)
+        if isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value):
+            measures.append(label+' '+str(round(value,1))+'%')
+    if warnings:
+        warning_text='; '.join(str(w['label'])+' '+str(round(w['loss_pct'],1))+'% loss' for w in warnings[:3])
+        risk_text=(('Historical risk: '+', '.join(measures)+'. ' if measures else 'Historical risk available. ')
+                   if risk.get('status')=='available' else 'Historical risk unavailable; valuation scenarios show: ')+warning_text
+    elif risk.get('status')=='available':
+        risk_text=(('Historical risk: '+', '.join(measures)+'. ' if measures else 'Historical risk is available. ')+
+                   'No calculated warnings at the '+str(risk.get('risk_warning_pct',20))+'% warning level.')
+    elif risk.get('status')=='cash_only':
+        risk_text='Cash only; no invested portfolio risk is currently calculated.'
+    else:
+        risk_text='Historical risk unavailable'+(': '+', '.join(risk.get('missing',[])[:3]) if risk.get('missing') else '.')
+    summary={'last_close_date':last_close_date,'holdings_attention':holdings_attention[:5],
+             'candidates':candidates,'risk':risk_text,
+             'data_status':('Stale or missing: '+ '; '.join(stale[:6])+'.' if stale else
+                            'No stale or missing tracked quote data.')}
+    return {**(report or {}),'review_alerts':alerts,'long_term_symbols':long_term_symbols,
+            'weekly_summary':summary},plan
 
 
 def email_worker():
