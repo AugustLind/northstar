@@ -48,6 +48,45 @@ class TradePlanTests(unittest.TestCase):
         self.assertEqual(v['sell_fees_nok'],12)
         self.assertEqual(v['cash_after_sell_scenario_nok'],10288)
 
+    def test_sell_review_prices_use_basis_and_both_fee_assumptions(self):
+        s=snapshot(10);s['positions'][0].update(cost=100,above=150)
+        s['quotes']['A']['source']='Independent quote fixture'
+        v=self.plan(s,p=profile(buy_fee_nok=25,sell_fee_nok=12))
+        row=v['holdings'][0]
+        self.assertEqual(row['break_even_price'],103.7)
+        self.assertEqual(row['limit_reference_price'],100)
+        self.assertEqual(row['quote_source'],'Independent quote fixture')
+        self.assertEqual(row['quote_age_seconds'],0)
+        self.assertEqual(row['target_price'],150)
+        self.assertEqual(row['target_reason'],'Your saved upper review level.')
+        second=snapshot(4);second['positions'][0]['cost']=200
+        row=self.plan(second,p=profile(buy_fee_nok=30,sell_fee_nok=10))['holdings'][0]
+        self.assertEqual(row['break_even_price'],210)
+
+    def test_missing_basis_unknown_sell_fee_and_stale_quote_withhold_precise_prices(self):
+        s=snapshot(10)
+        row=self.plan(s,p=profile(sell_fee_nok=12))['holdings'][0]
+        self.assertIsNone(row['break_even_price'])
+        self.assertIn('positive cost basis',row['break_even_status'])
+        s['positions'][0]['cost']=100
+        row=self.plan(s)['holdings'][0]
+        self.assertIsNone(row['break_even_price'])
+        self.assertIn('sell-fee assumption',row['break_even_status'])
+        s['quotes']['A']['asof']=NOW-5*86400
+        s['quotes']['A']['source']='Independent quote fixture'
+        row=self.plan(s,p=profile(sell_fee_nok=12))['holdings'][0]
+        self.assertIsNone(row['break_even_price'])
+        self.assertIsNone(row['limit_reference_price'])
+        self.assertEqual(row['quote_source'],'Independent quote fixture')
+        self.assertEqual(row['quote_age_seconds'],5*86400)
+        self.assertIsNone(row['sell_shares'])
+
+    def test_reconciliation_constraint_withholds_sell_quantity(self):
+        s=snapshot(10);s['ledger_reconciled']=False
+        row=self.plan(s,p=profile(sell_fee_nok=12))['holdings'][0]
+        self.assertIsNone(row['sell_shares'])
+        self.assertIn('Reconcile',row['reasons'][0])
+
     def test_budget_above_cash_does_not_reserve_unaffordable_orders(self):
         v=self.plan(cards=[card(),card('C.OL',2)],p=profile(cash_nok=5000,purchase_nok=100000,max_buy_fee_pct=2))
         self.assertEqual(len(v['buys']),1)

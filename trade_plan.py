@@ -38,11 +38,30 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
         aliases=[p for p in snapshot['positions'] if pf.canonical(p['symbol'],p['currency'])==h['symbol']]
         supported=(len(aliases)==1 and h['symbol'].endswith('.OL') and pf.fresh(q,now) and q.get('currency')=='NOK'
                    and abs(h['shares']-round(h['shares']))<1e-8)
+        position=aliases[0] if len(aliases)==1 else None
+        basis=position.get('cost') if position else None
+        basis_valid=(isinstance(basis,(int,float)) and not isinstance(basis,bool)
+                     and math.isfinite(basis) and basis>0)
+        break_even=(basis+(profile['buy_fee_nok']+profile['sell_fee_nok'])/h['shares']
+                    if supported and basis_valid and profile['sell_fee_nok'] is not None and h['shares']>0 else None)
+        target=position.get('above') if position else None
         row={'symbol':h['symbol'],'name':(card or {}).get('name',h['symbol']),'owned':h['shares'],
              'sell_shares':0 if ctx['complete'] and supported else None,'remaining_shares':h['shares'],
              'gross_proceeds_nok':0. if ctx['complete'] and supported else None,
              'price':q['price'] if supported else None,'quote_asof':q.get('asof') if q else None,
+             'quote_source':q.get('source') if q else None,
+             'quote_age_seconds':max(0,now-q['asof']) if q and isinstance(q.get('asof'),(int,float)) else None,
+             'break_even_price':break_even,'break_even_status':('Available' if break_even is not None else
+                 'Fresh quote, positive cost basis and entered buy and sell fee assumptions required.'),
+             'limit_reference_price':q['price'] if supported else None,
+             'limit_reference_note':'Current quote reference only; a limit order may not fill, especially if the limit is away from the market. You choose whether and how to place any order.',
+             'target_price':target if supported and isinstance(target,(int,float)) and target>0 else None,
+             'target_reason':'Your saved upper review level.' if supported and isinstance(target,(int,float)) and target>0 else None,
              'sector':h['sector'],'reasons':[],'technical_action':(card or {}).get('action') if report_ok and signal_current(card,now) else 'Current technical signal unavailable'}
+        if not basis_valid:
+            row['break_even_status']='Break-even unavailable: enter a positive cost basis for this holding.'
+        elif profile['sell_fee_nok'] is None:
+            row['break_even_status']='Break-even unavailable: enter a sell-fee assumption; current sale fees are unknown.'
         if row['sell_shares'] is None:
             row['reasons'].append('Quantity unavailable: complete portfolio valuation, fresh NOK quotes and one whole-share Oslo entry per ticker are required.')
         rows.append(row)
