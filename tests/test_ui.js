@@ -163,6 +163,31 @@ setImmediate(async()=>{
  assert(nodes['#dailyTop'].innerHTML.includes('data-review-action="holding"'));
  assert(nodes['#portfolioReviewEntry'].innerHTML.includes('Review portfolio'));
  assert(!nodes['#dailyTop'].innerHTML.includes('javascript:'));
+ const candidate=(i)=>({symbol:'CAND'+i+'.OL',name:'Candidate <'+i+'>',rank:i,buy_shares:2,total_nok:279,portfolio_reason:'Fits Energy limits <safe>'});
+ for(let count=0;count<=3;count++){
+  vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:count},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
+  assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,count);
+ }
+ vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:5},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
+ assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,3);
+ assert(nodes['#buyCandidates'].innerHTML.includes('&lt;safe&gt;'));
+ assert(!nodes['#buyCandidates'].innerHTML.includes('<safe>'));
+ vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:true,buy_candidate_warnings:[]})",context);
+ assert(nodes['#buyCandidatesStatus'].textContent.includes('Research is stale'));
+ assert.strictEqual(nodes['#buyCandidatesRecovery'].hidden,false);
+ assert.strictEqual(nodes['#buyCandidatesRecovery'].dataset.action,'refresh');
+ vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:false,buy_candidate_warnings:['Complete portfolio valuation required']})",context);
+ assert(nodes['#buyCandidatesStatus'].textContent.includes('current portfolio inputs'));
+ assert.strictEqual(nodes['#buyCandidatesRecovery'].dataset.action,'portfolio');
+ vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:false,buy_candidate_warnings:[]})",context);
+ assert(nodes['#buyCandidatesStatus'].textContent.includes('No eligible buying candidates'));
+ assert.strictEqual(nodes['#buyCandidatesRecovery'].dataset.action,'research');
+ const originalFetch=context.fetch;
+ context.fetch=async()=>{throw new Error('offline');};
+ await vm.runInContext('loadDaily()',context);
+ assert(nodes['#buyCandidatesStatus'].textContent.includes('could not be loaded'));
+ assert.strictEqual(nodes['#buyCandidatesRecovery'].dataset.action,'retry');
+ context.fetch=originalFetch;
  assert(nodes['#dailyChanges'].innerHTML.includes('New'));
  assert(nodes['#emailStatus'].textContent.includes('enabled'));
  assert(!nodes['#testEmail'].disabled);

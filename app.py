@@ -544,6 +544,9 @@ def broker_cash_check(data):
 def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
+    result['buy_candidates']=plan['buys'][:3]
+    result['buy_candidates_stale']=not trade_plan.current_report(report,time.time())
+    result['buy_candidate_warnings']=plan['warnings']
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
     result['email']=email_worker().status()

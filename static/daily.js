@@ -51,6 +51,7 @@ function renderEmailStatus(v) {
 function renderDaily(v) {
   dailyView = v;
   if (typeof renderHoldingAssessments === 'function') renderHoldingAssessments(v.holding_assessments);
+  renderBuyCandidates(v);
   $('#dailyStatus').textContent =
     'Updated ' +
     new Date(v.generated * 1000).toLocaleString() +
@@ -160,6 +161,26 @@ function renderDaily(v) {
     } catch (e) {}
   }
 }
+function renderBuyCandidates(v) {
+  const status = $('#buyCandidatesStatus'), list = $('#buyCandidates'), recovery = $('#buyCandidatesRecovery');
+  const candidates = Array.isArray(v.buy_candidates) ? v.buy_candidates.slice(0, 3) : [];
+  list.innerHTML = '';
+  recovery.hidden = true;
+  if (v.buy_candidates_stale) {
+    status.textContent = 'Research is stale or unavailable. Current signals are required before showing buying candidates.';
+    recovery.textContent = 'Refresh research'; recovery.dataset.action = 'refresh'; recovery.hidden = false;
+  } else if (candidates.length) {
+    status.textContent = candidates.length + ' eligible candidate' + (candidates.length === 1 ? '' : 's') + ' from your current portfolio and trade plan.';
+    list.innerHTML = candidates.map((c) => '<article class="card"><p class="eyebrow">RANK ' + esc(c.rank) + '</p><h3>' + esc(c.name) + ' · ' + esc(c.symbol) + '</h3><p>' + esc(c.portfolio_reason) + '</p><p>' + esc(c.buy_shares) + ' shares · ' + money(c.total_nok) + ' including estimated purchase fee</p><button type="button" data-candidate-stock="' + esc(c.symbol) + '">Review in Research</button></article>').join('');
+  } else {
+    const warnings = Array.isArray(v.buy_candidate_warnings) ? v.buy_candidate_warnings : [];
+    status.textContent = warnings.length
+      ? 'No candidates can be sized with the current portfolio inputs. ' + warnings[0]
+      : 'No eligible buying candidates under the current portfolio settings.';
+    recovery.textContent = warnings.length ? 'Review portfolio inputs' : 'Explore Research';
+    recovery.dataset.action = warnings.length ? 'portfolio' : 'research'; recovery.hidden = false;
+  }
+}
 async function loadDaily() {
   const token = ++dailyRequest;
   try {
@@ -170,6 +191,11 @@ async function loadDaily() {
       $('#dailyStatus').textContent = 'Reviews unavailable: ' + e.message;
       $('#dailyTop').textContent = 'Review data is unavailable. Check the connection and try again.';
       $('#portfolioReviewEntry').textContent = 'Needs attention is unavailable until the review request succeeds.';
+      $('#buyCandidates').innerHTML = '';
+      $('#buyCandidatesStatus').textContent = 'Buying candidates could not be loaded. ' + e.message;
+      $('#buyCandidatesRecovery').textContent = 'Retry';
+      $('#buyCandidatesRecovery').dataset.action = 'retry';
+      $('#buyCandidatesRecovery').hidden = false;
     }
   }
 }
@@ -259,6 +285,32 @@ $('#dailyTop').onclick = (e) => {
 $('#portfolioReviewEntry').onclick = (e) => {
   const action = e.target.dataset.reviewAction;
   if (action) openReviewAction(action, e.target.dataset.reviewSymbol || '');
+};
+$('#buyCandidates').onclick = (e) => {
+  const symbol = e.target.dataset.candidateStock;
+  if (!symbol) return;
+  document.querySelector('[data-tab="recommendations"]').click();
+  if (typeof selectStock === 'function') selectStock(symbol, true);
+};
+$('#buyCandidatesRecovery').onclick = async (e) => {
+  const button = e.currentTarget, action = button.dataset.action;
+  if (action === 'retry') { await loadDaily(); return; }
+  if (action === 'portfolio') {
+    document.querySelector('[data-tab="portfolio"]').click();
+    location.hash = '#fit';
+    return;
+  }
+  if (action === 'research') {
+    document.querySelector('[data-tab="recommendations"]').click();
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api('analyze', {});
+    $('#buyCandidatesStatus').textContent = 'Research refresh queued. Candidates will update when the scan completes.';
+  } catch (error) {
+    $('#buyCandidatesStatus').textContent = error.message;
+  } finally { button.disabled = false; }
 };
 setInterval(() => {
   if (apiBase && accessKey) loadDaily();

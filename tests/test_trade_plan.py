@@ -34,6 +34,8 @@ class TradePlanTests(unittest.TestCase):
         self.assertEqual(v['spent_nok'],979)
         self.assertEqual(v['unallocated_budget_nok'],21)
         self.assertEqual(v['cash_after_buys_nok'],9021)
+        self.assertIn('shared budget',v['buys'][0]['portfolio_reason'])
+        self.assertIn('Industrials sector',v['buys'][0]['portfolio_reason'])
         self.assertIsNone(v['cash_after_sell_scenario_nok'])
         self.assertIn('unknown until you enter',v['method'])
 

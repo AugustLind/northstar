@@ -203,7 +203,8 @@ def build(snapshot,report,profile,now=None):
                 buys.append({'symbol':symbol,'name':card.get('name',symbol),'buy_shares':n,'sell_shares':0,
                              'price':q['price'],'quote_asof':q['asof'],'value_nok':value,'fee_nok':buy_fee,
                              'total_nok':total,'fee_pct':fee_pct,'rank':card.get('rank'),
-                             'reason':'Meets the technical buy screen; sized in rank order within one shared budget and your limits.'})
+                             'reason':'Meets the technical buy screen; sized in rank order within one shared budget and your limits.',
+                             'portfolio_reason':'Fits your '+profile['sectors'][symbol]+' sector and company limits; '+str(n)+' whole shares fit your remaining shared budget, cash reserve and purchase-fee limit.'})
                 left-=total;spent+=total;fees+=buy_fee;working_profile['cash_nok']-=total
                 old=next((p for p in working['positions'] if p['currency']=='NOK' and pf.canonical(p['symbol'])==symbol),None)
                 if old:
