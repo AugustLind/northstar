@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Northstar · Investment notebook</title>
-    <link rel="stylesheet" href="./style.css?v=0c7fda159c78" />
+    <link rel="stylesheet" href="./style.css?v=41c55d25eacc" />
   </head>
   <body>
     <header>
@@ -120,6 +120,14 @@
           </p>
         </details>
         <p id="dailyStatus" role="status">Loading the daily overview…</p>
+        <section class="buy-candidates" aria-labelledby="buyCandidatesTitle">
+          <div class="sectionhead">
+            <div><p class="eyebrow">PORTFOLIO FIT</p><h2 id="buyCandidatesTitle">Buying candidates</h2></div>
+          </div>
+          <p id="buyCandidatesStatus" role="status" aria-live="polite">Loading eligible candidates…</p>
+          <div id="buyCandidates" class="candidate-grid"></div>
+          <button id="buyCandidatesRecovery" type="button" hidden></button>
+        </section>
         <section class="card" id="systemHealth">
           <div class="sectionhead">
             <div>
@@ -1285,7 +1293,7 @@
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
       <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
-      <script src="./daily.js?v=611b46c289c3"></script>
+      <script src="./daily.js?v=a9394db02573"></script>
       <script src="./advice.js?v=14f5b876ee6a"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>

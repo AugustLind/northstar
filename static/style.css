@@ -375,6 +375,20 @@ small {
   flex-wrap: wrap;
   margin: 18px 0;
 }
+.buy-candidates {
+  margin: 28px 0;
+}
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+}
+.candidate-grid h3 {
+  margin-top: 0;
+}
+.buy-candidates [role="status"] {
+  color: #52645a;
+}
 .researchtools label {
   min-width: 170px;
   flex: 1;
