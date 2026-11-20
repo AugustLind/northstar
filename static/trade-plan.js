@@ -71,13 +71,18 @@ function renderQuantityPlan(plan) {
             '</b><small>Owned: ' +
             esc(r.owned) +
             ' shares</small>' +
-            (r.price
-              ? '<small>Reference ' +
-                money(r.price) +
-                ' · ' +
-                new Date(r.quote_asof * 1000).toLocaleString() +
-                '</small>'
-              : '') +
+            (r.quote_source || r.quote_asof != null
+              ? '<small>Quote: ' + esc(r.quote_source || 'Source unavailable') + ' · ' +
+                (r.quote_age_seconds == null ? 'age unavailable' : esc(Math.floor(r.quote_age_seconds / 3600)) + 'h old') +
+                (r.quote_asof == null ? '' : ' · ' + new Date(r.quote_asof * 1000).toLocaleString()) + '</small>'
+              : '<small>Quote source and age unavailable.</small>') +
+            (r.limit_reference_price == null
+              ? '<small>Practical limit reference withheld until a fresh supported quote is available.</small>'
+              : '<small>Practical limit reference · current quote: ' + money(r.limit_reference_price) + '</small>' +
+                '<small>' + esc(r.limit_reference_note || '') + '</small>') +
+            '<small>Break-even: ' + (r.break_even_price == null ? esc(r.break_even_status || 'Unavailable') : money(r.break_even_price)) +
+              ' · break-even alone is not a reason to hold.</small>' +
+            (r.target_price == null ? '' : '<small>Separate target: ' + money(r.target_price) + ' · ' + esc(r.target_reason || '') + '</small>') +
             '</td><td><strong class="' +
             (r.sell_shares ? 'negative' : '') +
             '">' +
