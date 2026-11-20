@@ -30,7 +30,8 @@ class EmailPlanTests(unittest.TestCase):
                   'portfolio_preferences':{'risk_warning_pct':20}}
         report={'generated':NOW}
         plan={'buys':[],'holdings':[]}
-        board_review={'id':'issuer','kind':'announcement','source_asof':NOW}
+        board_review={'id':'issuer','kind':'announcement','symbol':'A.OL','title':'A.OL: issuer notice',
+                      'detail':'Read the notice.','url':'https://issuer.example/notice','source_asof':NOW}
         risk={'status':'available','volatility_pct':12.3,'var95_pct':2.4,
               'risk_warning_pct':20,'risk_warnings':[
             {'label':'Historical 95% daily VaR','loss_pct':22},
@@ -53,6 +54,8 @@ class EmailPlanTests(unittest.TestCase):
                          datetime.fromtimestamp(NOW,timezone.utc).astimezone(ZoneInfo('Europe/Oslo')).date().isoformat())
         self.assertIn('Historical 95% daily VaR',result['weekly_summary']['risk'])
         self.assertIn('annualized historical volatility 12.3%',result['weekly_summary']['risk'])
+        self.assertIn('A.OL: issuer notice',result['weekly_summary']['holdings_attention'][0])
+        self.assertIn('https://issuer.example/notice',result['weekly_summary']['holdings_attention'][0])
         self.assertIn('Research report: stale or missing',result['weekly_summary']['data_status'])
 
 

@@ -610,6 +610,27 @@ def email_plan():
                     (('; '+str(holding['sell_shares'])+' shares in the current review scenario') if holding.get('sell_shares') else '')+
                     ('. '+reasons if reasons else '.'))
             holdings_attention.append(detail[:700])
+    held_symbols={portfolio_fit.canonical(p['symbol'],p['currency']) for p in snapshot['positions'] if p['shares']>0}
+    for alert in alerts:
+        if alert.get('kind') not in ('announcement','company') or alert.get('symbol') not in held_symbols:
+            continue
+        source_asof=alert.get('source_asof')
+        source_date=(datetime.fromtimestamp(source_asof,timezone.utc).astimezone(oslo).date().isoformat()
+                     if isinstance(source_asof,(int,float)) and not isinstance(source_asof,bool)
+                     and math.isfinite(source_asof) and 0<=source_asof<=now+300 else None)
+        detail=str(alert.get('title','Holding review'))+'. '+str(alert.get('detail',''))
+        if source_date:
+            detail+=' Source date: '+source_date+'.'
+        else:
+            detail+=' Source date unavailable.'
+            stale.append(str(alert['symbol'])+': review source date missing')
+        if isinstance(source_asof,(int,float)) and now-source_asof>7*86400:
+            stale.append(str(alert['symbol'])+': review source is stale')
+        source_url=alert.get('url')
+        if (isinstance(source_url,str) and len(source_url)<=2000 and source_url.startswith('https://')
+                and not any(c in source_url for c in '\r\n\x00')):
+            detail+=' Source: '+source_url
+        holdings_attention.append(detail[:700])
     candidates=[]
     for card in (report or {}).get('cards',[]):
         if card.get('action')!='Consider buying' or card.get('held'):continue
