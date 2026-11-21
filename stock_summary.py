@@ -53,9 +53,12 @@ def build(symbol,snapshot,report,profile,now=None):
         if p.get('review'):invalidation.append('Your reconsideration note: '+p['review'])
     return {'symbol':symbol,'generated':now,'report_generated':(report or {}).get('generated'),'current':current,
         'qualifies':bool(current and policy.buy_signal(card)),'action':card.get('action','Insufficient data') if current else 'Refresh required',
+        'return_estimate':card.get('return_estimate') if current else {
+            'status':'not_applicable','reason':'A fresh current report and quote are required.',
+        },
         'why':reasons,'checks':checks,'invalidation':invalidation,'risks':list(dict.fromkeys(risks)),
         'portfolio':{'buy_shares':buy['buy_shares'] if buy else 0,'sell_shares':holding.get('sell_shares') if holding else None,
             'reason':buy.get('reason') if buy else blocked.get('reason') if blocked else 'No confirmed purchase in the current shared-budget plan.',
             'allocation_ready':preview['ready'],'after_stock_pct':preview.get('after_stock_pct'),'fee_pct':preview.get('fee_pct'),
             'sale_reasons':holding.get('reasons',[]) if holding else []},
-        'method':'Deterministic explanation of the existing technical policy and live shared-budget plan. No new trade rules, targets, probabilities or execution instructions.'}
+        'method':'Deterministic explanation of the existing technical policy and live shared-budget plan. Return ranges are experimental historical scenarios and do not change ranks, actions or quantities.'}

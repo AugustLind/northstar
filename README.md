@@ -62,6 +62,9 @@ files must be chosen again after a reload.
   multi-year financial charts, same-sector comparisons and a current stock decision summary.
 - Shows private service/data health and email acceptance history, with chart preferences
   and CSV/SVG exports.
+- Shows experimental three-month historical return ranges for current top-ranked and
+  held Oslo stocks, with the sample and walk-forward evidence in Explore. These ranges
+  do not change rankings or trade plans.
 - Supports chronological holdout, parameter/cost sensitivity, configurable experiment
   sale fees, and forward paper cohorts with explicit
   missing-data and methodology limitations.

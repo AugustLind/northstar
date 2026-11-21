@@ -45,6 +45,16 @@ Charts are drawn locally with native SVG and no third-party chart scripts. Full 
 
 This remains an **unvalidated technical ranking**. Annual company-financial snapshots are supplementary; they do not yet change ranks or establish complete business quality. NewsWeb headline metadata is presented separately; full-report interpretation and suitability are not assessed, and historical ranking experiments remain exploratory and survivor-biased.
 
+## Experimental three-month return ranges
+
+The Research table shows a compact median and 10th–90th percentile scenario range for current top-ranked stocks and tracked holdings. A held stock that does not currently pass the entry policy is labelled not applicable. The same range and its evidence appear in Explore. Estimates never change ranks, actions or quantities.
+
+The estimate replays the current technical entry policy at each available month end using only bars through that date. It uses the stock's own completed outcomes after passing the historical entry screen, measured through the 63rd later Oslo market session. Only dividend/split-adjusted NOK close histories are used. At least 20 completed historical signal outcomes are required; otherwise the view says **Insufficient history**. Samples show the most recent outcomes, and the summary reports sample count, walk-forward interval coverage, and median error against a same-stock historical-return baseline.
+
+Percentiles use linear interpolation: for completed outcomes of −10%, −5%, 0%, 5% and 10%, the p10 / median / p90 values are −8% / 0% / +8%. This example illustrates percentile arithmetic only; it does not meet the 20-outcome display minimum.
+
+The walk-forward check uses only earlier completed observations at each historical estimate date. It reports whether the 10th–90th range covered about 80% of later outcomes and whether the median forecast's mean absolute error was lower than the same-stock baseline. With at least 20 held-out forecasts, coverage between 70% and 90%, and lower median forecast error, the brief labels the result **Initial support**; otherwise it remains **Experimental**. That label never changes rankings, actions or quantities. These are empirical historical scenarios, not a probability guarantee, target price or investment recommendation. The current configured universe can omit delisted stocks, provider adjusted prices may be revised, and monthly 63-session outcomes overlap. The price source is Yahoo Finance's unofficial history endpoint. Personal trading fees and tax are excluded.
+
 ## Company fundamentals
 
 Explore a stock to see annual revenue/growth, operating and net margin, operating and free cash flow, debt, cash, equity, share-count changes and a price/annual-EPS proxy when compatible inputs exist. A separate low-concurrency worker checks the configured universe and holdings, prioritising an explicitly requested refresh. Successful records are cached for 24 hours; failed attempts back off for six hours. HTTP 401/403/429 defers remaining requests rather than repeatedly calling a blocked provider.

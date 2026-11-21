@@ -95,7 +95,7 @@ def latest(db,kind,subject,before):
 
 def analysis_fingerprint(root):
     digest=hashlib.sha256()
-    for name in ('research.py','indicators.py','decision_policy.py','trade_plan.py','portfolio_fit.py','advice_state.py','fundamentals.py','company_data.py','announcements.py'):
+    for name in ('research.py','return_estimates.py','indicators.py','decision_policy.py','trade_plan.py','portfolio_fit.py','advice_state.py','fundamentals.py','company_data.py','announcements.py'):
         digest.update(name.encode());digest.update((root/name).read_bytes())
     return digest.hexdigest()
 
@@ -132,10 +132,16 @@ def replay(db,identifier,root):
     import research
     rebuilt=research.build_report(snapshot,universe['universe'],universe['min_turnover_nok'],as_of=manifest['report_generated'])
     old={c['symbol']:c for c in saved['cards']};new={c['symbol']:c for c in rebuilt['cards']}
+    def estimate(card):
+        value=(card or {}).get('return_estimate') or {}
+        return {k:value.get(k) for k in ('status','sample_count','p10_pct','median_pct','p90_pct')}
     rows=[{'symbol':s,'saved_rank':old.get(s,{}).get('rank'),'replayed_rank':new.get(s,{}).get('rank'),
            'saved_action':old.get(s,{}).get('action'),'replayed_action':new.get(s,{}).get('action'),
-           'saved_score':old.get(s,{}).get('composite'),'replayed_score':new.get(s,{}).get('composite')} for s in sorted(set(old)|set(new))]
-    differences=sum(r['saved_rank']!=r['replayed_rank'] or r['saved_action']!=r['replayed_action'] or r['saved_score']!=r['replayed_score'] for r in rows)
+           'saved_score':old.get(s,{}).get('composite'),'replayed_score':new.get(s,{}).get('composite'),
+           'saved_return_estimate':estimate(old.get(s)),'replayed_return_estimate':estimate(new.get(s))} for s in sorted(set(old)|set(new))]
+    differences=sum(r['saved_rank']!=r['replayed_rank'] or r['saved_action']!=r['replayed_action'] or
+                    r['saved_score']!=r['replayed_score'] or
+                    r['saved_return_estimate']!=r['replayed_return_estimate'] for r in rows)
     return {'run_id':run['id'],'captured':before,'report_generated':manifest['report_generated'],
             'same_analysis_code':manifest['analysis_fingerprint']==analysis_fingerprint(root),'differences':differences,'rows':rows,
             'inputs':{'quotes':len(quote_rows),'financials':len(financial_rows),'universe':len(universe['universe'])},

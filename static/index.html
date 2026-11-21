@@ -357,6 +357,8 @@
             Top 20 contains the highest-scoring stocks that pass every technical entry rule.
             Portfolio limits and confirmation still apply; owned candidates may qualify for
             additions. Overall scores combine five technical views; they are not probabilities.
+            Experimental three-month return ranges are historical scenarios, not ranking inputs
+            or promises.
             Annual financial snapshots are available in Explore. They do not yet change this
             technical ranking. Source-linked NewsWeb notices and reporting-date extraction are
             available in Announcements. Headline labels do not change ranks.
@@ -424,7 +426,8 @@
         <p class="muted">
           *Purchase fee drag uses the saved purchase budget at report generation: 79 kr per order
           divided by the resulting stock value. Set a budget in Portfolio fit for a current
-          calculation. Technical scores do not predict returns after fees.
+          calculation. Experimental return ranges use dividend/split-adjusted prices before
+          personal fees and tax; they do not change technical ranks, actions or quantities.
         </p>
         <section id="explorer" class="card" hidden>
           <div class="sectionhead">
@@ -438,6 +441,10 @@
             <h3>Decision summary</h3>
             <p id="decisionStatus" role="status">Loading current signal and portfolio gates…</p>
             <div id="decisionSummary" class="decisiongrid"></div>
+            <details>
+              <summary>Historical return outcomes &amp; estimate validation</summary>
+              <div id="returnEstimateEvidence"></div>
+            </details>
             <details>
               <summary>Entry checks &amp; calculation basis</summary>
               <div id="decisionChecks"></div>
@@ -1334,11 +1341,11 @@
       <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
       <script src="./daily.js?v=62de273e65f2"></script>
-      <script src="./advice.js?v=ae2a8158d858"></script>
+      <script src="./advice.js?v=99a68ba3093b"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
       <script src="./portfolio-risk.js?v=e75ae85395c7"></script>
-      <script src="./stock-summary.js?v=9f8e720795e1"></script>
+      <script src="./stock-summary.js?v=2223dc022f57"></script>
       <script src="./validation-view.js?v=54bf6067f20c"></script>
       <script src="./system-status.js?v=a12e1049a887"></script>
       <script src="./chart-tools.js?v=837395634dcd"></script>

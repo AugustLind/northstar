@@ -7,7 +7,7 @@ Return to the [README](../README.md). Run commands from the repository root.
 | Area | Files |
 |---|---|
 | HTTP API, workers, SQLite orchestration | `app.py` |
-| Screening and indicators | `research.py`, `decision_policy.py`, `indicators.py`, `universe.py` |
+| Screening, return scenarios and indicators | `research.py`, `return_estimates.py`, `decision_policy.py`, `indicators.py`, `universe.py` |
 | Financial, announcement, and company data | `fundamentals.py`, `announcements.py`, `company_data.py` |
 | Portfolio covariance, scenarios and decision summaries | `portfolio_risk.py`, `stock_summary.py` |
 | Multi-year financial/peer context | `financial_analysis.py` |

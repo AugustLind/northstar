@@ -4,6 +4,20 @@ let researchView = null,
   chartRanges = {},
   askingModel = false;
 const timeLabel = (t) => (t ? new Date(t * 1000).toLocaleString() : 'not yet');
+function returnEstimateCell(estimate) {
+  if (!estimate) return '<td>—</td>';
+  if (estimate.status === 'not_applicable')
+    return `<td><small>Not applicable</small><small>${esc(estimate.reason || 'Current entry screen not passed.')}</small></td>`;
+  if (estimate.status === 'unavailable')
+    return `<td><small>Unavailable</small><small>${esc(estimate.reason || 'Adjusted history missing.')}</small></td>`;
+  if (estimate.status === 'insufficient_history')
+    return `<td><small>Insufficient history</small><small>${estimate.sample_count}/${estimate.minimum_samples} completed signals</small></td>`;
+  const pct = (value) => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+  const label = estimate.validation && estimate.validation.status === 'initial_support'
+    ? 'Initial support'
+    : 'Experimental';
+  return `<td><b>${pct(estimate.median_pct)}</b><small>${pct(estimate.p10_pct)}–${pct(estimate.p90_pct)}</small><small>${label} · n=${estimate.sample_count}</small></td>`;
+}
 function chart(card, range = '1Y') {
   const days = { '1M': 31, '3M': 93, '1Y': 370 }[range];
   const points = (card.history || []).filter((p) => p.time >= Date.now() / 1000 - days * 86400);
@@ -101,6 +115,7 @@ function renderAdvice() {
             rank: null,
             analyses: [],
             rank_eligible: false,
+            return_estimate: { status: 'not_applicable', reason: 'Current report or quote is stale.' },
             reasons: [
               'Report or quote is stale. Run analysis before using a recommendation.',
             ].concat(c.reasons),
@@ -193,13 +208,13 @@ function renderAdvice() {
     cards.filter((c) => c.score === null).length
   } without sufficient data. Primary recommendation cap: ${r.recommendation_limit || 20}; owned candidates may qualify for additions. Portfolio limits and signal confirmation still apply.`;
   $('#adviceCards').innerHTML = filtered.length
-    ? '<div class="tablewrap"><table class="ranktable"><thead><tr><th>Entry rank</th><th>Stock</th><th>Overall</th><th>Trend</th><th>Momentum</th><th>Risk</th><th>Timing</th><th>Liquidity</th><th>Annual quality</th><th>Purchase fee drag*</th><th>Action</th><th></th></tr></thead><tbody>' +
+    ? '<div class="tablewrap"><table class="ranktable"><thead><tr><th>Entry rank</th><th>Stock</th><th>3-mo range</th><th>Overall</th><th>Trend</th><th>Momentum</th><th>Risk</th><th>Timing</th><th>Liquidity</th><th>Annual quality</th><th>Purchase fee drag*</th><th>Action</th><th></th></tr></thead><tbody>' +
       filtered
         .map(
           (c) =>
             `<tr><td>${c.rank || '—'}</td><td><b>${esc(c.symbol)}</b><small>${esc(c.name || '')} ${
               c.held ? '· Owned' : ''
-            }</small></td><td><b>${c.composite == null ? '—' : c.composite.toFixed(1)}</b></td>${[
+            }</small></td>${returnEstimateCell(c.return_estimate)}<td><b>${c.composite == null ? '—' : c.composite.toFixed(1)}</b></td>${[
               'Trend',
               'Momentum',
               'Risk',

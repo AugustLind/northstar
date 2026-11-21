@@ -16,6 +16,7 @@ import advice_state
 import company_data
 import announcements
 import universe as oslo_universe
+import return_estimates
 import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -163,10 +164,24 @@ def build_report(snapshot, universe, min_turnover_nok=250000, as_of=None, promot
         card['sparkline'] = card['history'][-60::3]
         card['history'] = []
     recommendations=policy.recommendations(cards,promoted_model)
+    recommendation_limit=promoted_model.get('max_positions',policy.MAX_CANDIDATES) if promoted_model else policy.MAX_CANDIDATES
+    try:
+        return_estimates.attach(cards,quotes,[c['symbol'] for c in recommendations],now,
+                                min_turnover_nok,screen)
+    except Exception:
+        estimate_symbols={c['symbol'] for c in recommendations}
+        for card in cards:
+            if card['held'] or card['symbol'] in estimate_symbols:
+                card['return_estimate']=({
+                    'status':'not_applicable','reason':'Current entry screen not passed.'
+                } if not policy.buy_signal(card) else {
+                    'status':'unavailable',
+                    'reason':'Historical range calculation unavailable; current rankings are unchanged.'
+                })
     report={'generated': now, 'cards': sorted(cards, key=rank), 'market_scope': SCOPE,
             'top20':[c['symbol'] for c in recommendations], 'coverage':coverage,
             'paper_top20':[c['symbol'] for c in ranked[:policy.MAX_CANDIDATES]],
-            'recommendation_limit':promoted_model.get('max_positions',policy.MAX_CANDIDATES) if promoted_model else policy.MAX_CANDIDATES,
+            'recommendation_limit':recommendation_limit,
             'promoted_model':promoted_model,
             'policy_version':policy.VERSION,'min_turnover_nok':min_turnover_nok,
             'portfolio_context':portfolio, 'portfolio_limits':{k:v for k,v in profile.items() if k!='sectors'},
