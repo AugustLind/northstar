@@ -1,10 +1,12 @@
 /* Notification permission is requested only by the user's explicit button click. */
 let dailyView = null,
   dailyRequest = 0,
-  overviewAccountRequest = 0;
+  overviewAccountRequest = 0,
+  overviewAccountLoaded = false;
 async function loadOverviewAccount() {
   const token = ++overviewAccountRequest;
-  $('#overviewAccountStatus').textContent = 'Loading current valuation and ledger performance…';
+  if (!overviewAccountLoaded)
+    $('#overviewAccountStatus').textContent = 'Loading current valuation and ledger performance…';
   try {
     const value = await api('account-performance?allow_prior_close=0');
     if (token !== overviewAccountRequest) return;
@@ -37,6 +39,7 @@ async function loadOverviewAccount() {
     $('#overviewAccountStatus').textContent = notices.length
       ? notices.join(' ')
       : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';
+    overviewAccountLoaded = true;
   } catch (error) {
     if (token === overviewAccountRequest) {
       $('#overviewValue').textContent = 'Unavailable';
