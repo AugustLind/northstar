@@ -75,6 +75,10 @@ function renderPortfolioFit(v) {
           '</div>'
       )
       .join('') || '<p>No held-stock sector exposure yet.</p>';
+  if (typeof workspaceUiStateHas === 'function' && workspaceUiStateHas('fitPreferences')) {
+    fitDirty = true;
+    restoreWorkspaceUiState('fitPreferences');
+  }
   if (!fitDirty) {
     const f = $('#fitPreferences');
     for (const k of [
@@ -224,6 +228,7 @@ $('#fitPreferences').onsubmit = async (e) => {
   b.disabled = true;
   try {
     await api('portfolio-fit', data);
+    if (typeof clearWorkspaceUiFormState === 'function') clearWorkspaceUiFormState('fitPreferences');
     fitDirty = false;
     $('#fitExtraSymbol').value = '';
     $('#fitSaveStatus').textContent =

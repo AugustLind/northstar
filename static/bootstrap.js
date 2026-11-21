@@ -3,7 +3,7 @@ initExplorer();
 initChartTools();
 openWorkspace(workspaceFromLocation(), false);
 load().catch((e) => ($('#message').textContent = e.message));
-loadResearch();
+loadResearch().finally(restoreWorkspaceUiState);
 loadSystemStatus();
 setInterval(() => {
   loadResearch();

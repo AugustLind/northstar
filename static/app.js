@@ -43,6 +43,7 @@ $('#disconnect').onclick = () => {
   try {
     sessionStorage.removeItem('northstar-key');
   } catch (e) {}
+  if (typeof clearWorkspaceUiState === 'function') clearWorkspaceUiState();
   $('#accessKey').value = '';
   state = { positions: [], quotes: {} };
   $('#accountStatus').textContent = 'Not connected';
@@ -82,6 +83,7 @@ $('#connectionForm').onsubmit = async (e) => {
     $('#message').textContent = 'Connected to Northstar.';
     await load();
     if (typeof loadResearch === 'function') await loadResearch();
+    openWorkspace(workspaceFromLocation(), false);
   } catch (e) {
     $('#connectionMessage').textContent = e.message;
   }

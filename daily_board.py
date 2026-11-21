@@ -9,13 +9,19 @@ import fundamentals
 import company_data
 
 
+def technical_sale(row):
+    action=row.get('technical_action')
+    return bool(action in trade_plan.SELL_SIGNALS and
+                any(reason.startswith(action) for reason in row.get('reasons',[])))
+
+
 def build(snapshot,report,plan,feed,ledger=None,now=None):
     now=time.time() if now is None else now
     held={pf.canonical(p['symbol'],p['currency']) for p in snapshot['positions'] if p['shares']>0}
     reviews=[]
-    def add(key,priority,title,detail,kind,symbol=None,url=None,source_asof=None):
+    def add(key,priority,title,detail,kind,symbol=None,url=None,source_asof=None,review_type=None):
         reviews.append({'id':hashlib.sha256(key.encode()).hexdigest()[:24],'priority':priority,'title':title,
-                        'detail':detail,'kind':kind,'symbol':symbol,'url':url,'source_asof':source_asof,'observed':now})
+                        'detail':detail,'kind':kind,'review_type':review_type,'symbol':symbol,'url':url,'source_asof':source_asof,'observed':now})
     for symbol in snapshot['portfolio_context']['missing']:
         add('missing:'+symbol,100,'Refresh '+symbol+' before sizing trades','Current portfolio valuation is incomplete.','data',symbol)
     if ledger and not ledger.get('reconciled',True):
@@ -25,11 +31,13 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
     for row in plan['holdings']:
         if row.get('sell_shares'):
             change=changed.get((row['symbol'],'sell'),{}).get('change','Review')
+            technical=technical_sale(row)
             add('sale:'+row['symbol']+':'+str(changed.get((row['symbol'],'sell'),{}).get('change_id','active')),90,row['symbol']+': review '+str(row['sell_shares'])+' shares for sale',
                 change+'. '+' '.join(row['reasons'])+
                 (' Entered sale fee: '+str(row['fee_nok'])+' NOK; estimated net proceeds before tax: '+str(row['net_proceeds_nok'])+' NOK.'
                  if row.get('fee_nok') is not None and row.get('net_proceeds_nok') is not None else
-                 ' Gross sale estimate; sale fee unknown until entered. Tax is excluded.'),'holding',row['symbol'])
+                 ' Gross sale estimate; sale fee unknown until entered. Tax is excluded.'),'holding',row['symbol'],
+                review_type='technical sell review' if technical else 'portfolio-limit sale scenario')
     focused=held|set((report or {}).get('top20',[]))
     notices=announcements.view(feed,list(focused),now=now)
     for n in notices.get('items',[]):
@@ -65,8 +73,27 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
     if not trade_plan.current_report(report,now):
         add('stale-report',100,'Refresh the market report','Buy quantities and technical sale reviews need current signal evidence.','data')
     ordered=sorted({r['id']:r for r in reviews}.values(),key=lambda r:(-r['priority'],r['id']))
+    cards={pf.canonical(c['symbol']):c for c in (report or {}).get('cards',[])}
+    planned={pf.canonical(r['symbol']):r for r in plan.get('holdings',[])}
+    current=trade_plan.current_report(report,now)
+    assessments=[]
+    for position in snapshot['positions']:
+        if position['shares']<=0:continue
+        symbol=pf.canonical(position['symbol'],position['currency'])
+        card=cards.get(symbol)
+        sale=planned.get(symbol)
+        assessments.append({'symbol':symbol,'shares':position['shares'],
+            'status':'current' if current and card else 'stale' if card else 'unavailable',
+            'action':card.get('action') if card else None,
+            'reasons':(card.get('reasons') or [])[:8] if card else [],
+            'source_asof':card.get('asof') if card else None,
+            'sale_review':({'shares':sale.get('sell_shares'),'reasons':sale.get('reasons',[]),
+                'gross_proceeds_nok':sale.get('gross_proceeds_nok'),'fee_nok':sale.get('fee_nok'),
+                'net_proceeds_nok':sale.get('net_proceeds_nok'),
+                'technical':technical_sale(sale)} if sale and sale.get('sell_shares') else None)})
     return {'generated':now,'top3':ordered[:3],'reviews':ordered,'changes':changes,
             'plan':plan,'announcement_status':notices.get('status'),'ledger':ledger,
+            'holding_assessments':assessments,
             'coverage':(report or {}).get('coverage',{}),
             'method':'Priorities are review rules, not probabilities. Browser notifications require opt-in and an open dashboard. Optional server-side email sends confirmed share-plan changes, recent issuer and annual financial reviews, and significant historical or long-term holding risks when SMTP is configured and enabled.'}
 

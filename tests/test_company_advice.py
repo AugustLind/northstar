@@ -52,6 +52,21 @@ class CompanyTests(unittest.TestCase):
             self.assertIsNone(cd.peer_valuation('A.OL',f,records,{},sectors,NOW)['median_annual_pe_proxy'])
 
 class AdviceTests(unittest.TestCase):
+    def test_daily_board_preserves_existing_holding_policy_assessments_and_marks_stale_evidence(self):
+        s=snapshot(4);p=profile();s.update(portfolio_preferences=p,portfolio_context=pf.context(s,p,NOW),fundamentals={},signal_state={},last_trades={})
+        held=card('A.OL',1,'Hold / monitor');held['reasons']=['Existing technical screen reason.']
+        report={'generated':NOW,'policy_version':tp.policy.VERSION,'cards':[held],'top20':[],'coverage':{'analysed':1,'requested':1}}
+        plan=tp.build(s,report,p,NOW)
+        current=daily.build(s,report,plan,{},None,NOW)['holding_assessments'][0]
+        self.assertEqual(current['status'],'current')
+        self.assertEqual(current['action'],'Hold / monitor')
+        self.assertEqual(current['reasons'],['Existing technical screen reason.'])
+        stale_report={**report,'generated':NOW-2*86400}
+        stale_plan=tp.build(s,stale_report,p,NOW)
+        stale=daily.build(s,stale_report,stale_plan,{},None,NOW)['holding_assessments'][0]
+        self.assertEqual(stale['status'],'stale')
+        self.assertEqual(stale['action'],'Hold / monitor')
+
     def test_same_session_refresh_is_not_confirmation(self):
         report={'cards':[card()]};state=ads.observe(report,{},NOW)
         report['cards'][0]['asof']+=60

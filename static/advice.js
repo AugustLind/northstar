@@ -98,6 +98,8 @@ function renderAdvice() {
     f.elements.llm_enabled.checked = s.llm_enabled;
     researchSettingsLoaded = true;
   }
+  if (typeof workspaceUiStateHas === 'function' && workspaceUiStateHas('researchSettings'))
+    restoreWorkspaceUiState('researchSettings');
   if (!r) {
     $('#adviceCards').innerHTML =
       '<div class="card">Preparing a broad market scan. Progress updates every 15 seconds; larger scans may take several minutes.</div>';
@@ -303,6 +305,7 @@ $('#researchSettings').onsubmit = async (e) => {
       min_turnover_nok: Number(f.elements.min_turnover_nok.value),
       llm_enabled: f.elements.llm_enabled.checked,
     });
+    if (typeof clearWorkspaceUiFormState === 'function') clearWorkspaceUiFormState('researchSettings');
     $('#settingsMessage').textContent = 'Saved. New analysis queued.';
     await loadResearch();
   } catch (e) {

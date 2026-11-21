@@ -1,8 +1,98 @@
 /* Notification permission is requested only by the user's explicit button click. */
 let dailyView = null,
-  dailyRequest = 0;
+  dailyRequest = 0,
+  overviewAccountRequest = 0;
+async function loadOverviewAccount() {
+  const token = ++overviewAccountRequest;
+  $('#overviewAccountStatus').textContent = 'Loading current valuation and ledger performance…';
+  try {
+    const value = await api('account-performance?allow_prior_close=0');
+    if (token !== overviewAccountRequest) return;
+    $('#overviewValue').textContent =
+      value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
+    $('#overviewValueMeta').textContent =
+      (value.current_price_basis || 'Provider quote basis') +
+      ' · reporting date ' +
+      (value.current_date || 'unavailable') +
+      (value.current_asof
+        ? ' · provider prices as of ' + new Date(value.current_asof * 1000).toLocaleString()
+        : '');
+    $('#overviewMove').textContent =
+      value.today_change_nok == null
+        ? 'Unavailable'
+        : money(value.today_change_nok) + ' · ' + value.today_change_pct.toFixed(2) + '%';
+    $('#overviewMoveMeta').textContent =
+      value.today_change_nok == null
+        ? 'Today’s movement needs current same-session quotes and prior closes.'
+        : 'Held-asset price change · % of prior account value · ' +
+          value.today_date +
+          ' · cash flows excluded';
+    const verified =
+      ['available', 'estimated'].includes(value.status) && value.investment_pnl_nok != null;
+    $('#overviewPnl').textContent = verified ? money(value.investment_pnl_nok) : 'Unavailable';
+    $('#overviewPnlMeta').textContent = verified
+      ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
+      : 'Requires reconciled ledger, comparable valuations and verified opening history.';
+    const notices = (value.current_coverage || []).concat(value.coverage || []);
+    $('#overviewAccountStatus').textContent = notices.length
+      ? notices.join(' ')
+      : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';
+  } catch (error) {
+    if (token === overviewAccountRequest) {
+      $('#overviewValue').textContent = 'Unavailable';
+      $('#overviewMove').textContent = 'Unavailable';
+      $('#overviewPnl').textContent = 'Unavailable';
+      $('#overviewAccountStatus').textContent = error.message;
+    }
+  }
+}
 function safeDailyLink(url) {
   return typeof officialNoticeUrl === 'function' ? officialNoticeUrl(url) : '';
+}
+function reviewPresentationFor(review) {
+  if (review.kind === 'data') {
+    if (review.title === 'Check announcement coverage')
+      return {
+        category: 'ISSUER COVERAGE WARNING',
+        action: 'announcements',
+        label: 'Check announcement coverage',
+      };
+    if (review.title === 'Refresh the market report')
+      return {
+        category: 'SIGNAL EVIDENCE UNCERTAINTY',
+        action: 'research',
+        label: 'Review research status',
+      };
+    if (/^Refresh .* before sizing trades/.test(review.title))
+      return {
+        category: 'VALUATION DATA WARNING',
+        action: 'freshness',
+        label: 'Refresh market data',
+      };
+    return { category: 'DATA WARNING', action: 'freshness', label: 'Refresh market data' };
+  }
+  const presentation = {
+    holding: {
+      category: review.review_type || 'technical sell review',
+      action: 'holding',
+      label: 'Review holding',
+    },
+    company: {
+      category: 'annual accounting evidence',
+      action: 'stock',
+      label: 'Review annual evidence',
+    },
+    ledger: {
+      category: 'ledger / reconciliation blocker',
+      action: 'ledger',
+      label: 'Open reconciliation',
+    },
+    announcement: { category: 'issuer notice', action: 'stock', label: 'Review company' },
+    calendar: { category: 'issuer date', action: 'stock', label: 'Review company' },
+    purchase: { category: 'purchase plan review', action: 'stock', label: 'Review company' },
+    change: { category: 'changed or withdrawn evidence', action: 'stock', label: 'Review company' },
+  }[review.kind] || { category: 'review', action: 'stock', label: 'Review company' };
+  return { ...presentation, category: presentation.category.toUpperCase() };
 }
 function renderEmailStatus(v) {
   if (!v) return;
@@ -29,6 +119,9 @@ function renderEmailStatus(v) {
 }
 function renderDaily(v) {
   dailyView = v;
+  if (typeof renderHoldingAssessments === 'function')
+    renderHoldingAssessments(v.holding_assessments);
+  renderBuyCandidates(v);
   $('#dailyStatus').textContent =
     'Updated ' +
     new Date(v.generated * 1000).toLocaleString() +
@@ -39,14 +132,28 @@ function renderDaily(v) {
     ' stocks analysed · Announcement feed ' +
     v.announcement_status +
     '.';
-  $('#dailyTop').innerHTML = v.top3.length
-    ? v.top3
-        .map(
-          (r, i) =>
+  const visibleReviews = Array.from(
+    new Map(
+      v.top3
+        .concat(
+          v.reviews.filter(
+            (r) =>
+              r.kind === 'ledger' ||
+              /^Refresh .* before sizing trades|^Refresh the market report/.test(r.title)
+          )
+        )
+        .map((r) => [r.id, r])
+    ).values()
+  );
+  $('#dailyTop').innerHTML = visibleReviews.length
+    ? visibleReviews
+        .map((r, i) => {
+          const presentation = reviewPresentationFor(r);
+          return (
             '<article class="card"><p class="eyebrow">REVIEW ' +
             (i + 1) +
             ' · ' +
-            esc(r.kind) +
+            esc(presentation.category) +
             '</p><h2>' +
             esc(r.title) +
             '</h2><p>' +
@@ -57,15 +164,60 @@ function renderDaily(v) {
                 safeDailyLink(r.url) +
                 '">Read issuer source ↗</a>'
               : '') +
-            (r.symbol
-              ? '<button type="button" data-daily-stock="' +
-                esc(r.symbol) +
-                '">Explore company</button>'
-              : '') +
+            (presentation.action === 'stock'
+              ? r.symbol
+                ? '<button type="button" data-daily-stock="' +
+                  esc(r.symbol) +
+                  '">' +
+                  esc(presentation.label) +
+                  '</button>'
+                : ''
+              : '<button type="button" data-review-action="' +
+                presentation.action +
+                '"' +
+                (presentation.action === 'holding'
+                  ? ' data-review-symbol="' + esc(r.symbol) + '"'
+                  : '') +
+                '>' +
+                esc(presentation.label) +
+                '</button>') +
             '</article>'
-        )
+          );
+        })
         .join('')
-    : '<p>No priority review was generated. Check coverage before treating an empty list as reassurance.</p>';
+    : '<p>No actionable review is currently generated. This is based on the successfully loaded review rules and available evidence; it is not a recommendation to buy or hold.</p>';
+  const blocker =
+    v.reviews.find((r) => r.kind === 'ledger') ||
+    v.reviews.find(
+      (r) =>
+        r.kind === 'data' &&
+        /^Refresh .* before sizing trades|^Refresh the market report/.test(r.title)
+    );
+  const blockerAction = !blocker
+    ? 'portfolio'
+    : blocker.kind === 'ledger'
+    ? 'ledger'
+    : blocker.title === 'Refresh the market report'
+    ? 'research'
+    : 'freshness';
+  $('#portfolioReviewEntry').innerHTML =
+    '<h2>Needs attention</h2><p>' +
+    (blocker
+      ? 'Resolve the current data or reconciliation blocker before relying on portfolio sizing or account results.'
+      : v.reviews.length
+      ? 'Review the prioritized items and their linked evidence. Each prompt has a specific evidence type.'
+      : 'No actionable reviews are available after a successful load. Check coverage above before relying on this quiet state.') +
+    '</p><button type="button" data-review-action="' +
+    blockerAction +
+    '">' +
+    (blockerAction === 'ledger'
+      ? 'Fix reconciliation'
+      : blockerAction === 'research'
+      ? 'Review research status'
+      : blockerAction === 'freshness'
+      ? 'Refresh market data'
+      : 'Review portfolio') +
+    '</button>';
   $('#dailyChanges').innerHTML = v.changes.length
     ? '<div class="tablewrap"><table><thead><tr><th>Stock</th><th>Change</th><th>Direction / shares</th></tr></thead><tbody>' +
       v.changes
@@ -127,16 +279,97 @@ function renderDaily(v) {
     } catch (e) {}
   }
 }
+function renderBuyCandidates(v) {
+  const status = $('#buyCandidatesStatus'),
+    list = $('#buyCandidates'),
+    recovery = $('#buyCandidatesRecovery');
+  const candidates = Array.isArray(v.buy_candidates) ? v.buy_candidates.slice(0, 3) : [];
+  list.innerHTML = '';
+  recovery.hidden = true;
+  if (v.buy_candidates_stale) {
+    status.textContent =
+      'Research is stale or unavailable. Current signals are required before showing buying candidates.';
+    recovery.textContent = 'Refresh research';
+    recovery.dataset.action = 'refresh';
+    recovery.hidden = false;
+  } else if (candidates.length) {
+    status.textContent =
+      candidates.length +
+      ' eligible candidate' +
+      (candidates.length === 1 ? '' : 's') +
+      ' from your current portfolio and trade plan.';
+    list.innerHTML = candidates
+      .map(
+        (c) =>
+          '<article class="card"><p class="eyebrow">RANK ' +
+          esc(c.rank) +
+          '</p><h3>' +
+          esc(c.name) +
+          ' · ' +
+          esc(c.symbol) +
+          '</h3><p>' +
+          esc(c.portfolio_reason) +
+          '</p><p>' +
+          esc(c.buy_shares) +
+          ' shares · ' +
+          money(c.total_nok) +
+          ' including estimated purchase fee</p><button type="button" data-candidate-stock="' +
+          esc(c.symbol) +
+          '">Review in Research</button></article>'
+      )
+      .join('');
+  } else {
+    const warnings = Array.isArray(v.buy_candidate_warnings) ? v.buy_candidate_warnings : [];
+    status.textContent = warnings.length
+      ? 'No candidates can be sized with the current portfolio inputs. ' + warnings[0]
+      : 'No eligible buying candidates under the current portfolio settings.';
+    recovery.textContent = warnings.length ? 'Review portfolio inputs' : 'Explore Research';
+    recovery.dataset.action = warnings.length ? 'portfolio' : 'research';
+    recovery.hidden = false;
+  }
+}
 async function loadDaily() {
   const token = ++dailyRequest;
+  loadOverviewAccount();
   try {
     const v = await api('daily');
     if (token === dailyRequest) renderDaily(v);
   } catch (e) {
-    if (token === dailyRequest) $('#dailyStatus').textContent = e.message;
+    if (token === dailyRequest) {
+      $('#dailyStatus').textContent = 'Reviews unavailable: ' + e.message;
+      $('#dailyTop').textContent =
+        'Review data is unavailable. Check the connection and try again.';
+      $('#portfolioReviewEntry').textContent =
+        'Needs attention is unavailable until the review request succeeds.';
+      $('#buyCandidates').innerHTML = '';
+      $('#buyCandidatesStatus').textContent = 'Buying candidates could not be loaded. ' + e.message;
+      $('#buyCandidatesRecovery').textContent = 'Retry';
+      $('#buyCandidatesRecovery').dataset.action = 'retry';
+      $('#buyCandidatesRecovery').hidden = false;
+    }
   }
 }
 $('#refreshDaily').onclick = loadDaily;
+$('#refreshOverviewAccount').onclick = async () => {
+  const button = $('#refreshOverviewAccount');
+  button.disabled = true;
+  button.textContent = 'Refreshing market data…';
+  try {
+    const result = await api('refresh', {});
+    await loadOverviewAccount();
+    if (result.errors && result.errors.length)
+      $('#overviewAccountStatus').textContent = result.errors.join(' ');
+  } catch (error) {
+    $('#overviewAccountStatus').textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Refresh account value';
+  }
+};
+$('#openAccountPerformance').onclick = () => {
+  openWorkspace('accountPerformance');
+};
+$('#openAccountSetup').onclick = () => openWorkspace('activity');
 $('#markAlertsRead').onclick = async () => {
   if (!dailyView) return;
   try {
@@ -195,11 +428,68 @@ $('#testEmail').onclick = async () => {
     if (dailyView && dailyView.email) renderEmailStatus(dailyView.email);
   }
 };
+function openReviewAction(action, symbol) {
+  if (action === 'ledger') openWorkspace('activity');
+  else if (action === 'announcements') openWorkspace('announcements');
+  else if (action === 'freshness') {
+    openWorkspace('portfolio');
+    $('#refresh').click();
+  } else if (action === 'holding') {
+    openWorkspace('portfolio');
+    const target = Array.from(document.querySelectorAll('[data-assessment-symbol]')).find(
+      (node) => node.dataset.assessmentSymbol === symbol
+    );
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (action === 'research') openWorkspace('recommendations');
+  else openWorkspace('portfolio');
+}
 $('#dailyTop').onclick = (e) => {
+  const action = e.target.dataset.reviewAction;
+  if (action) {
+    openReviewAction(action, e.target.dataset.reviewSymbol || '');
+    return;
+  }
   const symbol = e.target.dataset.dailyStock;
   if (!symbol) return;
   document.querySelector('[data-tab="recommendations"]').click();
   if (typeof selectStock === 'function') selectStock(symbol, true);
+};
+$('#portfolioReviewEntry').onclick = (e) => {
+  const action = e.target.dataset.reviewAction;
+  if (action) openReviewAction(action, e.target.dataset.reviewSymbol || '');
+};
+$('#buyCandidates').onclick = (e) => {
+  const symbol = e.target.dataset.candidateStock;
+  if (!symbol) return;
+  document.querySelector('[data-tab="recommendations"]').click();
+  if (typeof selectStock === 'function') selectStock(symbol, true);
+};
+$('#buyCandidatesRecovery').onclick = async (e) => {
+  const button = e.currentTarget,
+    action = button.dataset.action;
+  if (action === 'retry') {
+    await loadDaily();
+    return;
+  }
+  if (action === 'portfolio') {
+    document.querySelector('[data-tab="portfolio"]').click();
+    location.hash = '#fit';
+    return;
+  }
+  if (action === 'research') {
+    document.querySelector('[data-tab="recommendations"]').click();
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api('analyze', {});
+    $('#buyCandidatesStatus').textContent =
+      'Research refresh queued. Candidates will update when the scan completes.';
+  } catch (error) {
+    $('#buyCandidatesStatus').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 };
 setInterval(() => {
   if (apiBase && accessKey) loadDaily();
