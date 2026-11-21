@@ -68,7 +68,7 @@ class Browser:
                 return message.get('result',{})
     def evaluate(self,expression):
         result=self.call('Runtime.evaluate',{'expression':expression,'returnByValue':True,'awaitPromise':True})
-        if 'exceptionDetails' in result:raise RuntimeError('Browser evaluation failed.')
+        if 'exceptionDetails' in result:raise RuntimeError('Browser evaluation failed: '+json.dumps(result['exceptionDetails'],sort_keys=True))
         return result['result'].get('value')
     def fill_key(self,key):
         target=self.call('Runtime.evaluate',{'expression':'window'})['result']['objectId']
