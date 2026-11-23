@@ -545,7 +545,7 @@ def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
     result['buy_candidates']=plan['buys'][:3]
-    result['buy_candidates_stale']=not trade_plan.current_report(report,time.time())
+    result['buy_candidates_stale']=not decision_policy.current_report(report,time.time())
     result['buy_candidate_warnings']=plan['warnings']
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
@@ -608,7 +608,7 @@ def email_plan():
             fx=snapshot['quotes'].get('NOK=X')
             if not fx:stale.append('NOK/USD conversion quote missing')
             elif not portfolio_fit.fresh(fx,now):stale.append('NOK/USD conversion quote stale')
-    report_ok=trade_plan.current_report(report,now)
+    report_ok=decision_policy.current_report(report,now)
     if not report_ok:
         stale.append('Research report: stale or missing')
     coverage=(report or {}).get('coverage',{})
@@ -787,7 +787,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(trade_plan.build(snapshot,read_meta('report'),snapshot['portfolio_preferences']))
         if self.path == '/api/portfolio-fit':
             snapshot=state()
-            return self.send_json(portfolio_fit.view(snapshot,read_meta('report'),snapshot['portfolio_preferences']))
+            report=read_meta('report')
+            profile=snapshot['portfolio_preferences']
+            now=time.time()
+            result=portfolio_fit.view(snapshot,report,profile,now)
+            result['trade_plan']=trade_plan.build(snapshot,report,profile,now)
+            return self.send_json(result)
         if self.path == '/api/validation':
             with connect() as db:
                 db.execute('CREATE TABLE IF NOT EXISTS paper_snapshots (generated REAL PRIMARY KEY, captured REAL NOT NULL, payload TEXT NOT NULL)')

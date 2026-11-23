@@ -10,7 +10,7 @@ def build(symbol,snapshot,report,profile,now=None):
     now=time.time() if now is None else now
     symbol=fundamentals.canonical(symbol)
     card=next((c for c in (report or {}).get('cards',[]) if c['symbol']==symbol),{})
-    m=card.get('metrics',{});current=trade_plan.current_report(report,now)
+    m=card.get('metrics',{});current=policy.current_report(report,now)
     quote=snapshot['quotes'].get(symbol) or snapshot['quotes'].get(symbol[:-3])
     current=bool(current and pf.fresh(quote,now) and quote.get('currency')=='NOK' and card.get('currency')=='NOK' and pf.fresh({'price':card.get('price'),'asof':card.get('asof')},now))
     preview=pf.preview(symbol,profile['purchase_nok'],snapshot,profile,now=now)

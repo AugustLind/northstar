@@ -14,6 +14,15 @@ from test_validation import quotes
 
 
 class SharedPolicyTests(unittest.TestCase):
+    def test_current_report_requires_matching_policy_and_fresh_generation_time(self):
+        report={'generated':NOW,'policy_version':policy.VERSION}
+        self.assertTrue(policy.current_report(report,NOW))
+        self.assertTrue(policy.current_report({**report,'generated':NOW+300},NOW))
+        self.assertFalse(policy.current_report({**report,'generated':NOW+301},NOW))
+        self.assertFalse(policy.current_report({**report,'generated':NOW-86401},NOW))
+        self.assertFalse(policy.current_report({**report,'policy_version':'old'},NOW))
+        self.assertFalse(policy.current_report({'policy_version':policy.VERSION},NOW))
+
     def metrics(self, **changes):
         return dict(close=110, ma50=105, ma200=100, momentum3m=5,
                     volatility=20, extension50=5, turnover20=250000,

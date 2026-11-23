@@ -119,6 +119,7 @@ class HostingTests(unittest.TestCase):
         view=self.request('GET','/api/portfolio-fit',headers)['body']
         self.assertEqual(view['portfolio']['total_nok'],10000)
         self.assertEqual(view['profile']['sectors']['BOUV.OL'],'Information technology')
+        self.assertIn('trade_plan',view)
         self.assertEqual(self.request('POST','/api/portfolio-fit',{**headers,'Origin':'https://attacker.example'},data)['status'],403)
         self.assertEqual(self.request('POST','/api/portfolio-fit',headers,{'cash_nok':-1})['status'],400)
         self.assertEqual(app.read_meta('portfolio_preferences')['cash_nok'],10000)

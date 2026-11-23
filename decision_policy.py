@@ -63,6 +63,13 @@ def buy_signal(card):
     return bool(card.get('rank_eligible') and card.get('action') in ('Consider buying', 'Hold / monitor'))
 
 
+def current_report(report, now):
+    generated = (report or {}).get('generated')
+    return ((report or {}).get('policy_version') == VERSION
+            and isinstance(generated, (int, float)) and math.isfinite(generated)
+            and -300 <= now - generated <= 86400)
+
+
 def rank_key(card):
     return (-card.get('composite', -1), card['symbol'])
 

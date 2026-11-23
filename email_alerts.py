@@ -123,7 +123,7 @@ def sync(db, report, plan, config, now):
     active = []
     active_risks=[]
     rows = {}
-    if trade_plan.current_report(report, now):
+    if policy.current_report(report, now):
         long_term=set((report or {}).get('long_term_symbols',[]))
         rows = {(r['symbol'], 'buy'): r for r in plan.get('buys', [])}
         rows.update({(r['symbol'], 'sell'): r for r in plan.get('holdings', []) if r.get('sell_shares')})
@@ -206,7 +206,7 @@ def sync(db, report, plan, config, now):
         # A withdrawal may disappear from the next scan's change list. Retain its
         # retry while the original suggestion remains absent from the live plan.
         if (row['kind'] == 'withdrawn' and row['target'] == config['target']
-                and trade_plan.current_report(report, now)
+                and policy.current_report(report, now)
                 and (row['symbol'], row['direction']) not in rows):
             active.append(row['id'])
         if row['kind'] == 'weekly' and row['target'] == config['target']:

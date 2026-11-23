@@ -32,6 +32,8 @@ class NavigationTests(unittest.TestCase):
             self.assertNotIn('open',layout.nodes[id]['attrs'])
             self.assertIn('Advanced tools',(Path(__file__).resolve().parents[1]/'static/index.html').read_text().split('id="'+id+'"')[1].split('</summary>',1)[0])
         rendered=(Path(__file__).resolve().parents[1]/'static/index.html').read_text()
+        self.assertIn('Single-stock previews passing technical and portfolio checks',rendered)
+        self.assertIn('Passing this check does not guarantee an allocation in the ranked shared-budget plan below.',rendered)
         self.assertLess(rendered.index('id="overviewMetrics"'),rendered.index('id="needsAttentionTitle"'))
         self.assertLess(rendered.index('id="needsAttentionTitle"'),rendered.index('id="buyCandidatesTitle"'))
         self.assertIn('portfolioAdvanced',layout.nodes['accountPerformance']['ancestors'])

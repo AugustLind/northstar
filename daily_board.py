@@ -3,6 +3,7 @@ import datetime as dt
 import hashlib
 import time
 import portfolio_fit as pf
+import decision_policy
 import trade_plan
 import announcements
 import fundamentals
@@ -70,12 +71,12 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
         if c['change']=='Withdrawn':
             add('withdrawn:'+c['symbol']+':'+c['direction']+':'+str((report or {}).get('generated')),80,c['symbol']+': previous '+c['direction']+' suggestion withdrawn',
                 'Do not use the earlier quantity; review the current plan.','change',c['symbol'])
-    if not trade_plan.current_report(report,now):
+    if not decision_policy.current_report(report,now):
         add('stale-report',100,'Refresh the market report','Buy quantities and technical sale reviews need current signal evidence.','data')
     ordered=sorted({r['id']:r for r in reviews}.values(),key=lambda r:(-r['priority'],r['id']))
     cards={pf.canonical(c['symbol']):c for c in (report or {}).get('cards',[])}
     planned={pf.canonical(r['symbol']):r for r in plan.get('holdings',[])}
-    current=trade_plan.current_report(report,now)
+    current=decision_policy.current_report(report,now)
     assessments=[]
     for position in snapshot['positions']:
         if position['shares']<=0:continue

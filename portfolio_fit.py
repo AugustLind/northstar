@@ -3,6 +3,7 @@ import math
 import re
 import time
 import company_data
+import decision_policy as policy
 from broker_costs import BUY_FEE_NOK
 
 SECTORS = ['Energy', 'Materials', 'Industrials', 'Consumer discretionary', 'Consumer staples',
@@ -215,18 +216,16 @@ def preview(symbol, amount, snapshot, profile, portfolio=None, now=None):
 
 
 def view(snapshot, report, profile, now=None):
-    import trade_plan
-    import decision_policy as policy
     now=time.time() if now is None else now
     profile=preferences(profile)
     ctx=context(snapshot,profile,now)
     cards=(report or {}).get('cards',[])
-    old=not trade_plan.current_report(report,now)
+    old=not policy.current_report(report,now)
     candidates=[]
     for card in policy.recommendations(cards,(report or {}).get('promoted_model')):
         symbol=canonical(card['symbol'])
         simulation=preview(symbol,profile['purchase_nok'],snapshot,profile,ctx,now)
-        actionable=not old and trade_plan.buy_signal(card) and fresh({'price':card.get('price'),'asof':card.get('asof')},now)
+        actionable=not old and policy.buy_signal(card) and fresh({'price':card.get('price'),'asof':card.get('asof')},now)
         simulation['technical_action']=card.get('action') if not old else 'Stale report'
         simulation['rank']=card.get('rank');simulation['name']=card.get('name',symbol)
         simulation['held']=any(h['symbol']==symbol for h in ctx['holdings'])
@@ -247,7 +246,7 @@ def view(snapshot, report, profile, now=None):
         candidates.append(simulation)
     return {'manual_sectors':snapshot.get('manual_portfolio_preferences',{}).get('sectors',profile['sectors']),
             'sector_sources':snapshot.get('portfolio_preferences',{}).get('sector_sources',{}),
-            'companies':snapshot.get('companies',{}), 'trade_plan':trade_plan.build(snapshot,report,profile,now),'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
+            'companies':snapshot.get('companies',{}), 'generated':now,'profile':profile,'sector_choices':SECTORS,'portfolio':ctx,'candidates':candidates,
             'report_generated':(report or {}).get('generated'),'report_stale':old,'buy_fee_nok':profile['buy_fee_nok'],
             'fee_model':'fixed-user-assumption-v1',
             'method':'Your limits are screening constraints, not a measure of investment suitability. Defaults are illustrative. '

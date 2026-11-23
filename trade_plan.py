@@ -17,12 +17,6 @@ def quote_for(snapshot,symbol):
     return existing or snapshot['quotes'].get(symbol)
 
 
-def current_report(report,now):
-    t=(report or {}).get('generated')
-    return ((report or {}).get('policy_version') == policy.VERSION
-            and isinstance(t,(int,float)) and math.isfinite(t) and -300<=now-t<=86400)
-
-
 def signal_current(card,now):
     return bool(card and pf.fresh({'price':card.get('price'),'asof':card.get('asof')},now))
 
@@ -145,7 +139,7 @@ def build(snapshot,report,profile,now=None):
     now=time.time() if now is None else now
     profile=pf.preferences(profile)
     ctx=pf.context(snapshot,profile,now)
-    report_ok=current_report(report,now)
+    report_ok=policy.current_report(report,now)
     cards={pf.canonical(c['symbol']):c for c in (report or {}).get('cards',[])}
     sells=sell_scenario(snapshot,cards,ctx,profile,report_ok,now)
     blocked_sales={r['symbol'] for r in sells if r['sell_shares']}
