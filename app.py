@@ -13,6 +13,7 @@ import base64
 import binascii
 import secrets
 import research
+import research_worker
 import decision_policy
 import fundamentals
 import announcements
@@ -962,7 +963,7 @@ if __name__ == '__main__':
     connect().close()
     ANNOUNCEMENTS_WORKER = announcements.Worker(read_meta,write_meta,announcement_focus)
     COMPANY_WORKER=company_data.Worker(read_meta,write_meta,financial_symbols)
-    WORKER = research.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, report_ready, archive_run)
+    WORKER = research_worker.ResearchWorker(refresh, lambda: state(True), read_meta, write_meta, settings, report_ready, archive_run)
     EMAIL_WORKER = email_alerts.Worker(connect,read_meta,write_meta,email_plan)
     FUNDAMENTALS_WORKER = fundamentals.Worker(read_meta, write_meta, financial_symbols)
     # Bind first so a second process cannot start a competing background worker.

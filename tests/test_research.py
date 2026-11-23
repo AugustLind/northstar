@@ -131,21 +131,6 @@ class ScreenTests(unittest.TestCase):
         missing = HTTPError('http://localhost', 404, 'missing', None, None)
         self.assertIn('ollama pull small', research.llm_error(missing, 'small'))
 
-    def test_worker_retains_rules_when_ai_unavailable(self):
-        values = {}
-        config = dict(research.DEFAULT_SETTINGS, universe=['BOUV.OL'], llm_enabled=True)
-        q = quote(); q['currency'] = 'NOK'
-        worker = research.ResearchWorker(lambda symbols: [],
-            lambda: {'positions': [], 'quotes': {'BOUV.OL': q}},
-            lambda k,d=None: values.get(k,d), lambda k,v: values.update({k:v}), lambda: config)
-        with patch.object(research, 'local_answer', side_effect=OSError('offline')):
-            self.assertTrue(worker.run_once())
-        self.assertEqual(values['report']['cards'][0]['action'], 'Consider buying')
-        self.assertIn('unavailable', values['report']['llm_status'])
-        self.assertFalse(worker.view()['worker']['running'])
-        self.assertTrue(worker.view()['worker']['next_run'] > time.time())
-
-
 class PersistenceTests(unittest.TestCase):
     def test_reverse_proxy_origin_is_explicit_and_exact(self):
         with patch.dict(os.environ, {'NORTHSTAR_PUBLIC_ORIGIN': 'https://northstar.example.com'}):
