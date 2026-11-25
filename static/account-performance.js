@@ -95,3 +95,118 @@ function renderAccountPerformance(value) {
 }
 $('#refreshAccountPerformance').onclick = loadAccountPerformance;
 $('#allowPriorClose').onchange = loadAccountPerformance;
+
+
+let overviewAccountRequest = 0;
+let overviewAccountLoaded = false;
+let todayHoldingMoves = new Map();
+
+function signedMove(nok, percent) {
+  if (nok == null) return 'Unavailable';
+  const amount = (nok > 0 ? '+' : '') + money(nok);
+  return percent == null
+    ? amount
+    : amount + ' (' + (percent > 0 ? '+' : '') + percent.toFixed(1) + '%)';
+}
+
+function renderTodayHoldingMoves() {
+  for (const cell of document.querySelectorAll('[data-today-holding]')) {
+    const move = todayHoldingMoves.get(cell.dataset.todayHolding);
+    cell.firstElementChild.textContent = move
+      ? signedMove(move.change_nok, move.change_pct)
+      : 'Unavailable';
+    cell.lastElementChild.textContent = move ? move.date : '';
+  }
+}
+
+function renderTodayPerformance(value) {
+  const date = value.today_date;
+  const label = date === value.current_date ? 'Today’s performance' : 'Last completed session';
+  $('#todayChartTitle').textContent = date ? label + ' · ' + date : 'Today’s performance';
+  $('#overviewMove').textContent = signedMove(value.today_change_nok, value.today_change_pct);
+  $('#overviewMoveMeta').textContent = date
+    ? label + ' · ' + date + ' (Europe/Oslo)' +
+      (value.today_change_pct != null && value.today_has_external_cash
+        ? ' · Percentage assumes end-of-day external cash flows'
+        : '')
+    : 'Session performance unavailable';
+  $('#todayExternalCash').textContent =
+    value.today_external_cash_nok == null ? 'Unavailable' : signedMove(value.today_external_cash_nok);
+  todayHoldingMoves = new Map((value.today_holdings || []).map((move) => [move.symbol, move]));
+  renderTodayHoldingMoves();
+  const chart = $('#todayChart');
+  if (value.today_change_nok == null) {
+    chart.textContent = 'Session chart unavailable. See coverage above.';
+    return;
+  }
+  const opening = value.today_opening_value_nok;
+  const adjusted = value.today_ending_value_nok - value.today_external_cash_nok;
+  const scale = Math.max(Math.abs(opening), Math.abs(adjusted), 1);
+  // A shared zero supports negative account values as well as ordinary positive balances.
+  chart.innerHTML = [
+    ['Previous close', opening],
+    ['Session value less net external cash flow', adjusted],
+  ].map(([label, amount]) => {
+    const left = amount < 0 ? 50 - Math.abs(amount) / scale * 50 : 50;
+    return `<div class="today-chart-row"><span>${label}</span><strong>${esc(money(amount))}</strong>
+      <div class="today-chart-track" aria-hidden="true"><span style="left:${left}%;width:${Math.abs(amount) / scale * 50}%"></span></div></div>`;
+  }).join('');
+}
+
+async function loadOverviewAccount() {
+  const token = ++overviewAccountRequest;
+  if (!overviewAccountLoaded)
+    $('#overviewAccountStatus').textContent = 'Loading current valuation and ledger performance…';
+  try {
+    const value = await api('account-performance?allow_prior_close=0');
+    if (token !== overviewAccountRequest) return;
+    $('#overviewValue').textContent =
+      value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
+    $('#overviewValueMeta').textContent =
+      (value.current_price_basis || 'Provider quote basis') +
+      ' · reporting date ' +
+      (value.current_date || 'unavailable') +
+      (value.current_asof
+        ? ' · provider prices as of ' + new Date(value.current_asof * 1000).toLocaleString(undefined, { timeZone: 'Europe/Oslo' }) + ' (Europe/Oslo)'
+        : '');
+    renderTodayPerformance(value);
+    const verified =
+      ['available', 'estimated'].includes(value.status) && value.investment_pnl_nok != null;
+    $('#overviewPnl').textContent = verified ? money(value.investment_pnl_nok) : 'Unavailable';
+    $('#overviewPnlMeta').textContent = verified
+      ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
+      : 'Requires reconciled ledger, comparable valuations and verified opening history.';
+    const notices = (value.current_coverage || []).concat(value.coverage || []);
+    $('#overviewAccountStatus').textContent = notices.length
+      ? notices.join(' ')
+      : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';
+    overviewAccountLoaded = true;
+  } catch (error) {
+    if (token === overviewAccountRequest) {
+      $('#overviewValue').textContent = 'Unavailable';
+      renderTodayPerformance({});
+      $('#overviewPnl').textContent = 'Unavailable';
+      $('#overviewAccountStatus').textContent = error.message;
+    }
+  }
+}
+$('#refreshOverviewAccount').onclick = async () => {
+  const button = $('#refreshOverviewAccount');
+  button.disabled = true;
+  button.textContent = 'Refreshing market data…';
+  try {
+    const result = await api('refresh', {});
+    await loadOverviewAccount();
+    if (result.errors && result.errors.length)
+      $('#overviewAccountStatus').textContent = result.errors.join(' ');
+  } catch (error) {
+    $('#overviewAccountStatus').textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Refresh account value';
+  }
+};
+$('#openAccountPerformance').onclick = () => {
+  openWorkspace('accountPerformance');
+};
+$('#openAccountSetup').onclick = () => openWorkspace('activity');

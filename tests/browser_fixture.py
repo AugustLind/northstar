@@ -1,4 +1,5 @@
 """Isolated authenticated server for browser checks. No real account or provider access."""
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -58,3 +59,55 @@ class Fixture:
             if v is None:os.environ.pop(k,None)
             else:os.environ[k]=v
         self.temp.cleanup()
+
+
+class SessionFixture(Fixture):
+    """A fixed Oslo reporting clock with known opening balances and cache states."""
+
+    def __enter__(self):
+        self.account_now = self.stamp('2025-04-16T20:30')
+        super().__enter__()
+        # Use a second temporary database so the general smoke fixture remains independent.
+        app.DB = Path(self.temp.name) / 'session.db'
+        app.save_position({'symbol':'SYNTH.OL','currency':'NOK','shares':100,'cost':100})
+        app.save_position({'symbol':'US','currency':'USD','shares':10,'cost':100})
+        app.write_meta('portfolio_preferences',{'cash_nok':80000})
+        app.ledger_initialize({'date':'2025-04-14'})
+        self.quotes('2025-04-16')
+        self.events([('deposit',10000,0)])
+        return self
+
+    @staticmethod
+    def stamp(value):
+        return datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp()
+
+    def events(self, rows):
+        events = [
+            {'id':index,'uid':'session-'+kind,'error':None,'date':'2025-04-16',
+             'type':kind,'symbol':'SYNTH.OL' if kind == 'buy' else '', 'name':kind,
+             'currency':'NOK','quantity':quantity,'net_cash':value,'fee':None}
+            for index,(kind,value,quantity) in enumerate(rows, 1)
+        ]
+        snapshot = app.state()
+        with app.connect() as db:
+            result = transactions.apply(db,events,[{'id':row['id']} for row in events],
+                                        app.read_meta('ledger_state'),snapshot['manual_portfolio_preferences'],snapshot['positions'])
+            for key,value in [('ledger_state',result['ledger']),('portfolio_preferences',result['profile'])]:
+                db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',(key,json.dumps(value)))
+
+    def quotes(self, date, fx=10, missing_oslo=False):
+        prices = {
+            'SYNTH.OL': ('NOK', {'2025-04-14':90, '2025-04-15':100, '2025-04-16':110}),
+            'US': ('USD', {'2025-04-14':100, '2025-04-15':100, '2025-04-16':100, '2025-04-17':100}),
+            'NOK=X': ('NOK', {'2025-04-14':10, '2025-04-15':10, '2025-04-16':fx, '2025-04-17':fx}),
+        }
+        with app.connect() as db:
+            for symbol,(currency, closes) in prices.items():
+                through = '2025-04-15' if missing_oslo and symbol == 'SYNTH.OL' else date
+                hour = '14:25' if symbol == 'SYNTH.OL' else '20:00'
+                history = [{'time':self.stamp(d+'T'+hour),'account_close':v}
+                           for d,v in closes.items() if d <= through]
+                bar = history[-1]
+                quote = {'price':bar['account_close'],'asof':bar['time'],'currency':currency,
+                         'account_history_version':1,'history':history,'source':'Synthetic session quotes'}
+                db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)',(symbol,json.dumps(quote)))

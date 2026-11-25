@@ -31,8 +31,8 @@ class AccountPerformanceTests(unittest.TestCase):
         self.assertEqual(value['today_change_nok'],20)
         self.assertEqual(value['today_change_pct'],10)
         self.assertEqual(value['today_date'],'2025-01-06')
-        self.assertIsNone(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600,
-            [event(4,'2025-01-06','buy',-10,1)])['today_change_nok'])
+        self.assertEqual(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600,
+            [event(4,'2025-01-06','buy',-10,1)])['today_change_nok'],20)
         snapshot['ledger_reconciled']=False
         self.assertIsNone(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600)['today_change_nok'])
         snapshot['quotes']['A.OL']['asof']=stamp('2025-01-05')

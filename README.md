@@ -30,7 +30,8 @@ not guaranteed; offline operation depends on previously cached data.
 
 ## First visit
 
-Start in **Overview → Needs attention** to review items that need action, then check
+**Portfolio** opens after sign-in with current value, session performance and net external
+cash flow. Open **Overview → Needs attention** to review items that need action, then check
 the separate **Buying candidates** list. Open **Advanced tools** in a workspace for its
 specialist workflows. Explore Research immediately, or open
 Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is

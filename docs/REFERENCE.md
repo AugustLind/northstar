@@ -191,7 +191,7 @@ Each row shows shares owned, shares to consider buying/selling, shares remaining
 
 5. **Sourced identity/sector metadata.** A low-rate daily public exact-symbol Yahoo search attempts company names/sectors/industries; a public Stock Analysis company-profile fallback verifies the exact Oslo ticker/exchange and reads sector, industry and ISIN where available. Sources, dates and errors are retained. Each provider backs off when blocked or rate-limited; no login or access-control bypass is used. User sector overrides win; provider classifications expire after 30 days and unknown coverage is never guessed. Known WWI/WWIB and ODF/ODFB issuer mappings combine exposure for company limits across share classes. Other issuer relationships remain explicitly unverified. Public-provider failures leave the manual fallback available.
 
-6. **Daily overview and alerts.** The default hosted landing page shows three priority reviews, source-linked issuer notices/earnings dates, share-count changes, data problems and reconciliation issues. Alerts are deduplicated, can be marked read and retain up to 200 entries / 30 days. Optional desktop notifications require a user gesture and browser permission, are limited to three new reviews per refresh, and require an open signed-in dashboard tab. They are disabled by default. Optional server-side email sends confirmed share-count plan changes, recent issuer and annual financial reviews, and significant historical or long-term holding risks through your configured SMTP provider, without an open browser. See the setup below. SMS/Telegram delivery is not implemented.
+6. **Daily overview and alerts.** The Overview workspace shows three priority reviews, source-linked issuer notices/earnings dates, share-count changes, data problems and reconciliation issues. Alerts are deduplicated, can be marked read and retain up to 200 entries / 30 days. Optional desktop notifications require a user gesture and browser permission, are limited to three new reviews per refresh, and require an open signed-in dashboard tab. They are disabled by default. Optional server-side email sends confirmed share-count plan changes, recent issuer and annual financial reviews, and significant historical or long-term holding risks through your configured SMTP provider, without an open browser. See the setup below. SMS/Telegram delivery is not implemented.
 
 Private ledger, classifications, previews and alerts live in Oracle SQLite and survive deployment; no broker files, account credentials or filenames are published. All new APIs use the existing access-key/origin protection.
 
@@ -240,15 +240,24 @@ allocation and transaction reconciliation.
 Legacy hashes such as `#fit`, `#activity` and `#announcements` still open the
 appropriate workspace and expand their section.
 
-Overview leads with a NOK valuation of recorded cash and held assets using fresh
-provider quotes, with the reporting date and quote timestamp shown. It is a quote
-valuation, not a live broker balance. A stale or incomplete holding withholds the
-total. Same-session movement shows held-asset price change and the percentage of the
-prior account value; it is withheld when a same-day ledger event has unknown intraday
-timing. Deposits and withdrawals never count as investment return. Ledger-derived
-investment gain/loss is shown only when reconciled account history has complete
-comparable valuations, and its dates end at the last completed priced day. Open
-Portfolio for the detailed curve, coverage and reconciliation workflow.
+Portfolio opens by default and shows recorded cash and held assets at provider quotes
+in NOK, with the quote timestamp in Europe/Oslo. The session chart compares the prior
+portfolio close with the latest session value less net external cash flows. For
+example, NOK 100,000 at the prior close, NOK 10,000 deposited, and NOK 111,000 at the
+latest quotes produce +NOK 1,000 of investment performance (+1.0%). The session
+percentage assumes external cash flows occur at the end of the measurement period.
+Dividends, interest, fees and trades affect investment P&L through their recorded net
+cash and ending holdings. The chart compares two valuation points.
+
+The session uses regular Oslo and US equity hours and scheduled holiday rules.
+Before opening or during a scheduled closure, the latest completed session is
+dated explicitly. Each holding uses its own market session and previous close,
+with dated USD/NOK conversion where applicable and a constant share count. In a
+mixed portfolio, a market that is closed contributes its previous closing mark.
+A missing expected quote or prior close withholds the account move. Extraordinary
+market closures and halts can appear as missing coverage. Reconciled holdings and
+cash are required for account performance. The detailed historical workflow
+remains available under Portfolio → Advanced tools.
 
 Research retains the existing five-component ranking and entry/exit policy.
 Additional diagnostics do **not** alter rankings, share quantities or email rules.

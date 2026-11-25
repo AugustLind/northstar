@@ -89,6 +89,9 @@ h1 {
   gap: 18px;
   margin: 35px 0;
 }
+.overview-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .overview-account-status,
 .overview-account-actions {
   grid-column: 1 / -1;
@@ -1193,4 +1196,23 @@ summary:focus-visible {
 }
 #researchArchive {
   margin-top: 24px;
+}
+
+.today-chart-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 1rem;
+  margin-block: 0.8rem;
+}
+.today-chart-track {
+  position: relative;
+  grid-column: 1 / -1;
+  height: 0.65rem;
+  background: linear-gradient(to right, transparent 49.8%, currentColor 49.8% 50.2%, transparent 50.2%);
+}
+.today-chart-track span {
+  position: absolute;
+  height: 100%;
+  background: currentColor;
+  border-radius: 0.2rem;
 }

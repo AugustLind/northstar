@@ -34,13 +34,13 @@ class NavigationTests(unittest.TestCase):
         rendered=(Path(__file__).resolve().parents[1]/'static/index.html').read_text()
         self.assertIn('Single-stock previews passing technical and portfolio checks',rendered)
         self.assertIn('Passing this check does not guarantee an allocation in the ranked shared-budget plan below.',rendered)
-        self.assertLess(rendered.index('id="overviewMetrics"'),rendered.index('id="needsAttentionTitle"'))
+        self.assertLess(rendered.index('id="overviewMetrics"'),rendered.index('id="todayChartTitle"'))
         self.assertLess(rendered.index('id="needsAttentionTitle"'),rendered.index('id="buyCandidatesTitle"'))
         self.assertIn('portfolioAdvanced',layout.nodes['accountPerformance']['ancestors'])
         self.assertIn('researchAdvanced',layout.nodes['chartPlot']['ancestors'])
         self.assertIn('strategyAdvanced',layout.nodes['robustnessPanel']['ancestors'])
         self.assertIn('overviewAdvanced',layout.nodes['systemHealth']['ancestors'])
-        self.assertIn('daily',layout.nodes['overviewMetrics']['ancestors'])
+        self.assertIn('portfolio',layout.nodes['overviewMetrics']['ancestors'])
         tabs={id for id,node in layout.nodes.items() if 'tab' in node['attrs'].get('class','').split()}
         self.assertEqual(tabs,set(layout.buttons))
         for id in ['systemHealth','portfolioRisk','stockDecision','financialTrendCharts','robustnessPanel','exportChartCSV','exportChartSVG','accountPerformance','researchArchive']:
@@ -48,8 +48,8 @@ class NavigationTests(unittest.TestCase):
         for child,parent in [('announcements','daily'),('briefing','daily'),('method','daily'),('fit','portfolio'),('activity','portfolio')]:
             self.assertIn(parent,layout.nodes[child]['ancestors'])
             self.assertIn(child+'Group',layout.nodes[child]['ancestors'])
-        self.assertNotIn('hidden',layout.nodes['daily']['attrs'])
-        for id in tabs-{'daily'}:self.assertIn('hidden',layout.nodes[id]['attrs'])
+        self.assertNotIn('hidden',layout.nodes['portfolio']['attrs'])
+        for id in tabs-{'portfolio'}:self.assertIn('hidden',layout.nodes[id]['attrs'])
 
 
     def test_generated_html_and_manifest_match_sources(self):

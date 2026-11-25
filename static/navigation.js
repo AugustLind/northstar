@@ -105,12 +105,12 @@ function workspaceFromLocation() {
     ? hashTarget
     : location.pathname === '/recommendations'
     ? 'recommendations'
-    : 'daily';
+    : 'portfolio';
 }
 function openWorkspace(target, updateHistory = true) {
   const destination = workspaceElement(target);
   const section = destination && destination.closest ? destination.closest('.tab') : null;
-  const page = workspaceRoutes[target] || (section && section.id) || 'daily';
+  const page = workspaceRoutes[target] || (section && section.id) || 'portfolio';
   if (!destination) target = page;
   $('#workspaceTitle').textContent = workspaceTitles[page];
   for (const section of document.querySelectorAll('.tab')) section.hidden = section.id !== page;

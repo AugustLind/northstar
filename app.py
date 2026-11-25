@@ -86,7 +86,10 @@ def connect():
 
 def read_meta(key, default=None):
     with connect() as db:
-        row = db.execute('SELECT payload FROM metadata WHERE key=?', (key,)).fetchone()
+        return meta_from_db(db, key, default)
+
+def meta_from_db(db, key, default=None):
+    row = db.execute('SELECT payload FROM metadata WHERE key=?', (key,)).fetchone()
     return json.loads(row['payload']) if row else default
 
 def write_meta(key, value):
@@ -326,20 +329,24 @@ def announcement_view(symbol=None, scope='focus'):
 
 def state(include_fundamentals=False):
     with connect() as db:
-        result = {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
-                'quotes': {r['symbol']: json.loads(r['payload']) for r in db.execute('SELECT * FROM quotes')}}
-        if include_fundamentals:
-            result['fundamentals'] = {r['key'].split(':', 1)[1]: json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'fundamentals:%'")}
-            result['announcements']=read_meta('announcements_feed',{})
-        result['companies']={r['key'].split(':',1)[1]:json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'company:%'")}
-        result['manual_portfolio_preferences']=portfolio_fit.preferences(read_meta('portfolio_preferences',{}))
-        result['portfolio_preferences']=company_data.effective(result['manual_portfolio_preferences'],result['companies'])
-        result['signal_state']=read_meta('signal_state',{})
-        result['last_trades']=read_meta('last_trades',{})
-        baseline=read_meta('ledger_state')
-        result['ledger_reconciled']=(False if read_meta('broker_cash_check',{}).get('mismatch_active') else (baseline['fingerprint']==transactions.fingerprint(result['positions'],result['manual_portfolio_preferences']['cash_nok'])) if baseline else None)
-        result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
-        return result
+        db.execute('BEGIN')
+        return read_state(db, include_fundamentals)[0]
+
+def read_state(db, include_fundamentals=False):
+    result = {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
+            'quotes': {r['symbol']: json.loads(r['payload']) for r in db.execute('SELECT * FROM quotes')}}
+    if include_fundamentals:
+        result['fundamentals'] = {r['key'].split(':', 1)[1]: json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'fundamentals:%'")}
+        result['announcements']=meta_from_db(db, 'announcements_feed',{})
+    result['companies']={r['key'].split(':',1)[1]:json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'company:%'")}
+    result['manual_portfolio_preferences']=portfolio_fit.preferences(meta_from_db(db, 'portfolio_preferences',{}))
+    result['portfolio_preferences']=company_data.effective(result['manual_portfolio_preferences'],result['companies'])
+    result['signal_state']=meta_from_db(db, 'signal_state',{})
+    result['last_trades']=meta_from_db(db, 'last_trades',{})
+    baseline=meta_from_db(db, 'ledger_state')
+    result['ledger_reconciled']=(False if meta_from_db(db, 'broker_cash_check',{}).get('mismatch_active') else (baseline['fingerprint']==transactions.fingerprint(result['positions'],result['manual_portfolio_preferences']['cash_nok'])) if baseline else None)
+    result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
+    return result, baseline
 
 def positions_fingerprint(positions):
     return hashlib.sha256(json.dumps(sorted(positions,key=lambda p:p['symbol']),sort_keys=True,allow_nan=False).encode()).hexdigest()
@@ -704,11 +711,12 @@ def archive_run(report,snapshot,config):
 
 
 def account_view(allow_prior_close=False):
-    snapshot=state()
     with connect() as db:
         transactions.schema(db)
+        db.execute('BEGIN')
+        snapshot, baseline = read_state(db)
         events=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM ledger_events ORDER BY date,uid')]
-    return account_performance.view(snapshot,read_meta('ledger_state'),events,allow_prior_close=allow_prior_close)
+    return account_performance.view(snapshot,baseline,events,allow_prior_close=allow_prior_close)
 
 
 class Handler(BaseHTTPRequestHandler):
