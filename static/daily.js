@@ -43,7 +43,7 @@ async function loadOverviewAccount() {
     overviewAccountLoaded = true;
   } catch (error) {
     if (token === overviewAccountRequest) {
-      renderToday({ today: { coverage: [error.message] } });
+      showTodayRefreshFailure(error);
       $('#overviewValue').textContent = 'Unavailable';
       $('#overviewMove').textContent = 'Unavailable';
       $('#overviewPnl').textContent = 'Unavailable';
@@ -360,7 +360,7 @@ async function loadDaily() {
   }
 }
 $('#refreshDaily').onclick = loadDaily;
-async function refreshAccountMarketData(button, status) {
+async function refreshAccountMarketData(button, status, showFailure) {
   const label = button.textContent;
   button.disabled = true;
   button.textContent = 'Refreshing market data…';
@@ -370,7 +370,8 @@ async function refreshAccountMarketData(button, status) {
     if (result.errors && result.errors.length)
       status.textContent += ' ' + result.errors.join(' ');
   } catch (error) {
-    status.textContent = error.message;
+    if (showFailure) showFailure(error);
+    else status.textContent = error.message;
   } finally {
     button.disabled = false;
     button.textContent = label;
@@ -379,7 +380,7 @@ async function refreshAccountMarketData(button, status) {
 $('#refreshOverviewAccount').onclick = (event) =>
   refreshAccountMarketData(event.currentTarget, $('#overviewAccountStatus'));
 $('#refreshToday').onclick = (event) =>
-  refreshAccountMarketData(event.currentTarget, $('#todayStatus'));
+  refreshAccountMarketData(event.currentTarget, $('#todayStatus'), showTodayRefreshFailure);
 $('#openAccountPerformance').onclick = () => {
   openWorkspace('accountPerformance');
 };

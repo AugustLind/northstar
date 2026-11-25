@@ -194,7 +194,7 @@ def session_performance(snapshot, baseline, events, now):
     def quote_day(timestamp):
         return dt.datetime.fromtimestamp(timestamp, OSLO).date()
 
-    def price(symbol, currency, report_date, latest):
+    def price(symbol, currency, report_date, latest, required):
         quote = quotes.get(symbol, {})
         if quote.get('currency') == currency:
             if latest:
@@ -205,12 +205,13 @@ def session_performance(snapshot, baseline, events, now):
                     value = bar.get('account_close')
                     if quote_day(bar['time']) == report_date and finite(value) and value > 0:
                         return value
-        coverage.append(f'{symbol}: missing {"session quote" if latest else "close"} on {report_date}.')
+        if required:
+            coverage.append(f'{symbol}: missing {"session quote" if latest else "close"} on {report_date}.')
         return None
 
-    def nok_price(symbol, currency, report_date, latest):
-        asset = price(symbol, currency, report_date, latest)
-        fx = price('NOK=X', 'NOK', report_date, latest) if currency == 'USD' else 1
+    def nok_price(symbol, currency, report_date, latest, required=True):
+        asset = price(symbol, currency, report_date, latest, required)
+        fx = price('NOK=X', 'NOK', report_date, latest, required) if currency == 'USD' else 1
         return asset * fx if asset is not None and fx is not None else None
 
     try:
@@ -258,7 +259,7 @@ def session_performance(snapshot, baseline, events, now):
         split_ok = math.isclose(split_ratio, math.prod(provider_splits))
         if not split_ok:
             coverage.append(f'{symbol}: provider and ledger splits need reconciliation.')
-        before = nok_price(symbol, row['currency'], prior, False)
+        before = nok_price(symbol, row['currency'], prior, False, required=first > 0)
         after = nok_price(symbol, row['currency'], date, live) if last else None
         valid &= split_ok and (not first or before is not None) and (not last or after is not None)
         begin += first * (before or 0)

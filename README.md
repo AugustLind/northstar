@@ -87,6 +87,11 @@ keep backups and portfolio exports outside tracked source.
 The local application binds to `127.0.0.1:8000`. Remote hosting and authentication
 require separate setup. The GitHub Pages dashboard is a static UI connected to
 an authenticated API; Pages alone cannot run Python, research workers, or Ollama.
+Select **Remember this browser** on a trusted browser to stay signed in after restarting it.
+The browser stores a revocable session token. The access key stays out of persistent storage.
+Remembered sessions have no scheduled expiry. Clearing browser storage or choosing **Sign out**
+requires signing in again.
+
 Do not put access keys or portfolio data in `static/config.js`.
 
 ## Optional setup

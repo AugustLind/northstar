@@ -96,6 +96,14 @@ function renderAccountPerformance(value) {
 $('#refreshAccountPerformance').onclick = loadAccountPerformance;
 $('#allowPriorClose').onchange = loadAccountPerformance;
 
+let todaySessionStatus = '';
+function showTodayRefreshFailure(error) {
+  const failure = 'Refresh failed. ' + error.message;
+  $('#todayStatus').textContent = todaySessionStatus
+    ? todaySessionStatus + ' Showing last loaded figures. ' + failure
+    : failure;
+}
+
 function renderToday(value) {
   const today = value.today || {};
   const signedMoney = (amount) =>
@@ -105,9 +113,10 @@ function renderToday(value) {
   const dateLabel = today.date
     ? (today.live ? 'Session ' : 'Last completed session ') + today.date + ' (Europe/Oslo)'
     : '';
-  $('#todayStatus').textContent = [dateLabel, ...(today.coverage || [])]
+  todaySessionStatus = [dateLabel, ...(today.coverage || [])]
     .filter(Boolean)
     .join(' · ');
+  $('#todayStatus').textContent = todaySessionStatus;
   $('#todayMetrics').innerHTML = [
     toolTile(
       'Current account value',

@@ -53,6 +53,29 @@ class HostingTests(unittest.TestCase):
         self.assertEqual(allowed['status'],200)
         self.assertEqual(allowed['body']['positions'],[])
 
+    def test_remembered_sessions_require_access_key_and_can_be_revoked(self):
+        headers = {'Origin': 'https://owner.github.io', 'Content-Type': 'application/json',
+                   'Authorization': 'Bearer test-key'}
+
+        def remember():
+            response = self.request('POST', '/api/session/remember', headers)
+            self.assertEqual(response['status'], 200)
+            return {**headers, 'Authorization': 'Bearer ' + response['body']['token']}
+
+        self.assertEqual(self.request('POST', '/api/session/remember',
+                                     {**headers, 'Authorization': 'Bearer wrong'})['status'], 401)
+        browser, other_browser = remember(), remember()
+        self.assertEqual(self.request('GET', '/api/state', browser)['status'], 200)
+        self.assertEqual(self.request('POST', '/api/session/remember', browser)['status'], 401)
+        self.assertEqual(self.request('POST', '/api/session/sign-out', browser)['status'], 200)
+        self.assertEqual(self.request('GET', '/api/state', browser)['status'], 401)
+        self.assertEqual(self.request('GET', '/api/state', other_browser)['status'], 200)
+        with patch.dict(os.environ, {'NORTHSTAR_ACCESS_KEY_HASH': hashlib.sha256(b'rotated').hexdigest()}):
+            self.assertEqual(self.request('GET', '/api/state', other_browser)['status'], 401)
+        app.revoke_remembered_sessions()
+        self.assertEqual(self.request('GET', '/api/state', other_browser)['status'], 401)
+        self.assertEqual(self.request('GET', '/api/state', headers)['status'], 200)
+
     def test_preflight_is_allowed_only_for_configured_origins(self):
         allowed=self.request('OPTIONS','/api/state',{'Origin':'https://owner.github.io'})
         self.assertEqual(allowed['status'],204)

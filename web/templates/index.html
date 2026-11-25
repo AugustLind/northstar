@@ -22,7 +22,7 @@
         <p id="connectionHelp">
           Use the address and access key supplied by your server owner. The address is usually
           prefilled. When running locally, leave it blank. Your access key is kept only for this tab
-          session.
+          session. Remember this browser to stay signed in after closing your browser.
         </p>
         <form id="connectionForm">
           <label
@@ -37,6 +37,8 @@
               type="password"
               autocomplete="off"
               placeholder="Paste your website access key" /></label
+          ><label class="check"
+            ><input id="rememberBrowser" type="checkbox" /> Remember this browser</label
           ><button>Connect</button> <button type="button" id="disconnect">Sign out</button>
           <p id="connectionMessage" role="status"></p>
         </form>

@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import sys
+from tempfile import TemporaryDirectory
 import time
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
@@ -14,6 +15,31 @@ def press_enter(browser):
     browser.call('Input.dispatchKeyEvent',{'type':'rawKeyDown','key':'Enter','code':'Enter','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
     browser.call('Input.dispatchKeyEvent',{'type':'char','key':'Enter','code':'Enter','text':'\r','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
     browser.call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Enter','code':'Enter','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
+
+
+def check_remembered_browser(fixture):
+    def visit(browser):
+        browser.call('Page.navigate', {'url': fixture.origin})
+        browser.wait("document.readyState==='complete' && Boolean(document.querySelector('#connectionPanel'))", 'dashboard loaded')
+
+    with TemporaryDirectory(prefix='northstar-restart-') as profile:
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("!document.querySelector('#connectionPanel').hidden", 'anonymous sign-in')
+            browser.evaluate("document.querySelector('#rememberBrowser').click()")
+            browser.fill_key(fixture.key)
+            browser.wait("document.querySelector('#accountStatus').textContent==='Connected'", 'remembered sign-in')
+            if browser.evaluate("Boolean(sessionStorage.getItem('northstar-key')) || !localStorage.getItem('northstar-remembered-session')"):
+                raise RuntimeError('Remembered sign-in did not replace the access key with a session token.')
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("document.querySelector('#accountStatus').textContent==='Connected' && document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#holdings').textContent.includes('SYNTH.OL')", 'remembered sign-in after complete Chrome restart')
+            browser.evaluate("document.querySelector('#connectionButton').click();document.querySelector('#disconnect').click()")
+            browser.wait("!document.querySelector('#connectionPanel').hidden && !localStorage.getItem('northstar-remembered-session') && !document.querySelector('#holdings').textContent.includes('SYNTH.OL')", 'remembered sign-out')
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("!document.querySelector('#connectionPanel').hidden && document.querySelector('#accountStatus').textContent==='Not connected'", 'sign-in required after restarting following sign-out')
+    print('Remembered sign-in and sign-out passed across complete Chrome restarts.')
 
 
 def prove_portfolio_and_candidates():
@@ -126,6 +152,8 @@ def prove_portfolio_and_candidates():
 
 
 def run():
+    with Fixture() as fixture:
+        check_remembered_browser(fixture)
     prove_portfolio_and_candidates()
     with Fixture() as fixture,Browser() as browser:
         for width,height in ((1440,1000),(390,900)):
@@ -165,7 +193,7 @@ def run():
                 browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
                 browser.wait("!document.querySelector('#portfolio').hidden",'Portfolio workspace for holding edit')
                 browser.evaluate("document.querySelector('#holdings button').click();const field=document.querySelector('#positionForm').elements.review;field.value='Unsaved reload draft';field.dispatchEvent(new Event('input',{bubbles:true}))")
-                browser.call('Page.reload',{'ignoreCache':True})
+                browser.reload()
                 browser.wait("document.querySelector('#editor').open && document.querySelector('#positionForm').elements.review.value==='Unsaved reload draft'",'holding edit draft restoration')
                 if not browser.evaluate("document.querySelector('#positionForm').elements.symbol.readOnly"):
                     raise RuntimeError('Reloaded holding edit draft lost its protected ticker field.')
@@ -291,7 +319,7 @@ def run():
             if not browser.evaluate("document.querySelector('#portfolioAdvanced').open && document.activeElement.id==='fit'"):
                 raise RuntimeError('Direct tool link did not reveal its parent disclosure and identify the destination: '+str(browser.evaluate("({outer:document.querySelector('#portfolioAdvanced').open,inner:document.querySelector('#fitGroup').open,focus:document.activeElement.id,hash:location.hash})")))
             browser.evaluate("const budget=document.querySelector('#fitPreferences').elements.purchase_nok;budget.value='5791';budget.dispatchEvent(new Event('input',{bubbles:true}))")
-            browser.call('Page.reload',{'ignoreCache':True})
+            browser.reload()
             browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#fitGroup').open && document.querySelector('#fitStatus').textContent.includes('Current portfolio check:') && document.querySelector('#researchStatus').textContent.includes('Last report:')",'deep-link refresh and unsaved edit restoration')
             if not browser.evaluate("document.querySelector('#fitPreferences').elements.purchase_nok.value==='5791' && document.querySelector('#adviceFilter').value==='all' && document.querySelector('#portfolioAdvanced').open"):
                 raise RuntimeError('Refresh did not preserve the tool link, unsaved allocation edit, or Research selection: '+str(browser.evaluate("({value:document.querySelector('#fitPreferences').elements.purchase_nok.value,filter:document.querySelector('#adviceFilter').value,advanced:document.querySelector('#portfolioAdvanced').open,saved:sessionStorage.getItem('northstar-workspace-ui-v1')})")))

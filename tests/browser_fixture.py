@@ -43,6 +43,12 @@ class Fixture:
         self.requests=[];fixture=self
         class Handler(app.Handler):
             def log_message(self,*args):pass
+            def handle(self):
+                try:
+                    super().handle()
+                except (BrokenPipeError, ConnectionResetError):
+                    # Chrome can close while parallel startup requests are in flight.
+                    pass
             def do_GET(self):
                 if self.path.startswith('/api/'):fixture.requests.append(('GET',self.path,bool(self.headers.get('Authorization'))))
                 try:
