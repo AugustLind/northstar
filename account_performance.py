@@ -129,6 +129,7 @@ def apply_event(holdings,e,reverse=False):
 
 
 OSLO = ZoneInfo('Europe/Oslo')
+NEW_YORK = ZoneInfo('America/New_York')
 
 
 def oslo_session(date):
@@ -164,10 +165,16 @@ def portfolio_performance(snapshot, baseline, events, now):
     date = local_now.date()
     opening = dt.datetime.combine(date, dt.time(9), OSLO).timestamp()
 
-    def session_quote(quote):
+    def session_quote(quote, symbol):
         stamp = quote.get('asof')
         value = quote.get('price')
-        return finite(stamp) and opening <= stamp <= now and finite(value) and value > 0
+        if symbol == 'NOK=X':
+            first = dt.datetime.combine(date, dt.time.min, OSLO).timestamp()
+        elif quote.get('currency') == 'USD':
+            first = dt.datetime.combine(date, dt.time(9, 30), NEW_YORK).timestamp()
+        else:
+            first = opening
+        return finite(stamp) and first <= stamp <= now and finite(value) and value > 0
 
     quotes = dict(snapshot['quotes'])
     held_symbols = []
@@ -179,7 +186,7 @@ def portfolio_performance(snapshot, baseline, events, now):
 
     # Allow the initial quote to arrive during the opening publication window.
     # Once a held security or the benchmark quotes, identify any missing inputs.
-    has_session_quote = any(session_quote(quotes.get(symbol, {}))
+    has_session_quote = any(session_quote(quotes.get(symbol, {}), symbol)
                             for symbol in [*held_symbols, 'OSEBX.OL'])
     live = (oslo_session(date) and now >= opening and
             (not held_symbols or has_session_quote or now >= opening + 15 * 60))
@@ -195,13 +202,22 @@ def portfolio_performance(snapshot, baseline, events, now):
         source_date = report_date if oslo_session(report_date) else previous_oslo_session(report_date)
         if quote.get('currency') == currency:
             if latest:
-                if session_quote(quote):
+                if session_quote(quote, symbol):
                     return quote['price']
             elif quote.get('account_history_version') == 1:
-                for bar in reversed(quote.get('history', [])):
-                    value = bar.get('account_close')
-                    if quote_day(bar['time']) == source_date and finite(value) and value > 0:
-                        return value
+                if symbol == 'NOK=X':
+                    close = dt.datetime.combine(source_date + dt.timedelta(days=1), dt.time.min, OSLO).timestamp()
+                else:
+                    close = quote.get('regular_session_end')
+                    if not finite(close) or quote_day(close) != source_date:
+                        zone, closing = (NEW_YORK, dt.time(16)) if currency == 'USD' else (OSLO, dt.time(16, 30))
+                        close = dt.datetime.combine(source_date, closing, zone).timestamp()
+                observed = quote.get('fetched', quote.get('asof'))
+                if finite(observed) and close <= observed <= now:
+                    for bar in reversed(quote.get('history', [])):
+                        stamp, value = bar.get('time'), bar.get('account_close')
+                        if finite(stamp) and stamp <= observed and quote_day(stamp) == source_date and finite(value) and value > 0:
+                            return value
         if coverage is not None:
             coverage.append(f'{symbol}: missing {"session quote" if latest else "close"} on {source_date}.')
         return None

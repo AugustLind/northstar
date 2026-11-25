@@ -130,8 +130,8 @@ function holdingMovements(holdings) {
 }
 
 const portfolioPeriodStatus = { today: '', week: '' };
-function showPortfolioRefreshFailure(error) {
-  const failure = 'Refresh failed. ' + error.message;
+function showPortfolioRefreshFailure(error, refreshErrors = []) {
+  const failure = 'Refresh failed. ' + [error.message, ...refreshErrors].join(' ');
   for (const [period, status] of Object.entries(portfolioPeriodStatus)) {
     $('#' + period + 'Status').textContent = status
       ? status + ' Showing last loaded figures. ' + failure
@@ -139,12 +139,14 @@ function showPortfolioRefreshFailure(error) {
   }
 }
 
-function renderToday(value) {
+function renderToday(value, refreshErrors = []) {
   const today = value.today || {};
   const dateLabel = today.date
     ? (today.live ? 'Session ' : 'Last completed session ') + today.date + ' (Europe/Oslo)'
     : '';
-  portfolioPeriodStatus.today = [dateLabel, ...(today.coverage || [])].filter(Boolean).join(' · ');
+  portfolioPeriodStatus.today = [dateLabel, ...(today.coverage || []), ...refreshErrors]
+    .filter(Boolean)
+    .join(' · ');
   $('#todayStatus').textContent = portfolioPeriodStatus.today;
   $('#todayMetrics').innerHTML =
     toolTile(
@@ -156,7 +158,7 @@ function renderToday(value) {
   $('#todayHoldings').innerHTML = holdingMovements(today.holdings);
 }
 
-function renderLast7Days(week = {}) {
+function renderLast7Days(week = {}, refreshErrors = []) {
   const windowLabel = week.window_start
     ? week.window_start + ' to ' + week.window_end + ' (Europe/Oslo)'
     : '';
@@ -166,7 +168,13 @@ function renderLast7Days(week = {}) {
     week.curve?.length && week.closed_dates.length
       ? 'Prior closes carried on ' + week.closed_dates.join(', ')
       : '';
-  portfolioPeriodStatus.week = [windowLabel, latest, closures, ...(week.coverage || [])]
+  portfolioPeriodStatus.week = [
+    windowLabel,
+    latest,
+    closures,
+    ...(week.coverage || []),
+    ...refreshErrors,
+  ]
     .filter(Boolean)
     .join(' · ');
   $('#weekStatus').textContent = portfolioPeriodStatus.week;

@@ -3,15 +3,15 @@ let dailyView = null,
   dailyRequest = 0,
   overviewAccountRequest = 0,
   overviewAccountLoaded = false;
-async function loadOverviewAccount() {
+async function loadOverviewAccount(refreshErrors = []) {
   const token = ++overviewAccountRequest;
   if (!overviewAccountLoaded)
     $('#overviewAccountStatus').textContent = 'Loading current valuation and ledger performance…';
   try {
     const value = await api('account-performance?allow_prior_close=0');
     if (token !== overviewAccountRequest) return;
-    renderToday(value);
-    renderLast7Days(value.last_7_days);
+    renderToday(value, refreshErrors);
+    renderLast7Days(value.last_7_days, refreshErrors);
     $('#overviewValue').textContent =
       value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
     $('#overviewValueMeta').textContent =
@@ -37,18 +37,18 @@ async function loadOverviewAccount() {
     $('#overviewPnlMeta').textContent = verified
       ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
       : 'Requires reconciled ledger, comparable valuations and verified opening history.';
-    const notices = (value.current_coverage || []).concat(value.coverage || []);
+    const notices = (value.current_coverage || []).concat(value.coverage || [], refreshErrors);
     $('#overviewAccountStatus').textContent = notices.length
       ? notices.join(' ')
       : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';
     overviewAccountLoaded = true;
   } catch (error) {
     if (token === overviewAccountRequest) {
-      showPortfolioRefreshFailure(error);
+      showPortfolioRefreshFailure(error, refreshErrors);
       $('#overviewValue').textContent = 'Unavailable';
       $('#overviewMove').textContent = 'Unavailable';
       $('#overviewPnl').textContent = 'Unavailable';
-      $('#overviewAccountStatus').textContent = error.message;
+      $('#overviewAccountStatus').textContent = [error.message, ...refreshErrors].join(' ');
     }
   }
 }
@@ -368,9 +368,7 @@ async function refreshAccountMarketData(button, status, showFailure) {
   button.textContent = 'Refreshing market data…';
   try {
     const result = await api('refresh', {});
-    await loadOverviewAccount();
-    if (result.errors && result.errors.length)
-      status.textContent += ' ' + result.errors.join(' ');
+    await loadOverviewAccount(result.errors || []);
   } catch (error) {
     if (showFailure) showFailure(error);
     else status.textContent = error.message;

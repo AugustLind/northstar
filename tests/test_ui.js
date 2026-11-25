@@ -280,6 +280,15 @@ setImmediate(async()=>{
  await vm.runInContext('loadOverviewAccount()',context);
  assert(todayStatus.textContent.includes('2026-11-23'));
  assert(!todayStatus.textContent.includes('Refresh failed'));
+ const holdingNotice='BOUV.OL: missing session quote.';
+ const providerError='Watchlist quote refresh failed.';
+ context.fetch=async (url)=>({ok:true,json:async()=>url.endsWith('/api/refresh')
+   ? {errors:[providerError]}
+   : {...accountPerformanceFixture,today:{...todayFixture,coverage:[holdingNotice],change_nok:null}}});
+ const refreshToday=nodes['#refreshToday'];
+ await refreshToday.onclick({currentTarget:refreshToday});
+ assert(todayStatus.textContent.includes(holdingNotice));
+ assert(todayStatus.textContent.includes(providerError));
  context.fetch=performanceFetch;
 
  const rememberedKey='northstar-remembered-session';
