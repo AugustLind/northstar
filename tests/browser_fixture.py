@@ -110,7 +110,7 @@ def session_timestamp(value):
     return datetime.fromisoformat(value).replace(tzinfo=app.account_performance.OSLO).timestamp()
 
 
-def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='11:00'):
+def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='16:00'):
     """Start at NOK 100,000, with both NOK and USD exposure."""
     opening = [
         {'symbol': 'SYNTH.OL', 'currency': 'NOK', 'shares': 3, 'cost': 1000},
@@ -141,8 +141,10 @@ def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='11
             (row['uid'], row['date'], json.dumps(row)) for row in events
         ])
         for symbol, currency, latest, close in rows:
+            observed = ('2025-01-04T00:00' if quote_date == '2025-01-03' else quote_date+'T'+quote_time)
             quote = {'price': latest if quote_date == '2025-01-06' else close,
                      'currency': currency, 'asof': session_timestamp(quote_date+'T'+quote_time),
+                     'fetched': session_timestamp(observed),
                      'account_history_version': 1, 'history': [
                          {'time': session_timestamp(date+'T16:30'), 'account_close': close, 'close': close}
                          for date in ('2025-01-02', '2025-01-03')

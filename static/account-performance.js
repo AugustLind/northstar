@@ -97,14 +97,14 @@ $('#refreshAccountPerformance').onclick = loadAccountPerformance;
 $('#allowPriorClose').onchange = loadAccountPerformance;
 
 let todaySessionStatus = '';
-function showTodayRefreshFailure(error) {
-  const failure = 'Refresh failed. ' + error.message;
+function showTodayRefreshFailure(error, refreshErrors = []) {
+  const failure = 'Refresh failed. ' + [error.message, ...refreshErrors].join(' ');
   $('#todayStatus').textContent = todaySessionStatus
     ? todaySessionStatus + ' Showing last loaded figures. ' + failure
     : failure;
 }
 
-function renderToday(value) {
+function renderToday(value, refreshErrors = []) {
   const today = value.today || {};
   const signedMoney = (amount) =>
     amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + money(amount);
@@ -113,7 +113,7 @@ function renderToday(value) {
   const dateLabel = today.date
     ? (today.live ? 'Session ' : 'Last completed session ') + today.date + ' (Europe/Oslo)'
     : '';
-  todaySessionStatus = [dateLabel, ...(today.coverage || [])]
+  todaySessionStatus = [dateLabel, ...(today.coverage || []), ...refreshErrors]
     .filter(Boolean)
     .join(' · ');
   $('#todayStatus').textContent = todaySessionStatus;

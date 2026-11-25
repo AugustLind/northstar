@@ -149,10 +149,10 @@ def prove_portfolio_and_candidates():
                      'rank-one candidate opens Research by keyboard')
         app.write_meta('report', original_report)
 
-        seed_today(1300, [('deposit', 10000, 0)], quote_time='09:06')
+        seed_today(1300, [('deposit', 10000, 0)])
         provider_quotes = app.state()['quotes']
         view = app.account_performance.view
-        now = session_timestamp('2025-01-06T09:07')
+        now = session_timestamp('2025-01-06T16:01')
         with patch.object(app.account_performance, 'view', side_effect=lambda *args, **kwargs: view(*args, **kwargs, now=now)):
             browser.evaluate("document.querySelector('[data-tab=portfolio]').click()")
 
@@ -179,7 +179,7 @@ def prove_portfolio_and_candidates():
                 Array.from(document.querySelectorAll('#todayHoldings tbody tr')).find(row => row.textContent.includes('USDTEST')).textContent.includes('+10.0%')
                 """, 'dated close-to-quote basis, end-of-day assumption and USD FX move')
 
-            now = session_timestamp('2025-01-06T15:00')
+            now = session_timestamp('2025-01-06T16:30')
             seed_today(1000, [('buy', -1000, 1), ('withdrawal', -2000, 0), ('dividend', 50, 0), ('fee', -30, 0)])
             browser.evaluate('loadOverviewAccount()')
             wait_today(98120, 120, '+0.1%', -2000)
@@ -195,7 +195,7 @@ def prove_portfolio_and_candidates():
                              'dated completed session on closure, at Oslo date boundary and before the first quote')
                 wait_today(100000, 0, '0.0%', 0)
 
-            now = session_timestamp('2025-01-06T15:00')
+            now = session_timestamp('2025-01-06T16:30')
             browser.evaluate('loadOverviewAccount()')
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('missing session quote on 2025-01-06') &&
                 !document.querySelector('#todayChart svg')""", 'missing open-session quote coverage gap')

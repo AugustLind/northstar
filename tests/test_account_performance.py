@@ -45,6 +45,12 @@ class AccountPerformanceTests(unittest.TestCase):
         self.assertIn('A.OL: missing close on 2025-01-03.', today['coverage'])
 
         prices['history'].extend(quote([('2025-01-03', 11)])['history'])
+        prices['fetched'] = stamp('2025-01-03T12:01')
+        today = ap.view(snapshot, baseline, [], now)['today']
+        self.assertIsNone(today['change_nok'])
+        self.assertIn('A.OL: missing close on 2025-01-03.', today['coverage'])
+
+        prices['fetched'] = stamp('2025-01-03T16:00')
         today = ap.view(snapshot, baseline, [], now)['today']
         self.assertEqual(today['change_nok'], 10)
         self.assertEqual(today['coverage'], [])
@@ -54,12 +60,32 @@ class AccountPerformanceTests(unittest.TestCase):
 
     def test_today_full_sale_needs_only_the_previous_close_and_sale_proceeds(self):
         events = [event(1, '2025-01-06', 'sell', cash=110, qty=1)]
-        snapshot, baseline = setup(events, quote([('2025-01-03', 100)]),
+        prices = quote([('2025-01-03', 100)])
+        prices['fetched'] = stamp('2025-01-03T16:00')
+        snapshot, baseline = setup(events, prices,
                                    opening_shares=1, opening_cash=0)
         today = ap.view(snapshot, baseline, events, now=NOW + 14 * 3600)['today']
         self.assertEqual(today['change_nok'], 10)
         self.assertEqual(today['change_pct'], 10)
         self.assertEqual(today['coverage'], [])
+
+    def test_today_rejects_a_same_date_us_equity_quote_before_us_open(self):
+        prices = quote([('2025-01-03', 10)], currency='USD')
+        prices.update(price=12, asof=stamp('2025-01-06T14:25'), fetched=stamp('2025-01-06T14:32'))
+        snapshot, baseline = setup([], prices)
+        snapshot['positions'] = [{'symbol': 'US', 'currency': 'USD', 'shares': 10}]
+        fx = quote([('2025-01-03', 10)])
+        fx.update(price=10, asof=stamp('2025-01-06T07:00'), fetched=stamp('2025-01-06T14:32'))
+        snapshot['quotes'] = {'US': prices, 'NOK=X': fx}
+        now = stamp('2025-01-06T14:32')
+
+        today = ap.view(snapshot, baseline, [], now)['today']
+        self.assertIsNone(today['change_nok'])
+        self.assertIn('US: missing session quote on 2025-01-06.', today['coverage'])
+
+        prices['asof'] = stamp('2025-01-06T14:30')
+        today = ap.view(snapshot, baseline, [], now)['today']
+        self.assertEqual(today['change_nok'], 200)
 
     def test_current_value_and_today_movement_use_current_quotes_and_recorded_cash(self):
         q=quote([('2025-01-03',10)])
