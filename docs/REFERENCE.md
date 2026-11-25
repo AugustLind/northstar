@@ -450,6 +450,15 @@ portfolio and is never substituted when account data is incomplete.
   withdrawals. The percentage applies the day-end cash-flow convention. Net
   dividends and fees are included in the ledger cash movement. Holding price changes
   are per share in NOK, use dated FX, and adjust for matched splits.
+- **Last 7 days** covers seven Oslo calendar dates including today, with a
+  starting valuation at the preceding close. Before the first session quote
+  during the opening publication window, the chart ends on the latest valuation
+  date. On scheduled closures the chart uses prior closing prices and includes
+  ledger activity on its recorded date. Missing required prices on open sessions
+  leave a coverage gap. The chart deducts cumulative net deposits and withdrawals
+  from account value. The percentage links daily returns using the same day-end
+  cash-flow convention as Today, and holding movements use the same per-share NOK
+  basis.
 - The ledger must reconcile to current quantities and manually tracked NOK cash,
   including any broker-cash mismatch check. Unknown transfers, missing trades,
   unsupported cash currencies or a conflicting opening snapshot block account returns.

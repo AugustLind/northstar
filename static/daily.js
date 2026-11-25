@@ -11,6 +11,7 @@ async function loadOverviewAccount(refreshErrors = []) {
     const value = await api('account-performance?allow_prior_close=0');
     if (token !== overviewAccountRequest) return;
     renderToday(value, refreshErrors);
+    renderLast7Days(value.last_7_days, refreshErrors);
     $('#overviewValue').textContent =
       value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
     $('#overviewValueMeta').textContent =
@@ -43,7 +44,7 @@ async function loadOverviewAccount(refreshErrors = []) {
     overviewAccountLoaded = true;
   } catch (error) {
     if (token === overviewAccountRequest) {
-      showTodayRefreshFailure(error, refreshErrors);
+      showPortfolioRefreshFailure(error, refreshErrors);
       $('#overviewValue').textContent = 'Unavailable';
       $('#overviewMove').textContent = 'Unavailable';
       $('#overviewPnl').textContent = 'Unavailable';
@@ -379,7 +380,7 @@ async function refreshAccountMarketData(button, status, showFailure) {
 $('#refreshOverviewAccount').onclick = (event) =>
   refreshAccountMarketData(event.currentTarget, $('#overviewAccountStatus'));
 $('#refreshToday').onclick = (event) =>
-  refreshAccountMarketData(event.currentTarget, $('#todayStatus'), showTodayRefreshFailure);
+  refreshAccountMarketData(event.currentTarget, $('#todayStatus'), showPortfolioRefreshFailure);
 $('#openAccountPerformance').onclick = () => {
   openWorkspace('accountPerformance');
 };

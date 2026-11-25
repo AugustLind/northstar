@@ -110,7 +110,8 @@ def session_timestamp(value):
     return datetime.fromisoformat(value).replace(tzinfo=app.account_performance.OSLO).timestamp()
 
 
-def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='16:00'):
+def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='16:00', *,
+               session_date='2025-01-06', close_dates=('2025-01-02', '2025-01-03')):
     """Start at NOK 100,000, with both NOK and USD exposure."""
     opening = [
         {'symbol': 'SYNTH.OL', 'currency': 'NOK', 'shares': 3, 'cost': 1000},
@@ -118,9 +119,9 @@ def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='16
     ]
     held = {row['symbol']: dict(row) for row in opening}
     events = []
-    for number, (kind, amount, quantity) in enumerate(cash_events, 1):
+    for number, (kind, amount, quantity, *dates) in enumerate(cash_events, 1):
         row = {'uid': f'session-{number}', 'id': number, 'type': kind,
-               'date': '2025-01-06', 'currency': 'NOK', 'net_cash': amount,
+               'date': dates[0] if dates else session_date, 'currency': 'NOK', 'net_cash': amount,
                'symbol': 'SYNTH.OL' if kind == 'buy' else '', 'quantity': quantity}
         events.append(row)
         app.account_performance.apply_event(held, row)
@@ -130,7 +131,7 @@ def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='16
     prefs = app.read_meta('portfolio_preferences')
     app.write_meta('portfolio_preferences', {**prefs, 'cash_nok': cash})
     positions = app.state()['positions']
-    app.write_meta('ledger_state', {'cutoff_date': '2025-01-02', 'opening_cash_nok': 96000,
+    app.write_meta('ledger_state', {'cutoff_date': close_dates[0], 'opening_cash_nok': 96000,
                                     'opening_positions': opening,
                                     'fingerprint': transactions.fingerprint(positions, cash)})
     rows = [('SYNTH.OL', 'NOK', stock_price, 1000), ('USDTEST', 'USD', 100, 100),
@@ -141,12 +142,14 @@ def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='16
             (row['uid'], row['date'], json.dumps(row)) for row in events
         ])
         for symbol, currency, latest, close in rows:
-            observed = ('2025-01-04T00:00' if quote_date == '2025-01-03' else quote_date+'T'+quote_time)
-            quote = {'price': latest if quote_date == '2025-01-06' else close,
-                     'currency': currency, 'asof': session_timestamp(quote_date+'T'+quote_time),
-                     'fetched': session_timestamp(observed),
+            quote_stamp = session_timestamp(quote_date+'T'+quote_time)
+            observed = (session_timestamp(quote_date+'T00:00') + 86400
+                        if quote_date != session_date else quote_stamp)
+            quote = {'price': latest if quote_date == session_date else close,
+                     'currency': currency, 'asof': quote_stamp,
+                     'fetched': observed,
                      'account_history_version': 1, 'history': [
                          {'time': session_timestamp(date+'T16:30'), 'account_close': close, 'close': close}
-                         for date in ('2025-01-02', '2025-01-03')
+                         for date in close_dates
                      ]}
             db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)', (symbol, json.dumps(quote)))
