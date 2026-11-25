@@ -52,6 +52,74 @@ class CompanyTests(unittest.TestCase):
             self.assertIsNone(cd.peer_valuation('A.OL',f,records,{},sectors,NOW)['median_annual_pe_proxy'])
 
 class AdviceTests(unittest.TestCase):
+    def holding_advice(self,snapshot,report,preferences,now=NOW):
+        snapshot.update(portfolio_preferences=preferences,
+                        portfolio_context=pf.context(snapshot,preferences,now))
+        plan=tp.build(snapshot,report,preferences,now)
+        return daily.build(snapshot,report,plan,{},None,now)['holding_assessments'][0]['advice']
+
+    def test_saved_price_change_requires_fresh_confirmation_sessions(self):
+        s=snapshot(10)
+        p=profile(confirm_sessions=2,signal_wait_hours=0)
+        s['positions'][0]['below']=100
+        first={**card('A.OL',action='Review sell threshold'),'review_price':100,'asof':NOW-86400}
+        report={'generated':NOW,'policy_version':tp.policy.VERSION,'cards':[first]}
+        s['signal_state']=ads.observe(report,{},NOW-86400)
+        report['cards']=[{**first,'asof':NOW}]
+        s['signal_state']=ads.observe(report,s['signal_state'],NOW)
+        self.assertEqual(self.holding_advice(s,report,p)['review_price'],100)
+
+        s['positions'][0]['below']=105
+        s['quotes']['A']['price']=103
+        self.assertEqual(self.holding_advice(s,report,p)['label'],'Insufficient data')
+        report['cards']=[{**first,'asof':NOW,'price':103,'review_price':105}]
+        s['signal_state']=ads.observe(report,s['signal_state'],NOW)
+        self.assertEqual(self.holding_advice(s,report,p)['label'],'Insufficient data')
+        later=NOW+86400
+        report['generated']=later
+        report['cards'][0]['asof']=later
+        s['quotes']['A']['asof']=later
+        s['signal_state']=ads.observe(report,s['signal_state'],later)
+        self.assertEqual(self.holding_advice(s,report,p,later)['review_price'],105)
+
+    def test_quote_crossing_saved_price_after_report_withholds_hold(self):
+        s=snapshot(10)
+        s['positions'][0]['below']=95
+        p=profile()
+        report={'generated':NOW,'policy_version':tp.policy.VERSION,
+                'cards':[card('A.OL',action='Hold / monitor')]}
+        self.assertEqual(self.holding_advice(s,report,p)['label'],'Hold')
+
+        s['quotes']['A']['price']=90
+        advice=self.holding_advice(s,report,p)
+        self.assertEqual(advice['label'],'Insufficient data')
+        self.assertIn('confirm the current saved review price',advice['reason'])
+
+    def test_reserve_breach_keeps_sell_review_when_reconciliation_blocks_sizing(self):
+        s=snapshot(10)
+        p=profile(cash_nok=0,reserve_pct=25)
+        report={'generated':NOW,'policy_version':tp.policy.VERSION,
+                'cards':[card('A.OL',action='Hold / monitor')]}
+        self.assertEqual(self.holding_advice(s,report,p)['shares'],3)
+
+        s['ledger_reconciled']=False
+        advice=self.holding_advice(s,report,p)
+        self.assertEqual(advice['label'],'Sell review')
+        self.assertIn('25.0% cash reserve',advice['reason'])
+        self.assertIsNone(advice['shares'])
+        self.assertIn('Reconcile holdings and cash',advice['sizing_blocker'])
+
+    def test_holding_advice_explains_multiple_limits_that_add_shares(self):
+        s=snapshot(10)
+        p=profile(cash_nok=0,max_stock_pct=40,max_sector_pct=20)
+        report={'generated':NOW,'policy_version':tp.policy.VERSION,
+                'cards':[card('A.OL',action='Hold / monitor')]}
+        advice=self.holding_advice(s,report,p)
+        self.assertEqual(advice['shares'],8)
+        self.assertEqual(advice['percent'],80)
+        self.assertIn('40.0% position limit',advice['reason'])
+        self.assertIn('20.0% sector limit',advice['reason'])
+
     def test_daily_board_preserves_existing_holding_policy_assessments_and_marks_stale_evidence(self):
         s=snapshot(4);p=profile();s.update(portfolio_preferences=p,portfolio_context=pf.context(s,p,NOW),fundamentals={},signal_state={},last_trades={})
         held=card('A.OL',1,'Hold / monitor');held['reasons']=['Existing technical screen reason.']

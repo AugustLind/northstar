@@ -205,7 +205,7 @@ $('#ledgerApply').onclick = async () => {
       ' duplicates skipped. Verify the result against Nordnet.';
     await loadLedger();
     if (typeof loadAccountPerformance === 'function') loadAccountPerformance();
-    await load();
+    await reloadHoldings();
     if (typeof loadResearch === 'function') await loadResearch();
   } catch (e) {
     $('#ledgerMessage').textContent = e.message;
