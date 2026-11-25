@@ -117,7 +117,7 @@ def prove_funded_switch(browser, report):
                    (json.dumps({**original_quote, 'price': 100, 'asof': now}), 'SYNTH.OL'))
 
     settings = {**prefs, 'purchase_nok': 120, 'buy_fee_nok': 2, 'sell_fee_nok': 5,
-                'max_buy_fee_pct': 5, 'max_stock_pct': 50, 'reserve_pct': 75}
+                'max_buy_fee_pct': 5, 'max_stock_pct': 50, 'reserve_pct': 76}
     app.write_meta('portfolio_preferences', settings)
     browser.evaluate('loadDaily()')
     browser.wait("""(() => {
@@ -131,7 +131,7 @@ def prove_funded_switch(browser, report):
             ['Sale fee', money(0), money(5)],
             ['Purchase fee', money(0), money(2)],
             ['Cash after trades', money(1070), money(1053)],
-            ['Cash reserve (minimum 75%)', '78.1%', '77.3%'],
+            ['Cash reserve (minimum 76%)', '78.1%', '77.3%'],
             ['SYNTH.OL company weight', '21.9%', '14.7%'],
             ['IDEA1.OL company weight', '0.0%', '8.1%'],
             ['Industrials sector weight', '21.9%', '14.7%'],
@@ -140,10 +140,11 @@ def prove_funded_switch(browser, report):
     })()""", 'funded switch shows exact quantities, fees, reserve and concentration')
 
     for changes, label, reason in (
-        ({'sell_fee_nok': None}, 'Comparison unavailable', 'Enter a sell-fee assumption'),
+        # At this reserve, the entered sale fee can change the reviewed share count.
+        ({'sell_fee_nok': None, 'reserve_pct': 85.4}, 'Comparison unavailable', 'Enter a sell-fee assumption'),
         ({'sell_fee_nok': 100}, 'No switch qualifies', ''),
         ({'sectors': {'SYNTH.OL': 'Industrials'}}, 'Comparison unavailable', 'Classify this stock'),
-        ({'reserve_pct': 0}, 'No switch qualifies', ''),
+        ({'reserve_pct': 75}, 'No switch qualifies', ''),
         ({'max_stock_pct': 14.62}, 'No switch qualifies', ''),
     ):
         app.write_meta('portfolio_preferences', {**settings, **changes})

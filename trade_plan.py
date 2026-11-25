@@ -185,7 +185,15 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
     return rows
 
 
-def buy_inputs(card,snapshot,ctx,profile,report_ok,blocked_sales,budget,minimum_order,now):
+def report_cards(report):
+    return {pf.canonical(card['symbol']):card for card in (report or {}).get('cards',[])}
+
+
+def minimum_buy_order(profile):
+    return profile['buy_fee_nok']*(1+100/profile['max_buy_fee_pct'])
+
+
+def buy_inputs(card,snapshot,ctx,profile,now,*,report_ok,blocked_sales,budget):
     import advice_state
 
     symbol=pf.canonical(card['symbol'])
@@ -199,6 +207,7 @@ def buy_inputs(card,snapshot,ctx,profile,report_ok,blocked_sales,budget,minimum_
         return None,'The complete technical buy screen is not met.',False
     if not ctx['complete'] or not ctx['total_nok']:
         return None,'Complete tracked portfolio valuation required.',True
+    minimum_order=minimum_buy_order(profile)
     if budget<minimum_order-1e-8:
         return None,'Remaining shared budget is below '+str(round(minimum_order,2))+' NOK needed for your purchase-fee limit.',False
     waiting=advice_state.gate(symbol,'buy',snapshot,profile,now)
@@ -264,21 +273,25 @@ def funded_switch(snapshot,report,plan):
 
     budget=profile['purchase_nok']
     buy_fee=profile['buy_fee_nok']
-    minimum_order=buy_fee*(1+100/profile['max_buy_fee_pct'])
-    cards={pf.canonical(card['symbol']):card for card in (report or {}).get('cards',[])}
+    cards=report_cards(report)
     ranked=policy.recommendations(cards.values(),(report or {}).get('promoted_model'))
     for card in ranked:
         symbol=pf.canonical(card['symbol'])
-        quote,reason,evidence_missing=buy_inputs(card,snapshot,ctx,profile,report_ok,
-                                                blocked_sales,budget,minimum_order,now)
+        quote,reason,evidence_missing=buy_inputs(card,snapshot,ctx,profile,now,report_ok=report_ok,
+                                                blocked_sales=blocked_sales,budget=budget)
         if evidence_missing:
             missing=reason
         if reason:
             continue
+        cash_shares,_,cash_fee_pct=buy_quantity(symbol,quote,ctx,profile,budget)
+        if cash_shares and cash_fee_pct<=profile['max_buy_fee_pct']+1e-8:
+            continue
         for sale in sales:
-            # A zero fee gives an upper bound on available proceeds when the assumption is missing.
-            sale_fee=sale['fee_nok'] or 0.
-            proceeds=sale['gross_proceeds_nok']-sale_fee
+            sale_fee=sale['fee_nok']
+            if sale_fee is None:
+                missing='Enter a sell-fee assumption to confirm net sale proceeds.'
+                continue
+            proceeds=sale['net_proceeds_nok']
             if proceeds<=0:
                 continue
             sold=sale['symbol']
@@ -300,9 +313,6 @@ def funded_switch(snapshot,report,plan):
             if (after['cash_pct']<profile['reserve_pct']-1e-8
                 or any(row['weight_pct']>profile['max_stock_pct']+1e-8 for row in after['issuer_exposure'])
                 or any(row['weight_pct']>profile['max_sector_pct']+1e-8 for row in after['sectors'])):
-                continue
-            if sale['fee_nok'] is None:
-                missing='Enter a sell-fee assumption to confirm net sale proceeds.'
                 continue
             companies=dict.fromkeys((company_data.issuer(sold),company_data.issuer(symbol)))
             sectors=dict.fromkeys((profile['sectors'][sold],profile['sectors'][symbol]))
@@ -326,14 +336,14 @@ def build(snapshot,report,profile,now=None):
     profile=pf.preferences(profile)
     ctx=pf.context(snapshot,profile,now)
     report_ok=policy.current_report(report,now)
-    cards={pf.canonical(c['symbol']):c for c in (report or {}).get('cards',[])}
+    cards=report_cards(report)
     sells=sell_scenario(snapshot,cards,ctx,profile,report_ok,now)
     blocked_sales={r['symbol'] for r in sells if r['sell_shares']}
     ranked=policy.recommendations(cards.values(),(report or {}).get('promoted_model'))
     buys=[];blocked=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
     left=profile['purchase_nok'];spent=0.;fees=0.;warnings=list(ctx['warnings'])
     buy_fee=profile['buy_fee_nok']
-    minimum_order=buy_fee*(1+100/profile['max_buy_fee_pct'])
+    minimum_order=minimum_buy_order(profile)
     max_orders=len(ranked) if minimum_order==0 else min(len(ranked),int(min(left,ctx['cash_nok'])/minimum_order))
     if not report_ok:
         warnings.append('Refresh the market report before generating buy quantities or signal-based sale quantities.')
@@ -343,8 +353,8 @@ def build(snapshot,report,profile,now=None):
     for card in ranked:
         symbol=pf.canonical(card['symbol'])
         current=pf.context(working,working_profile,now)
-        q,reason,evidence_missing=buy_inputs(card,working,current,working_profile,report_ok,
-                                             blocked_sales,left,minimum_order,now)
+        q,reason,evidence_missing=buy_inputs(card,working,current,working_profile,now,report_ok=report_ok,
+                                             blocked_sales=blocked_sales,budget=left)
         if reason is None:
             # Reserve all possible later buy fees so the entire plan respects final weights.
             reserve_fees=max(0,max_orders-len(buys)-1)*buy_fee
