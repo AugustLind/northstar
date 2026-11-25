@@ -168,7 +168,7 @@ $('#nordnetImportApply').onclick = async () => {
     $('#nordnetFile').value = '';
     $('#nordnetImportStatus').textContent =
       'Imported ' + result.updated + ' holdings. Notes preserved. The market scan has been queued.';
-    await load();
+    await reloadHoldings();
     if (typeof loadResearch === 'function') await loadResearch();
     if (typeof loadPortfolioFit === 'function') await loadPortfolioFit();
   } catch (e) {

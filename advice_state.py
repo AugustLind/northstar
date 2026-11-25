@@ -18,19 +18,25 @@ def observe(report,previous,now=None):
         else:intent='watch'
         if not trade_plan.signal_current(card,now):intent='unavailable'
         session=dt.datetime.fromtimestamp(card.get('asof') or now,dt.timezone.utc).date().isoformat()
+        action=card.get('action')
+        review_price=card.get('review_price')
         same=old.get('intent')==intent
+        if action in policy.REVIEW_LEVELS or old.get('action') in policy.REVIEW_LEVELS:
+            same=same and old.get('action')==action and old.get('review_price')==review_price
         sessions=list(old.get('sessions',[])) if same else []
         if session not in sessions:sessions.append(session)
         result[symbol]={'intent':intent,'since':old.get('since',now) if same else now,'sessions':sessions[-30:],
-                        'last_seen':now,'action':card.get('action'),'policy_version':policy.VERSION}
+                        'last_seen':now,'action':action,'review_price':review_price,'policy_version':policy.VERSION}
     return result
 
 
-def gate(symbol,direction,snapshot,profile,now):
+def gate(symbol,direction,snapshot,profile,now,*,review_trigger=None):
     if 'signal_state' not in snapshot:return None
     record=snapshot.get('signal_state',{}).get(symbol,{})
     if record.get('policy_version')!=policy.VERSION or record.get('intent')!=direction:
         return 'Waiting for a matching dated signal observation under the current policy.'
+    if review_trigger and review_trigger!=(record.get('action'),record.get('review_price')):
+        return 'Waiting for a matching dated signal observation for the current saved review price.'
     count=len(record.get('sessions',[]));required=int(profile['confirm_sessions'])
     if count<required:return 'Waiting for signal confirmation: '+str(count)+' / '+str(required)+' market sessions.'
     if now-record.get('since',now)<profile['signal_wait_hours']*3600:

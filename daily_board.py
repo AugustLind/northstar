@@ -16,6 +16,23 @@ def technical_sale(row):
                 any(reason.startswith(action) for reason in row.get('reasons',[])))
 
 
+def holding_advice(sale):
+    if not sale:
+        return {'label':'Insufficient data','reason':'No current technical assessment.'}
+    technical=sale['technical_review_reason']
+    reasons=([technical] if technical else [])+sale['portfolio_review_reasons']
+    if reasons:
+        shares=sale['sell_shares']
+        return {'label':'Sell review','reason':' '.join(reasons),
+                'review_price':sale['review_price'],
+                'shares':shares or None,'percent':shares/sale['owned']*100 if shares else None,
+                'sizing_blocker':None if shares else (sale['sizing_blocker'] or 'No whole-share reduction is available.')}
+    if sale['technical_action']=='Hold / monitor' and not sale['technical_review_blocker']:
+        return {'label':'Hold','reason':'No confirmed sell trigger for this holding.'}
+    return {'label':'Insufficient data',
+            'reason':sale['technical_review_blocker'] or 'No current technical assessment.'}
+
+
 def build(snapshot,report,plan,feed,ledger=None,now=None):
     now=time.time() if now is None else now
     held={pf.canonical(p['symbol'],p['currency']) for p in snapshot['positions'] if p['shares']>0}
@@ -75,7 +92,7 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
         add('stale-report',100,'Refresh the market report','Buy quantities and technical sale reviews need current signal evidence.','data')
     ordered=sorted({r['id']:r for r in reviews}.values(),key=lambda r:(-r['priority'],r['id']))
     cards={pf.canonical(c['symbol']):c for c in (report or {}).get('cards',[])}
-    planned={pf.canonical(r['symbol']):r for r in plan.get('holdings',[])}
+    planned={r['symbol']:r for r in plan.get('holdings',[])}
     current=decision_policy.current_report(report,now)
     assessments=[]
     for position in snapshot['positions']:
@@ -83,7 +100,8 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
         symbol=pf.canonical(position['symbol'],position['currency'])
         card=cards.get(symbol)
         sale=planned.get(symbol)
-        assessments.append({'symbol':symbol,'shares':position['shares'],
+        assessments.append({'symbol':symbol,'position_symbol':position['symbol'],'shares':position['shares'],
+            'advice':holding_advice(sale),
             'status':'current' if current and card else 'stale' if card else 'unavailable',
             'action':card.get('action') if card else None,
             'reasons':(card.get('reasons') or [])[:8] if card else [],

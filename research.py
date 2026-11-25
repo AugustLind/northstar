@@ -112,6 +112,8 @@ def screen(symbol, q, position=None, min_turnover_nok=250000, as_of=None):
                f'Annualised daily-price volatility: {volatility:.1f}%.']
     decision = policy.decide(result['metrics'], q['price'], position, min_turnover_nok)
     result.update(decision)
+    if decision['action'] in policy.REVIEW_LEVELS:
+        result['review_price'] = position[policy.REVIEW_LEVELS[decision['action']]]
     result['reasons'] = result.pop('policy_reasons') + reasons
     return result
 

@@ -235,7 +235,7 @@ $('#fitPreferences').onsubmit = async (e) => {
       'Saved on Oracle. Purchase previews do not update cash or holdings.';
     $('#fitPreviewResult').innerHTML = '';
     await loadPortfolioFit();
-    await load();
+    await reloadHoldings();
     if (typeof loadResearch === 'function') await loadResearch();
   } catch (error) {
     $('#fitSaveStatus').textContent = error.message;
