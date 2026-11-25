@@ -217,7 +217,7 @@ const ChartKit = (() => {
       lo0 = Math.min(...transformed),
       hi0 = Math.max(...transformed),
       pad = (hi0 - lo0) * 0.08 || (log ? 0.01 : 1),
-      lo = percent || log ? lo0 - pad : Math.max(0, lo0 - pad),
+      lo = percent || log || lo0 < 0 ? lo0 - pad : Math.max(0, lo0 - pad),
       hi = hi0 + pad,
       y = (v) => T + ((hi - convert(v)) / (hi - lo)) * (P - T);
     const path = (v, yy = y) => {
@@ -243,7 +243,7 @@ const ChartKit = (() => {
         ? 'Period change (%)'
         : log
         ? 'Price · logarithmic scale'
-        : 'Price · ' + escape(options.currency || 'NOK')
+        : escape(options.valueLabel || 'Price · ' + (options.currency || 'NOK'))
     }</text>`;
     for (let i = 0; i < 5; i++) {
       const value = lo + ((hi - lo) * i) / 4,

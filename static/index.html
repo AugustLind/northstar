@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Northstar · Investment notebook</title>
-    <link rel="stylesheet" href="./style.css?v=c8b07d4259e1" />
+    <link rel="stylesheet" href="./style.css?v=2cc71dc4a23f" />
   </head>
   <body>
     <header>
@@ -51,16 +51,17 @@
         </div>
         <div class="section-context">
           <p class="eyebrow">CURRENT WORKSPACE</p>
-          <h1 id="workspaceTitle">Overview</h1>
+          <h1 id="workspaceTitle">Portfolio</h1>
         </div>
       </section>
       <nav class="workspace-nav" aria-label="Main workspace">
-        <button type="button" data-tab="daily" class="active" aria-current="page">Overview</button
-        ><button type="button" data-tab="recommendations">Research</button
-        ><button type="button" data-tab="portfolio">Portfolio</button
-        ><button type="button" data-tab="validation">Strategy lab</button>
+        <button type="button" data-tab="portfolio" class="active" aria-current="page">Portfolio</button>
+        <button type="button" data-tab="candidates">Candidates</button>
+        <button type="button" data-tab="daily">Overview</button>
+        <button type="button" data-tab="recommendations">Research</button>
+        <button type="button" data-tab="validation">Strategy lab</button>
       </nav>
-      <section id="daily" class="tab">
+      <section id="daily" class="tab" hidden>
         <section
           class="metrics overview-metrics"
           id="overviewMetrics"
@@ -143,17 +144,6 @@
           <p id="dailyStatus" role="status">Loading the daily overview…</p>
           <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
           <div id="dailyTop"></div>
-        </section>
-        <section class="buy-candidates" aria-labelledby="buyCandidatesTitle">
-          <div class="sectionhead">
-            <div>
-              <p class="eyebrow">PORTFOLIO FIT</p>
-              <h2 id="buyCandidatesTitle">Buying candidates</h2>
-            </div>
-          </div>
-          <p id="buyCandidatesStatus" role="status" aria-live="polite">Loading eligible candidates…</p>
-          <div id="buyCandidates" class="candidate-grid"></div>
-          <button id="buyCandidatesRecovery" type="button" hidden></button>
         </section>
         <details class="workspacefold advanced-tools" id="overviewAdvanced">
           <summary>Advanced tools</summary>
@@ -699,7 +689,17 @@
         </details>
         </details>
       </section>
-      <section id="portfolio" class="tab" hidden>
+      <section id="portfolio" class="tab">
+        <section class="card" aria-labelledby="todayTitle">
+          <div class="sectionhead">
+            <h2 id="todayTitle">Today’s performance</h2>
+            <button id="refreshToday" type="button">Refresh performance</button>
+          </div>
+          <p id="todayStatus" role="status">Loading account performance…</p>
+          <div id="todayMetrics" class="metrics"></div>
+          <div id="todayChart" class="chartplot" hidden></div>
+          <div id="todayHoldings" class="tablewrap"></div>
+        </section>
         <div class="sectionhead">
           <div>
             <h2>Your companies</h2>
@@ -1151,6 +1151,19 @@
         </details>
         </details>
       </section>
+      <section id="candidates" class="tab" hidden>
+        <section class="buy-candidates" aria-labelledby="buyCandidatesTitle">
+          <div class="sectionhead">
+            <div>
+              <p class="eyebrow">PORTFOLIO FIT</p>
+              <h2 id="buyCandidatesTitle">Buying candidates</h2>
+            </div>
+          </div>
+          <p id="buyCandidatesStatus" role="status" aria-live="polite">Loading eligible candidates…</p>
+          <div id="buyCandidates" class="candidate-grid"></div>
+          <button id="buyCandidatesRecovery" type="button" hidden></button>
+        </section>
+      </section>
       <section id="validation" class="tab" hidden>
         <h2>Strategy lab</h2>
         <p>
@@ -1333,15 +1346,15 @@
       <script src="./ui-common.js?v=a383e4205a2e"></script>
       <script src="./app.js?v=2b105bb82020"></script>
       <script src="./portfolio.js?v=a5e7c51fcbea"></script>
-      <script src="./navigation.js?v=3ea4b075fe01"></script>
-      <script src="./charts.js?v=540b385835d5"></script>
+      <script src="./navigation.js?v=2e40f3ebd77e"></script>
+      <script src="./charts.js?v=1a61a2335970"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=098d62b0f747"></script>
       <script src="./portfolio-fit.js?v=60381fd56b85"></script>
       <script src="./holdings-import.js?v=ff5e53af103a"></script>
       <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
       <script src="./ledger.js?v=8d600a05ae71"></script>
-      <script src="./daily.js?v=256dd31dafcb"></script>
+      <script src="./daily.js?v=076ff3bea401"></script>
       <script src="./advice.js?v=99a68ba3093b"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
@@ -1350,7 +1363,7 @@
       <script src="./validation-view.js?v=54bf6067f20c"></script>
       <script src="./system-status.js?v=a12e1049a887"></script>
       <script src="./chart-tools.js?v=837395634dcd"></script>
-      <script src="./account-performance.js?v=6b9e443db403"></script>
+      <script src="./account-performance.js?v=8cc16546ba0a"></script>
       <script src="./archive-view.js?v=0b37ca5c26ad"></script>
       <script src="./bootstrap.js?v=2e28e49c6266"></script>
   </body>

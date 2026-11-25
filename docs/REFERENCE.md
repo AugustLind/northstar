@@ -229,14 +229,11 @@ After manual edits, restart the service. `GET /api/email` exposes only configura
 
 ## Research workspace and expanded diagnostics
 
-The dashboard has four workspaces: **Overview**, **Research**, **Portfolio**, and
-**Strategy lab**. Overview separates its mixed priority reviews from up to three
-buying candidates taken from the current shared-budget trade plan. Candidates
-follow the existing technical, quote freshness, holdings, cash, purchase fee,
-sector, reserve and reconciliation checks; no eligible candidate is hidden behind
-a placeholder. Each candidate links to its Research analysis. Overview groups
-these lists with email, issuer notices and methodology. Portfolio groups holdings,
-allocation and transaction reconciliation.
+Signed-in visits open **Portfolio**. Choose **Candidates** from the same navigation
+to see up to five qualifying buys in shared-budget trade-plan order. Each idea explains
+which limits its sizing meets and links to its Research analysis. A valid empty list
+has its own state, separate from stale research and missing sizing evidence.
+**Overview** groups priority reviews with email, issuer notices and methodology.
 Legacy hashes such as `#fit`, `#activity` and `#announcements` still open the
 appropriate workspace and expand their section.
 
@@ -433,6 +430,16 @@ historical proxy. Account P&L uses opening holdings, imported dated events, actu
 net broker cash and dated prices. The proxy remains a hypothetical daily rebalanced
 portfolio and is never substituted when account data is incomplete.
 
+- **Today’s performance** uses Europe/Oslo reporting dates. During a regular Oslo
+  session it compares the latest same-session quotes with the previous scheduled
+  close. On scheduled closures and before the first quote during the 15-minute
+  opening publication window, it shows the dated last completed session. After the
+  window, or once a held security or the Oslo benchmark quotes, missing session
+  quotes or required closes leave a coverage gap. The chart
+  shows the two measured endpoints. Its ending value excludes net deposits and
+  withdrawals. The percentage applies the day-end cash-flow convention. Net
+  dividends and fees are included in the ledger cash movement. Holding price changes
+  are per share in NOK, use dated FX, and adjust for matched splits.
 - The ledger must reconcile to current quantities and manually tracked NOK cash,
   including any broker-cash mismatch check. Unknown transfers, missing trades,
   unsupported cash currencies or a conflicting opening snapshot block account returns.

@@ -20,6 +20,9 @@ def setup(events,prices,opening_shares=10,opening_cash=100,opening_cost=10,legac
     return snapshot,baseline
 
 class AccountPerformanceTests(unittest.TestCase):
+    def test_previous_oslo_session_skips_easter_closures(self):
+        self.assertEqual(ap.previous_oslo_session(dt.date(2026, 4, 7)), dt.date(2026, 4, 1))
+
     def test_current_value_and_today_movement_use_current_quotes_and_recorded_cash(self):
         q=quote([('2025-01-03',10)])
         q.update(price=12,asof=stamp('2025-01-06')+12*3600)

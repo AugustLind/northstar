@@ -19,11 +19,11 @@ class Layout(HTMLParser):
         else:self.stack.pop()
 
 class NavigationTests(unittest.TestCase):
-    def test_four_workspaces_preserve_merged_tools_and_valid_markup(self):
+    def test_workspaces_preserve_merged_tools_and_valid_markup(self):
         layout=Layout();layout.feed((Path(__file__).resolve().parents[1]/'static/index.html').read_text())
         self.assertEqual(layout.errors,[]);self.assertEqual(layout.stack,[])
         self.assertTrue(all(n==1 for n in Counter(layout.ids).values()))
-        self.assertEqual(layout.buttons,['daily','recommendations','portfolio','validation'])
+        self.assertEqual(layout.buttons,['portfolio','candidates','daily','recommendations','validation'])
         self.assertIn('workspaceTitle',layout.nodes)
         self.assertIn('accountName',layout.nodes)
         self.assertIn('accountStatus',layout.nodes)
@@ -35,7 +35,8 @@ class NavigationTests(unittest.TestCase):
         self.assertIn('Single-stock previews passing technical and portfolio checks',rendered)
         self.assertIn('Passing this check does not guarantee an allocation in the ranked shared-budget plan below.',rendered)
         self.assertLess(rendered.index('id="overviewMetrics"'),rendered.index('id="needsAttentionTitle"'))
-        self.assertLess(rendered.index('id="needsAttentionTitle"'),rendered.index('id="buyCandidatesTitle"'))
+        self.assertIn('candidates',layout.nodes['buyCandidatesTitle']['ancestors'])
+        self.assertIn('portfolio',layout.nodes['todayTitle']['ancestors'])
         self.assertIn('portfolioAdvanced',layout.nodes['accountPerformance']['ancestors'])
         self.assertIn('researchAdvanced',layout.nodes['chartPlot']['ancestors'])
         self.assertIn('strategyAdvanced',layout.nodes['robustnessPanel']['ancestors'])
@@ -48,8 +49,8 @@ class NavigationTests(unittest.TestCase):
         for child,parent in [('announcements','daily'),('briefing','daily'),('method','daily'),('fit','portfolio'),('activity','portfolio')]:
             self.assertIn(parent,layout.nodes[child]['ancestors'])
             self.assertIn(child+'Group',layout.nodes[child]['ancestors'])
-        self.assertNotIn('hidden',layout.nodes['daily']['attrs'])
-        for id in tabs-{'daily'}:self.assertIn('hidden',layout.nodes[id]['attrs'])
+        self.assertNotIn('hidden',layout.nodes['portfolio']['attrs'])
+        for id in tabs-{'portfolio'}:self.assertIn('hidden',layout.nodes[id]['attrs'])
 
 
     def test_generated_html_and_manifest_match_sources(self):

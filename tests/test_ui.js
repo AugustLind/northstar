@@ -25,7 +25,7 @@ const chartStorage=new Map();
 const summaryFixture={symbol:'BOUV.OL',generated:now,current:true,qualifies:true,action:'Consider buying',why:['Measured entry evidence'],invalidation:['Below MA200 and negative momentum'],risks:['<untrusted>'],checks:[{label:'Close above MA200',passes:true}],portfolio:{buy_shares:0,reason:'Waiting for confirmation'},method:'Existing rules'};
 const riskFixture={generated:now,status:'available',observations:120,missing:[],volatility_pct:20,var95_pct:2,tail95_pct:3,concentration:{largest_company_pct:30},risk_contributions:[{symbol:'<untrusted>',weight_pct:30,annual_volatility_pct:20,risk_share_pct:100,volatility_contribution_pct:20}],correlations:[{symbol:'A.OL',values:[1]}],curve:history,scenarios:[{label:'Equities -20%',change_nok:-200,change_pct:-20,after_nok:800}],method:'Current-weight proxy'};
 const systemFixture={generated:now,uptime_seconds:120,state:'attention',components:[{label:'<untrusted>',state:'partial',detail:'1 stale quote',action:'Refresh market data'}],workers:[{name:'research',state:'running'}],email_history:[{kind:'test',status:'sent',created:now,attempts:1,sent:now}]};
-const workspaceNames=['daily','recommendations','portfolio','validation'];
+const workspaceNames=['daily','recommendations','portfolio','candidates','validation'];
 const workspaceSections=workspaceNames.map(id=>{const n=element();n.id=id;nodes['#'+id]=n;return n;});
 nodes['#workspaceTitle']=element();
 const workspaceButtons=workspaceNames.map(tab=>{const n=element();n.dataset.tab=tab;nodes['[data-tab="'+tab+'"]']=n;return n;});
@@ -74,14 +74,14 @@ setImmediate(async()=>{
  context.location.hash='#fit';
  assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'fit');
  context.location.hash='';context.location.pathname='/';
- assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'daily');
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'portfolio');
  context.location.pathname='/recommendations';
  for(const [target,page] of [['unrecognised:hash','daily'],['fit','portfolio'],['activity','portfolio'],['announcements','daily'],['method','daily'],['validation','validation']]){
   vm.runInContext("openWorkspace('"+target+"')",context);
   assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
   assert.strictEqual(nodes['#'+page].hidden,false);
   assert.strictEqual(nodes['[data-tab="'+page+'"]'].attributes['aria-current'],'page');
-  assert.strictEqual(nodes['#workspaceTitle'].textContent,{daily:'Overview',recommendations:'Research',portfolio:'Portfolio',validation:'Strategy lab'}[page]);
+  assert.strictEqual(nodes['#workspaceTitle'].textContent,{daily:'Overview',recommendations:'Research',portfolio:'Portfolio',candidates:'Candidates',validation:'Strategy lab'}[page]);
   if(target!==page&&target!=='unrecognised:hash')assert(nodes['#'+target+'Group'].open);
  }
  assert(workspaceHistory.includes('/recommendations#fit'));
@@ -179,8 +179,8 @@ setImmediate(async()=>{
   vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:count},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
   assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,count);
  }
- vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:5},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
- assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,3);
+ vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:6},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
+ assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,5);
  assert(nodes['#buyCandidates'].innerHTML.includes('&lt;safe&gt;'));
  assert(!nodes['#buyCandidates'].innerHTML.includes('<safe>'));
  vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:true,buy_candidate_warnings:[]})",context);
