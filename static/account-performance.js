@@ -1,5 +1,6 @@
 /* Ledger-derived performance. Never substitutes the current-weight proxy for account history. */
 let accountPerformanceRequest = 0;
+let portfolioTodaySessionStatus = '';
 async function loadAccountPerformance() {
   const token = ++accountPerformanceRequest;
   try {
@@ -13,7 +14,10 @@ async function loadAccountPerformance() {
   } catch (error) {
     if (token === accountPerformanceRequest) {
       $('#accountPerformanceStatus').textContent = error.message;
-      $('#portfolioTodayStatus').textContent = error.message;
+      const failure = 'Refresh failed. ' + error.message;
+      $('#portfolioTodayStatus').textContent = portfolioTodaySessionStatus
+        ? portfolioTodaySessionStatus + ' Showing last loaded figures. ' + failure
+        : failure;
     }
   }
 }
@@ -108,10 +112,11 @@ function renderPortfolioToday(value) {
     amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + format(amount);
   const move = (amount, pct) =>
     signed(amount, money) + (pct == null ? '' : ' (' + signed(pct, (n) => n.toFixed(1) + '%') + ')');
-  $('#portfolioTodayStatus').textContent = [
+  portfolioTodaySessionStatus = [
     today.date + ' · Europe/Oslo' + (today.completed ? ' · Last completed session' : ''),
     ...today.coverage,
   ].join('. ');
+  $('#portfolioTodayStatus').textContent = portfolioTodaySessionStatus;
   $('#portfolioTodayMetrics').innerHTML = [
     toolTile(
       'Current account value',

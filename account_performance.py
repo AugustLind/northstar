@@ -221,7 +221,6 @@ def session_performance(snapshot, baseline, events, now, session, *, completed):
     def prices(symbol, currency):
         quote = quotes.get(symbol) or quotes.get(symbol.removesuffix('.OL'))
         if not quote or quote.get('currency') != currency:
-            out['coverage'].append(f'{symbol}: missing {currency} price coverage.')
             return None, None
         closes = {}
         if quote.get('account_history_version') == 1:
@@ -231,13 +230,21 @@ def session_performance(snapshot, baseline, events, now, session, *, completed):
                     if bar_date in (previous, session):
                         closes[bar_date] = bar['account_close']
         start, end = closes.get(previous), closes.get(session) if completed else None
-        if end is None and pf.fresh(quote, now) and oslo_date(quote['asof']) == session:
+        if not completed and pf.fresh(quote, now) and oslo_date(quote['asof']) == session:
             end = quote['price']
             observations.append(quote['asof'])
-        if start is None or end is None:
-            label = 'previous close' if start is None else 'latest session quote'
-            out['coverage'].append(f'{symbol}: missing {label} coverage for {previous if start is None else session}.')
         return start, end
+
+    def check_coverage(symbol, before, after, start_shares, end_shares):
+        if start_shares and before is None:
+            warning = f'{symbol}: missing previous close coverage for {previous}.'
+        elif end_shares and after is None:
+            label = 'session close' if completed else 'latest session quote'
+            warning = f'{symbol}: missing {label} coverage for {session}.'
+        else:
+            return
+        if warning not in out['coverage']:
+            out['coverage'].append(warning)
 
     start_value, end_value = opening_cash, ending_cash
     fx = None
@@ -248,9 +255,11 @@ def session_performance(snapshot, baseline, events, now, session, *, completed):
             continue
         currency = (ending.get(symbol) or opening[symbol])['currency']
         before, after = prices(symbol, currency)
+        check_coverage(symbol, before, after, start_shares, end_shares)
         if currency == 'USD':
             if fx is None:
                 fx = prices('NOK=X', 'NOK')
+            check_coverage('NOK=X', *fx, start_shares, end_shares)
             before = before * fx[0] if before is not None and fx[0] is not None else None
             after = after * fx[1] if after is not None and fx[1] is not None else None
         if currency not in ('NOK', 'USD'):

@@ -252,6 +252,41 @@ setImmediate(async()=>{
  vm.runInContext("researchView.report.generated=Date.now()/1000-2*86400;renderAdvice()",context);
  assert(!nodes['#adviceCards'].innerHTML.includes('Hold / monitor'));
  assert(nodes['#adviceSummary'].textContent.includes('0 buy candidates'));
+ const performanceFetch=context.fetch;
+ const todayFixture={date:'2026-11-21',completed:true,coverage:[],change_nok:100,
+   change_pct:1,external_nok:0,holdings:[],curve:[{time:1795192200,close:1},{time:1795278600,close:1.01}]};
+ context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:todayFixture})});
+ await vm.runInContext('loadAccountPerformance()',context);
+ const todayStatus=nodes['#portfolioTodayStatus'];
+ const todayMetrics=nodes['#portfolioTodayMetrics'].innerHTML;
+ const todayChart=nodes['#portfolioTodayChart'].innerHTML;
+ assert(todayStatus.textContent.includes(todayFixture.date));
+ assert(todayMetrics.includes('Investment performance'));
+ assert(todayChart.includes('<svg'));
+ context.fetch=async()=>{throw Error('fixture disconnected');};
+ await vm.runInContext('loadAccountPerformance()',context);
+ assert(todayStatus.textContent.includes(todayFixture.date),'Retained figures must keep their session date.');
+ assert(todayStatus.textContent.includes('Refresh failed'));
+ assert.strictEqual(nodes['#portfolioTodayMetrics'].innerHTML,todayMetrics);
+ assert.strictEqual(nodes['#portfolioTodayChart'].innerHTML,todayChart);
+ context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:{...todayFixture,date:'2026-11-23',completed:false}})});
+ await vm.runInContext('loadAccountPerformance()',context);
+ assert(todayStatus.textContent.includes('2026-11-23'));
+ assert(!todayStatus.textContent.includes('Refresh failed'));
+ context.fetch=performanceFetch;
+
+ const rememberedKey='northstar-remembered-session';
+ const newSession={origin:'https://api.example.com',token:'ns-session-created-in-another-tab'};
+ chartStorage.set(rememberedKey,JSON.stringify(newSession));
+ context.window.localStorage.removeItem=(key)=>chartStorage.delete(key);
+ let reloaded=false;
+ context.location.reload=()=>{reloaded=true;};
+ await nodes['#disconnect'].onclick();
+ assert(requests.some(({path,options})=>path===newSession.origin+'/api/session/sign-out'
+   && options.headers.Authorization==='Bearer '+newSession.token));
+ assert(!chartStorage.has(rememberedKey));
+ assert(!browserStorage.has('northstar-key'));
+ assert(reloaded);
  console.log('UI contract and chart rendering smoke checks passed (not browser QA).');
  }catch(error){console.error(error);process.exitCode=1;}
 });

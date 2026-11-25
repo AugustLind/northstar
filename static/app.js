@@ -4,10 +4,7 @@ const rememberedSessionKey = 'northstar-remembered-session';
 const configuredApi = (window.NORTHSTAR_CONFIG && window.NORTHSTAR_CONFIG.apiBase) || '';
 let apiBase = configuredApi,
   accessKey = '',
-  rememberedSession = null;
-try {
-  rememberedSession = JSON.parse(window.localStorage.getItem(rememberedSessionKey) || 'null');
-} catch (e) {}
+  rememberedSession = readRememberedSession();
 try {
   accessKey = sessionStorage.getItem('northstar-key') || '';
   apiBase = sessionStorage.getItem('northstar-api') ?? configuredApi;
@@ -22,10 +19,16 @@ function showConnection(message = '') {
   $('#backendAddress').value = apiBase;
   $('#connectionMessage').textContent = message;
 }
-function forgetRememberedSession() {
+function readRememberedSession() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(rememberedSessionKey) || 'null');
-    if (stored && stored.token === rememberedSession.token)
+    return JSON.parse(window.localStorage.getItem(rememberedSessionKey) || 'null');
+  } catch (e) {
+    return null;
+  }
+}
+function forgetRememberedSession(session) {
+  try {
+    if (readRememberedSession()?.token === session.token)
       window.localStorage.removeItem(rememberedSessionKey);
   } catch (e) {}
   rememberedSession = null;
@@ -66,7 +69,7 @@ async function api(path, data, origin = apiBase, credential = accessKey) {
     if (path === 'session/sign-out') return;
     if (credential === accessKey && origin === apiBase) {
       if (rememberedSession && credential === rememberedSession.token) {
-        forgetRememberedSession();
+        forgetRememberedSession(rememberedSession);
         finishSignOut();
       }
       showConnection(body.error);
@@ -77,9 +80,10 @@ async function api(path, data, origin = apiBase, credential = accessKey) {
 }
 
 async function revokeRememberedSession() {
-  if (!rememberedSession) return;
-  await api('session/sign-out', {}, rememberedSession.origin, rememberedSession.token);
-  forgetRememberedSession();
+  const session = readRememberedSession() || rememberedSession;
+  if (!session) return;
+  await api('session/sign-out', {}, session.origin, session.token);
+  forgetRememberedSession(session);
 }
 
 $('#connectionButton').onclick = () => showConnection();
