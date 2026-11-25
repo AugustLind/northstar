@@ -42,7 +42,7 @@ class TradePlanTests(unittest.TestCase):
     def test_entered_fee_assumptions_change_buy_and_sale_guidance(self):
         p=profile(buy_fee_nok=25,sell_fee_nok=12)
         s=snapshot(10);s['positions'][0]['above']=100
-        v=self.plan(s,[card('A.OL',action='Consider taking profits'),card('B.OL',2)],p)
+        v=self.plan(s,[{**card('A.OL',action='Consider taking profits'),'review_price':100},card('B.OL',2)],p)
         self.assertEqual(v['buys'][0]['fee_nok'],25)
         sale=next(r for r in v['holdings'] if r['symbol']=='A.OL')
         self.assertEqual(sale['gross_proceeds_nok'],300)
@@ -122,10 +122,11 @@ class TradePlanTests(unittest.TestCase):
 
     def test_sale_never_exceeds_owned_and_zero_review_is_explicit(self):
         s=snapshot(1);s['positions'][0].update(below=100,above=100)
-        v=self.plan(s,[card('A.OL',action='Review sell threshold')],profile(review_sell_pct=100))
+        v=self.plan(s,[{**card('A.OL',action='Review sell threshold'),'review_price':100}],profile(review_sell_pct=100))
         self.assertEqual(v['holdings'][0]['sell_shares'],1)
         self.assertEqual(v['holdings'][0]['remaining_shares'],0)
-        v=self.plan(s,[card('A.OL',action='Consider taking profits')],profile(review_sell_pct=0))
+        s['positions'][0]['below']=None
+        v=self.plan(s,[{**card('A.OL',action='Consider taking profits'),'review_price':100}],profile(review_sell_pct=0))
         self.assertEqual(v['holdings'][0]['sell_shares'],0)
         self.assertTrue(any('0%' in r for r in v['holdings'][0]['reasons']))
 
@@ -141,8 +142,8 @@ class TradePlanTests(unittest.TestCase):
         self.assertTrue(any('cash reserve' in reason for r in v['holdings'] for reason in r['reasons']))
 
     def test_stale_report_suppresses_signals_but_not_fresh_allocation_math(self):
-        s=snapshot(10);p=profile(cash_nok=0,max_stock_pct=60)
-        v=tp.build(s,{'generated':NOW-2*86400,'cards':[card('A.OL',action='Consider taking profits'),card()]},p,NOW)
+        s=snapshot(10);s['positions'][0]['above']=100;p=profile(cash_nok=0,max_stock_pct=60)
+        v=tp.build(s,{'generated':NOW-2*86400,'cards':[{**card('A.OL',action='Consider taking profits'),'review_price':100},card()]},p,NOW)
         self.assertEqual(v['buys'],[])
         self.assertEqual(v['holdings'][0]['sell_shares'],4)
         self.assertFalse(any('sale-review setting' in r for r in v['holdings'][0]['reasons']))

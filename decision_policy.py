@@ -7,6 +7,20 @@ SELL_SIGNALS = frozenset({'Consider reducing / selling', 'Review sell threshold'
                           'Consider taking profits'})
 
 
+REVIEW_LEVELS = {
+    'Review sell threshold': 'below',
+    'Consider taking profits': 'above',
+}
+
+
+def saved_price_trigger(position, price):
+    if position.get('below') is not None and price <= position['below']:
+        return 'Review sell threshold'
+    if position.get('above') is not None and price >= position['above']:
+        return 'Consider taking profits'
+    return None
+
+
 def trend_score(metrics):
     return 25 * sum((metrics['close'] > metrics['ma200'], metrics['close'] > metrics['ma50'],
                      metrics['ma50'] > metrics['ma200'], metrics['momentum3m'] > 0))
@@ -40,12 +54,11 @@ def decide(metrics, price, position=None, min_turnover_nok=250000):
         if metrics['close'] < metrics['ma200'] and metrics['momentum3m'] < 0:
             action = 'Consider reducing / selling'
             reasons.insert(0, 'Both the long-term price trend and three-month momentum are negative.')
-        if position.get('below') is not None and price <= position['below']:
-            action = 'Review sell threshold'
-            reasons.insert(0, 'Your lower review price has been reached.')
-        elif position.get('above') is not None and price >= position['above']:
-            action = 'Consider taking profits'
-            reasons.insert(0, 'Your upper review price has been reached.')
+        trigger = saved_price_trigger(position, price)
+        if trigger:
+            action = trigger
+            level = 'lower' if REVIEW_LEVELS[trigger] == 'below' else 'upper'
+            reasons.insert(0, f'Your {level} review price has been reached.')
     elif not known:
         action = 'Wait / liquidity unknown'
     elif turnover < min_turnover_nok:

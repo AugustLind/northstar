@@ -20,14 +20,14 @@ def holding_advice(sale):
     if not sale:
         return {'label':'Insufficient data','reason':'No current technical assessment.'}
     technical=sale['technical_review_reason']
-    portfolio=sale['portfolio_review_reason']
-    if technical or portfolio:
+    reasons=([technical] if technical else [])+sale['portfolio_review_reasons']
+    if reasons:
         shares=sale['sell_shares']
-        return {'label':'Sell review','reason':' '.join(filter(None,(technical,portfolio))),
+        return {'label':'Sell review','reason':' '.join(reasons),
                 'review_price':sale['review_price'],
                 'shares':shares or None,'percent':shares/sale['owned']*100 if shares else None,
                 'sizing_blocker':None if shares else (sale['sizing_blocker'] or 'No whole-share reduction is available.')}
-    if sale['technical_action']=='Hold / monitor':
+    if sale['technical_action']=='Hold / monitor' and not sale['technical_review_blocker']:
         return {'label':'Hold','reason':'No confirmed sell trigger for this holding.'}
     return {'label':'Insufficient data',
             'reason':sale['technical_review_blocker'] or 'No current technical assessment.'}

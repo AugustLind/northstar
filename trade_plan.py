@@ -46,34 +46,42 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
         target=position.get('above') if position else None
         action=card.get('action') if report_ok and signal_current(card,now) else None
         sell_action=action in SELL_SIGNALS
-        waiting=advice_state.gate(h['symbol'],'sell',snapshot,profile,now) if sell_action else None
-        level_key,level_reason={
-            'Review sell threshold':('below','Lower review price reached.'),
-            'Consider taking profits':('above','Upper review price reached.'),
-        }.get(action,(None,None))
-        technical_reason=(level_reason or (card.get('reasons') or [action])[0]
-                          if sell_action and not waiting else None)
+        level_key=policy.REVIEW_LEVELS.get(action)
         review_price=position.get(level_key) if position and level_key else None
-        if level_key and technical_reason:
-            reached=(pf.fresh(q,now) and position and q.get('currency')==position['currency']
-                     and review_price is not None
-                     and (q['price']<=review_price if level_key=='below' else q['price']>=review_price))
-            if not reached:
-                technical_reason=None
+        live_trigger=(policy.saved_price_trigger(position,q['price'])
+                      if position and pf.fresh(q,now) and q.get('currency')==position['currency'] else None)
+        waiting=None
+        if sell_action:
+            if level_key and not (
+                live_trigger==action and card.get('review_price')==review_price
+            ):
                 waiting='Refresh the market report to confirm the current saved review price.'
-        weight=h['weight_pct']
-        limit_reason=(f"Above your {profile['max_stock_pct']}% position limit."
-                      if weight is not None and weight>profile['max_stock_pct']+1e-8 else None)
+            else:
+                waiting=advice_state.gate(
+                    h['symbol'],'sell',snapshot,profile,now,
+                    review_trigger=(action,review_price) if level_key else None)
+        elif action=='Hold / monitor' and live_trigger:
+            waiting='Refresh the market report to confirm the current saved review price.'
+        technical_reason=None
+        if sell_action and not waiting:
+            technical_reason=(card.get('reasons') or [action])[0]
+            if level_key:
+                level='Lower' if level_key=='below' else 'Upper'
+                technical_reason=f'{level} review price reached.'
         sizing_blocker=None
         if snapshot.get('ledger_reconciled') is False:
             sizing_blocker='Reconcile holdings and cash against the ledger before sizing sales.'
         elif not ctx['complete'] or not supported:
             sizing_blocker='Quantity unavailable: complete portfolio valuation, fresh NOK quotes and one whole-share Oslo entry per ticker are required.'
-        if sizing_blocker and not limit_reason:
-            if h['issuer'] in issuer_over_limit:
-                limit_reason=f"Combined share classes exceed your {profile['max_stock_pct']}% company limit."
-            elif h['sector'] in sector_over_limit:
-                limit_reason=f"{h['sector']} exceeds your {profile['max_sector_pct']}% sector limit."
+        portfolio_reasons=[]
+        if sizing_blocker:
+            weight=h['weight_pct']
+            if weight is not None and weight>profile['max_stock_pct']+1e-8:
+                portfolio_reasons.append(f"Above your {profile['max_stock_pct']}% position limit.")
+            elif h['issuer'] in issuer_over_limit:
+                portfolio_reasons.append(f"Combined share classes exceed your {profile['max_stock_pct']}% company limit.")
+            if h['sector'] in sector_over_limit:
+                portfolio_reasons.append(f"{h['sector']} exceeds your {profile['max_sector_pct']}% sector limit.")
         row={'symbol':h['symbol'],'name':(card or {}).get('name',h['symbol']),'owned':h['shares'],
              'sell_shares':0 if not sizing_blocker else None,'remaining_shares':h['shares'],
              'gross_proceeds_nok':0. if not sizing_blocker else None,
@@ -89,7 +97,7 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
              'sector':h['sector'],'reasons':[],'technical_action':action or 'Current technical signal unavailable',
              'technical_review_reason':technical_reason,'technical_review_blocker':waiting,
              'review_price':review_price if technical_reason else None,
-             'portfolio_review_reason':limit_reason,'sizing_blocker':sizing_blocker}
+             'portfolio_review_reasons':portfolio_reasons,'sizing_blocker':sizing_blocker}
         if not basis_valid:
             row['break_even_status']='Break-even unavailable: enter a positive cost basis for this holding.'
         elif profile['sell_fee_nok'] is None:
@@ -107,8 +115,8 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
             row['remaining_shares']=row['owned']-row['sell_shares']
             row['gross_proceeds_nok']=row['sell_shares']*row['price']
             row['reasons'].append(reason)
-            if portfolio_limit and not row['portfolio_review_reason']:
-                row['portfolio_review_reason']=reason
+            if portfolio_limit:
+                row['portfolio_review_reasons'].append(reason)
     def ceil_shares(value,price):
         return max(0,math.ceil(value/price-1e-10))
     for row in rows:
@@ -151,7 +159,12 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
     # Sales to meet the cash reserve are a separate scenario; proceeds never fund the buy plan.
     sell_fee=profile['sell_fee_nok']
     selected_orders=sum(bool(r['sell_shares']) for r in rows)
-    need=total*profile['reserve_pct']/100-ctx['cash_nok']-sum(r['gross_proceeds_nok'] or 0 for r in rows)
+    reserve_shortfall=total*profile['reserve_pct']/100-ctx['cash_nok']
+    if reserve_shortfall>1e-8 and all(r['sell_shares'] is None for r in rows):
+        for row in rows:
+            row['portfolio_review_reasons'].append(
+                f"Tracked cash is below your {profile['reserve_pct']}% cash reserve.")
+    need=reserve_shortfall-sum(r['gross_proceeds_nok'] or 0 for r in rows)
     if sell_fee is not None:
         need+=selected_orders*sell_fee
     for row in sorted((r for r in rows if r['sell_shares'] is not None),key=lambda r:(-r['remaining_shares']*r['price'],r['symbol'])):
