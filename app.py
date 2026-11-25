@@ -12,6 +12,7 @@ import hmac
 import base64
 import binascii
 import secrets
+import sys
 import research
 import research_worker
 import decision_policy
@@ -60,14 +61,30 @@ def request_origin_allowed(origin, host):
     pages = os.environ.get('NORTHSTAR_PAGES_ORIGIN')
     return not origin or origin == allowed or bool(pages and origin == pages)
 
+def bearer_digest(authorization):
+    if authorization and authorization.startswith('Bearer '):
+        return hashlib.sha256(authorization[7:].encode()).hexdigest()
+    return ''
+
+
 def api_authorized(authorization):
     expected = os.environ.get('NORTHSTAR_ACCESS_KEY_HASH')
     if not expected:
         return not os.environ.get('NORTHSTAR_PAGES_ORIGIN')
-    if not authorization or not authorization.startswith('Bearer '):
+    digest = bearer_digest(authorization)
+    if hmac.compare_digest(digest, expected):
+        return True
+    if not authorization or not authorization.startswith('Bearer ns-session-'):
         return False
-    digest = hashlib.sha256(authorization[7:].encode()).hexdigest()
-    return hmac.compare_digest(digest, expected)
+    with connect() as db:
+        return db.execute('SELECT 1 FROM remembered_sessions WHERE digest=? AND key_hash=?',
+                          (digest, expected)).fetchone() is not None
+
+
+def revoke_remembered_sessions():
+    with connect() as db:
+        db.execute('DELETE FROM remembered_sessions')
+
 
 def connect():
     DB.parent.mkdir(exist_ok=True)
@@ -81,6 +98,7 @@ def connect():
     if 'long_term' not in {r['name'] for r in db.execute('PRAGMA table_info(positions)')}:
         db.execute('ALTER TABLE positions ADD COLUMN long_term INTEGER NOT NULL DEFAULT 0')
     db.execute('CREATE TABLE IF NOT EXISTS quotes (symbol TEXT PRIMARY KEY, payload TEXT)')
+    db.execute('CREATE TABLE IF NOT EXISTS remembered_sessions (digest TEXT PRIMARY KEY, key_hash TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, payload TEXT)')
     return db
 
@@ -324,6 +342,14 @@ def announcement_view(symbol=None, scope='focus'):
                   progress=read_meta('announcements_progress'))
     return result
 
+def ledger_reconciliation(positions, profile, baseline, cash_check):
+    if cash_check.get('mismatch_active'):
+        return False
+    if baseline:
+        return baseline['fingerprint'] == transactions.fingerprint(positions, profile['cash_nok'])
+    return None
+
+
 def state(include_fundamentals=False):
     with connect() as db:
         result = {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
@@ -337,7 +363,8 @@ def state(include_fundamentals=False):
         result['signal_state']=read_meta('signal_state',{})
         result['last_trades']=read_meta('last_trades',{})
         baseline=read_meta('ledger_state')
-        result['ledger_reconciled']=(False if read_meta('broker_cash_check',{}).get('mismatch_active') else (baseline['fingerprint']==transactions.fingerprint(result['positions'],result['manual_portfolio_preferences']['cash_nok'])) if baseline else None)
+        result['ledger_reconciled']=ledger_reconciliation(result['positions'], result['manual_portfolio_preferences'],
+                                                        baseline, read_meta('broker_cash_check',{}))
         result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
         return result
 
@@ -545,9 +572,12 @@ def broker_cash_check(data):
 def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
-    result['buy_candidates']=plan['buys'][:3]
+    result['buy_candidates']=plan['buys'][:5]
     result['buy_candidates_stale']=not decision_policy.current_report(report,time.time())
-    result['buy_candidate_warnings']=plan['warnings']
+    result['buy_candidate_warnings']=[
+        row['symbol']+': '+row['reason'] for row in plan['blocked_buys'] if row['evidence_missing']
+    ]
+    result['buy_candidate_research_incomplete']=bool((report or {}).get('coverage', {}).get('unavailable'))
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
     result['email']=email_worker().status()
@@ -704,11 +734,20 @@ def archive_run(report,snapshot,config):
 
 
 def account_view(allow_prior_close=False):
-    snapshot=state()
     with connect() as db:
         transactions.schema(db)
-        events=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM ledger_events ORDER BY date,uid')]
-    return account_performance.view(snapshot,read_meta('ledger_state'),events,allow_prior_close=allow_prior_close)
+        db.execute('BEGIN')
+        positions = [dict(row) for row in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        quotes = {row['symbol']: json.loads(row['payload']) for row in db.execute('SELECT * FROM quotes')}
+        metadata = {row['key']: json.loads(row['payload']) for row in db.execute(
+            "SELECT * FROM metadata WHERE key IN ('portfolio_preferences', 'ledger_state', 'broker_cash_check')")}
+        events = [json.loads(row['payload']) for row in db.execute('SELECT payload FROM ledger_events ORDER BY date,uid')]
+    profile = portfolio_fit.preferences(metadata.get('portfolio_preferences', {}))
+    baseline = metadata.get('ledger_state')
+    reconciled = ledger_reconciliation(positions, profile, baseline, metadata.get('broker_cash_check', {}))
+    snapshot = {'positions': positions, 'quotes': quotes, 'manual_portfolio_preferences': profile,
+                'ledger_reconciled': reconciled}
+    return account_performance.view(snapshot, baseline, events, allow_prior_close=allow_prior_close)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -838,7 +877,12 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if not request_origin_allowed(origin, self.headers.get('Host', '')):
             return self.send_json({'error': 'Cross-origin request rejected.'}, 403)
-        if not api_authorized(self.headers.get('Authorization')):
+        authorization = self.headers.get('Authorization')
+        if self.path == '/api/session/remember':
+            expected = os.environ.get('NORTHSTAR_ACCESS_KEY_HASH')
+            if not expected or not hmac.compare_digest(bearer_digest(authorization), expected):
+                return self.send_json({'error': 'Enter your Northstar access key to remember this browser.'}, 401)
+        elif not api_authorized(authorization):
             return self.send_json({'error': 'Sign in with your Northstar access key.'}, 401)
         if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             return self.send_json({'error': 'JSON required.'}, 415)
@@ -849,6 +893,16 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError('JSON object required.')
+            if self.path == '/api/session/remember':
+                token = 'ns-session-' + secrets.token_urlsafe(32)
+                with connect() as db:
+                    db.execute('INSERT INTO remembered_sessions VALUES (?,?)',
+                               (bearer_digest('Bearer ' + token), expected))
+                return self.send_json({'token': token})
+            if self.path == '/api/session/sign-out':
+                with connect() as db:
+                    db.execute('DELETE FROM remembered_sessions WHERE digest=?', (bearer_digest(authorization),))
+                return self.send_json({'ok': True})
             if self.path == '/api/email/settings':
                 return self.send_json(email_worker().set_enabled(data.get('enabled')))
             elif self.path == '/api/email/test':
@@ -960,6 +1014,10 @@ def report_ready():
         EMAIL_WORKER.wake.set()
 
 if __name__ == '__main__':
+    if sys.argv[1:] == ['revoke-remembered-sessions']:
+        revoke_remembered_sessions()
+        print('Revoked all remembered browser sessions.')
+        sys.exit(0)
     connect().close()
     ANNOUNCEMENTS_WORKER = announcements.Worker(read_meta,write_meta,announcement_focus)
     COMPANY_WORKER=company_data.Worker(read_meta,write_meta,financial_symbols)

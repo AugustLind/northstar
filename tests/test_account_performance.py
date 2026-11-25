@@ -20,6 +20,47 @@ def setup(events,prices,opening_shares=10,opening_cash=100,opening_cost=10,legac
     return snapshot,baseline
 
 class AccountPerformanceTests(unittest.TestCase):
+    def test_new_listing_without_previous_close_still_counts_in_account_return(self):
+        prices = quote([])
+        prices.update(price=110, asof=stamp('2025-01-06T12:00'))
+        rows = [event(1, '2025-01-06', 'buy', -1050, 10)]
+        snapshot, baseline = setup(rows, prices, opening_shares=0, opening_cash=2000)
+
+        today = ap.view(snapshot, baseline, rows, stamp('2025-01-06T13:00'))['today']
+        self.assertEqual(today['coverage'], [])
+        self.assertEqual(today['change_nok'], 50)
+        self.assertEqual(today['change_pct'], 2.5)
+        self.assertIsNone(today['holdings'][0]['change_nok'])
+
+    def test_completed_session_requires_a_dated_close(self):
+        prices = quote([('2025-01-02', 10)])
+        prices.update(price=12, asof=stamp('2025-01-03T12:00'))
+        snapshot, baseline = setup([], prices)
+        now = stamp('2025-01-06T06:00')
+
+        today = ap.view(snapshot, baseline, [], now)['today']
+        self.assertEqual(today['date'], '2025-01-03')
+        self.assertFalse(today['live'])
+        self.assertIsNone(today['change_nok'])
+        self.assertIn('A.OL: missing close on 2025-01-03.', today['coverage'])
+
+        prices['history'].extend(quote([('2025-01-03', 11)])['history'])
+        today = ap.view(snapshot, baseline, [], now)['today']
+        self.assertEqual(today['change_nok'], 10)
+        self.assertEqual(today['coverage'], [])
+
+    def test_previous_oslo_session_skips_easter_closures(self):
+        self.assertEqual(ap.previous_oslo_session(dt.date(2026, 4, 7)), dt.date(2026, 4, 1))
+
+    def test_today_full_sale_needs_only_the_previous_close_and_sale_proceeds(self):
+        events = [event(1, '2025-01-06', 'sell', cash=110, qty=1)]
+        snapshot, baseline = setup(events, quote([('2025-01-03', 100)]),
+                                   opening_shares=1, opening_cash=0)
+        today = ap.view(snapshot, baseline, events, now=NOW + 14 * 3600)['today']
+        self.assertEqual(today['change_nok'], 10)
+        self.assertEqual(today['change_pct'], 10)
+        self.assertEqual(today['coverage'], [])
+
     def test_current_value_and_today_movement_use_current_quotes_and_recorded_cash(self):
         q=quote([('2025-01-03',10)])
         q.update(price=12,asof=stamp('2025-01-06')+12*3600)

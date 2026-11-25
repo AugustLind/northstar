@@ -2,10 +2,11 @@
 from pathlib import Path
 import json
 import sys
+from tempfile import TemporaryDirectory
 import time
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
-from browser_fixture import Fixture
+from browser_fixture import Fixture, seed_candidates, seed_today, session_timestamp
 from browser_client import Browser
 import app
 import advice_state
@@ -74,7 +75,144 @@ def prove_holding_advice(browser):
         browser.evaluate('loadDaily()')
 
 
+def check_remembered_browser(fixture):
+    def visit(browser):
+        browser.call('Page.navigate', {'url': fixture.origin})
+        browser.wait("document.readyState==='complete' && Boolean(document.querySelector('#connectionPanel'))", 'dashboard loaded')
+
+    with TemporaryDirectory(prefix='northstar-restart-') as profile:
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("!document.querySelector('#connectionPanel').hidden", 'anonymous sign-in')
+            browser.evaluate("document.querySelector('#rememberBrowser').click()")
+            browser.fill_key(fixture.key)
+            browser.wait("document.querySelector('#accountStatus').textContent==='Connected'", 'remembered sign-in')
+            if browser.evaluate("Boolean(sessionStorage.getItem('northstar-key')) || !localStorage.getItem('northstar-remembered-session')"):
+                raise RuntimeError('Remembered sign-in did not replace the access key with a session token.')
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("document.querySelector('#accountStatus').textContent==='Connected' && document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#holdings').textContent.includes('SYNTH.OL')", 'remembered sign-in after complete Chrome restart')
+            browser.evaluate("document.querySelector('#connectionButton').click();document.querySelector('#disconnect').click()")
+            browser.wait("!document.querySelector('#connectionPanel').hidden && !localStorage.getItem('northstar-remembered-session') && !document.querySelector('#holdings').textContent.includes('SYNTH.OL')", 'remembered sign-out')
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("!document.querySelector('#connectionPanel').hidden && document.querySelector('#accountStatus').textContent==='Not connected'", 'sign-in required after restarting following sign-out')
+    print('Remembered sign-in and sign-out passed across complete Chrome restarts.')
+
+
+def prove_portfolio_and_candidates():
+    from unittest.mock import patch
+
+    with Fixture() as fixture, Browser() as browser:
+        browser.call('Page.navigate', {'url': fixture.origin+'/'})
+        browser.wait("document.querySelector('#connectionPanel') && !document.querySelector('#connectionPanel').hidden", 'sign-in panel')
+        browser.fill_key(fixture.key)
+        browser.wait("document.querySelector('#accountStatus').textContent==='Connected' && "
+                     "document.querySelector('[data-tab=portfolio][aria-current=page]') && "
+                     "document.querySelector('#todayTitle').checkVisibility() && !location.hash",
+                     'signed-in Portfolio landing with visible Today section')
+        original_report = app.read_meta('report')
+        report = seed_candidates()
+        browser.evaluate("document.querySelector('[data-tab=candidates]').focus()")
+        press_enter(browser)
+        browser.wait("document.querySelector('#workspaceTitle').textContent==='Candidates' && "
+                     "document.querySelector('#buyCandidates').checkVisibility() && "
+                     "document.querySelectorAll('#buyCandidates article').length===5",
+                     'Portfolio to Candidates via keyboard and real shared-budget response')
+        expected = [[f'IDEA{rank}.OL', f'RANK {rank}', sector] for rank, sector in enumerate(
+            ('Energy', 'Materials', 'Health care', 'Financials', 'Utilities'), 1)]
+        cards = browser.evaluate("""Array.from(document.querySelectorAll('#buyCandidates article'), card => [
+            card.querySelector('button').dataset.candidateStock,
+            card.querySelector('p').textContent,
+            card.querySelector('p:nth-of-type(2)').textContent
+        ])""")
+        if not all(actual[:2] == wanted[:2] and 'Fits your '+wanted[2]+' sector' in actual[2]
+                   for actual, wanted in zip(cards, expected)):
+            raise RuntimeError('Ranked candidates or portfolio reasons differ: '+str(cards))
+
+        browser.evaluate("document.querySelector('[data-tab=portfolio]').click()")
+        browser.wait("document.querySelector('#todayTitle').checkVisibility()", 'Candidates back to Portfolio')
+        def candidate_state(payload, expected_status):
+            app.write_meta('report', payload)
+            browser.evaluate("document.querySelector('[data-tab=candidates]').click()")
+            browser.wait("document.querySelector('#buyCandidatesStatus').textContent.includes("+json.dumps(expected_status)+
+                         ") && !document.querySelector('#buyCandidates article')", expected_status)
+        candidate_state({**report, 'generated': time.time()-2*86400}, 'Research is stale')
+        candidate_state({**report, 'cards': [], 'coverage': {'unavailable': 1}}, 'lack usable research evidence')
+        candidate_state({**report, 'cards': [], 'coverage': {'unavailable': 0}}, 'No eligible buying candidates')
+        app.write_meta('report', report)
+        browser.evaluate("document.querySelector('[data-tab=candidates]').click()")
+        browser.wait("document.querySelectorAll('#buyCandidates button').length===5", 'candidates recover after fresh research')
+        browser.evaluate("document.querySelector('#buyCandidates button').focus()")
+        press_enter(browser)
+        browser.wait("document.querySelector('#workspaceTitle').textContent==='Research' && explorerSymbol==='IDEA1.OL'",
+                     'rank-one candidate opens Research by keyboard')
+        app.write_meta('report', original_report)
+
+        seed_today(1300, [('deposit', 10000, 0)], quote_time='09:06')
+        provider_quotes = app.state()['quotes']
+        view = app.account_performance.view
+        now = session_timestamp('2025-01-06T09:07')
+        with patch.object(app.account_performance, 'view', side_effect=lambda *args, **kwargs: view(*args, **kwargs, now=now)):
+            browser.evaluate("document.querySelector('[data-tab=portfolio]').click()")
+
+            def wait_today(account, performance, percent, cash):
+                assertion = f"""(() => {{
+                    const metrics = Array.from(document.querySelectorAll('#todayMetrics strong'), n => n.textContent);
+                    const signed = value => (value > 0 ? '+' : '') + money(value);
+                    return metrics[0] === money({account}) &&
+                        metrics[1] === signed({performance}) + ' · ' + {json.dumps(percent)} &&
+                        metrics[2] === signed({cash}) && Boolean(document.querySelector('#todayChart svg'));
+                }})()"""
+                try:
+                    browser.wait(assertion, f'Today value {account}, return {performance} ({percent}), flow {cash}, and chart')
+                except RuntimeError as error:
+                    actual = browser.evaluate("Array.from(document.querySelectorAll('#todayStatus, #todayMetrics strong'), n => n.textContent)")
+                    raise RuntimeError(f'{error}. Displayed {actual}') from error
+
+            wait_today(111000, 1000, '+1.0%', 10000)
+            browser.wait("""document.querySelector('#todayStatus').textContent.includes('2025-01-06 (Europe/Oslo)') &&
+                document.querySelector('#todayChart svg title').textContent.includes('2025-01-03 to 2025-01-06') &&
+                ['2025-01-03', '2025-01-06'].every(date =>
+                    Array.from(document.querySelectorAll('#todayChart svg text')).some(label => label.textContent === date)) &&
+                document.querySelector('#todayMetrics').textContent.includes('day end') &&
+                Array.from(document.querySelectorAll('#todayHoldings tbody tr')).find(row => row.textContent.includes('USDTEST')).textContent.includes('+10.0%')
+                """, 'dated close-to-quote basis, end-of-day assumption and USD FX move')
+
+            now = session_timestamp('2025-01-06T15:00')
+            seed_today(1000, [('buy', -1000, 1), ('withdrawal', -2000, 0), ('dividend', 50, 0), ('fee', -30, 0)])
+            browser.evaluate('loadOverviewAccount()')
+            wait_today(98120, 120, '+0.1%', -2000)
+            browser.wait("""Array.from(document.querySelectorAll('#todayHoldings tbody tr'))
+                .find(row => row.textContent.includes('SYNTH.OL')).cells[1].textContent === money(0)
+                """, 'unchanged per-share movement after buying another share')
+
+            seed_today(1000, [], quote_date='2025-01-03')
+            for local_time in ('2025-01-05T15:00', '2025-01-06T00:30', '2025-01-06T08:50', '2025-01-06T09:05'):
+                now = session_timestamp(local_time)
+                browser.evaluate('loadOverviewAccount()')
+                browser.wait("document.querySelector('#todayStatus').textContent.includes('Last completed session 2025-01-03')",
+                             'dated completed session on closure, at Oslo date boundary and before the first quote')
+                wait_today(100000, 0, '0.0%', 0)
+
+            now = session_timestamp('2025-01-06T15:00')
+            browser.evaluate('loadOverviewAccount()')
+            browser.wait("""document.querySelector('#todayStatus').textContent.includes('missing session quote on 2025-01-06') &&
+                !document.querySelector('#todayChart svg')""", 'missing open-session quote coverage gap')
+
+            seed_today(1300, [('deposit', 10000, 0)], quote_date='2025-01-03')
+            with patch.object(app, 'fetch_quote', side_effect=provider_quotes.__getitem__):
+                browser.evaluate("document.querySelector('#refreshToday').click()")
+                wait_today(111000, 1000, '+1.0%', 10000)
+        if browser.errors:
+            raise RuntimeError('Uncaught browser error during Portfolio and Candidates checks.')
+    print('Synthetic Portfolio landing, Today figures and coverage, and Candidates navigation, ranking and terminal states passed.')
+
+
 def run():
+    with Fixture() as fixture:
+        check_remembered_browser(fixture)
+    prove_portfolio_and_candidates()
     with Fixture() as fixture,Browser() as browser:
         for width,height in ((1440,1000),(390,900)):
             browser.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':height,'deviceScaleFactor':1,'mobile':width<600})
@@ -86,7 +224,7 @@ def run():
             browser.evaluate('loadDaily()')
             browser.wait("document.querySelector('#dailyStatus').textContent.startsWith('Updated') && document.querySelector('#holdingAssessments').textContent.includes('Policy result:') && !document.querySelector('#buyCandidatesStatus').textContent.includes('Loading eligible candidates')",'authenticated holding assessment and buying-candidate response')
             browser.wait("!document.querySelector('#overviewAccountStatus').textContent.includes('Loading')",'current account summary response')
-            browser.wait("document.querySelector('#researchStatus').textContent.includes('Last report:') && document.querySelector('#workspaceTitle').textContent==='Overview'",'completed sign-in workspace startup')
+            browser.wait("document.querySelector('#researchStatus').textContent.includes('Last report:') && document.querySelector('#workspaceTitle').textContent==='Portfolio' && !document.querySelector('#portfolio').hidden",'authenticated Portfolio landing')
             if browser.evaluate("document.querySelector('#overviewValue').textContent==='Unavailable' || document.querySelector('#overviewValue').textContent==='—'"):
                 raise RuntimeError('Current account value unavailable: '+str(browser.evaluate("document.querySelector('#overviewValueMeta').textContent+' '+document.querySelector('#overviewAccountStatus').textContent")))
             if browser.evaluate("document.querySelector('#overviewPnl').textContent==='Unavailable'"):
@@ -121,7 +259,7 @@ def run():
             prove_holding_advice(browser)
             if width==1440:
                 browser.evaluate("document.querySelector('#holdings button').click();const field=document.querySelector('#positionForm').elements.review;field.value='Unsaved reload draft';field.dispatchEvent(new Event('input',{bubbles:true}))")
-                browser.call('Page.reload',{'ignoreCache':True})
+                browser.reload()
                 browser.wait("document.querySelector('#editor').open && document.querySelector('#positionForm').elements.review.value==='Unsaved reload draft'",'holding edit draft restoration')
                 if not browser.evaluate("document.querySelector('#positionForm').elements.symbol.readOnly"):
                     raise RuntimeError('Reloaded holding edit draft lost its protected ticker field.')
@@ -205,17 +343,8 @@ def run():
             browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click();document.querySelector('[data-tab=\"recommendations\"]').click()")
             if not browser.evaluate("document.querySelector('#adviceFilter').value==='all'"):
                 raise RuntimeError('Research selection was lost when changing workspaces.')
-            if not browser.evaluate("document.querySelectorAll('nav [data-tab]').length===4 && !/NaN|Infinity/.test(document.querySelector('#chartPlot').innerHTML)"):
+            if not browser.evaluate("document.querySelectorAll('nav [data-tab]').length===5 && !/NaN|Infinity/.test(document.querySelector('#chartPlot').innerHTML)"):
                 raise RuntimeError('Research navigation/chart contract failed.')
-            candidate_checks=browser.evaluate("(() => { const item=i=>({symbol:'BOUV.OL',name:'Bouvet',rank:i+1,buy_shares:1,total_nok:204,portfolio_reason:'Fits your sector and cash limits.'}); let counts=[]; for(let n=0;n<=3;n++){renderBuyCandidates({buy_candidates:Array.from({length:n},(_,i)=>item(i)),buy_candidates_stale:false,buy_candidate_warnings:[]});counts.push(document.querySelectorAll('#buyCandidates [data-candidate-stock]').length);} renderBuyCandidates({buy_candidates:Array.from({length:5},(_,i)=>item(i)),buy_candidates_stale:false,buy_candidate_warnings:[]}); const capped=document.querySelectorAll('#buyCandidates [data-candidate-stock]').length; renderBuyCandidates({buy_candidates:[],buy_candidates_stale:true,buy_candidate_warnings:[]}); const stale=document.querySelector('#buyCandidatesStatus').textContent.includes('Research is stale'); renderBuyCandidates({buy_candidates:[],buy_candidates_stale:false,buy_candidate_warnings:['Portfolio incomplete']}); const blocked=document.querySelector('#buyCandidatesStatus').textContent.includes('current portfolio inputs'); return {counts,capped,stale,blocked}; })()")
-            if candidate_checks != {'counts':[0,1,2,3],'capped':3,'stale':True,'blocked':True}:
-                raise RuntimeError('Buying-candidate count, stale or blocked-state check failed: '+str(candidate_checks))
-            browser.evaluate("document.querySelector('#daily').hidden=false;document.querySelector('#recommendations').hidden=true;document.querySelector('#workspaceTitle').textContent='Overview';document.querySelector('[data-tab=\"daily\"]').setAttribute('aria-current','page')")
-            browser.evaluate("renderBuyCandidates({buy_candidates:[{symbol:'BOUV.OL',name:'Bouvet',rank:1,buy_shares:1,total_nok:204,portfolio_reason:'Fits your sector and cash limits.'}],buy_candidates_stale:false,buy_candidate_warnings:[]});document.querySelector('#buyCandidates [data-candidate-stock]').focus()")
-            if not browser.evaluate("document.activeElement.matches('#buyCandidates [data-candidate-stock]')"):
-                raise RuntimeError('Buying-candidate action is not keyboard focusable.')
-            press_enter(browser)
-            browser.wait("document.querySelector('#workspaceTitle').textContent==='Research' && explorerSymbol==='BOUV.OL'",'keyboard buying-candidate Research action')
             browser.evaluate("document.querySelector('[data-tab=\"validation\"]').click()")
             if width==1440:
                 started=time.time()
@@ -255,7 +384,7 @@ def run():
             if not browser.evaluate("document.querySelector('#portfolioAdvanced').open && document.activeElement.id==='fit'"):
                 raise RuntimeError('Direct tool link did not reveal its parent disclosure and identify the destination: '+str(browser.evaluate("({outer:document.querySelector('#portfolioAdvanced').open,inner:document.querySelector('#fitGroup').open,focus:document.activeElement.id,hash:location.hash})")))
             browser.evaluate("const budget=document.querySelector('#fitPreferences').elements.purchase_nok;budget.value='5791';budget.dispatchEvent(new Event('input',{bubbles:true}))")
-            browser.call('Page.reload',{'ignoreCache':True})
+            browser.reload()
             browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#fitGroup').open && document.querySelector('#fitStatus').textContent.includes('Current portfolio check:') && document.querySelector('#researchStatus').textContent.includes('Last report:')",'deep-link refresh and unsaved edit restoration')
             if not browser.evaluate("document.querySelector('#fitPreferences').elements.purchase_nok.value==='5791' && document.querySelector('#adviceFilter').value==='all' && document.querySelector('#portfolioAdvanced').open"):
                 raise RuntimeError('Refresh did not preserve the tool link, unsaved allocation edit, or Research selection: '+str(browser.evaluate("({value:document.querySelector('#fitPreferences').elements.purchase_nok.value,filter:document.querySelector('#adviceFilter').value,advanced:document.querySelector('#portfolioAdvanced').open,saved:sessionStorage.getItem('northstar-workspace-ui-v1')})")))

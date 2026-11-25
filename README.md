@@ -30,8 +30,9 @@ not guaranteed; offline operation depends on previously cached data.
 
 ## First visit
 
-Start in **Overview → Needs attention** to review items that need action, then check
-the separate **Buying candidates** list. Open **Advanced tools** in a workspace for its
+Portfolio opens by default with current account value and Today’s performance.
+Open **Candidates** to see ranked buying ideas or **Overview → Needs attention**
+to review items that need action. Open **Advanced tools** in a workspace for its
 specialist workflows. Explore Research immediately, or open
 Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is
 a watchlist entry. For actual account returns, verify cash and an opening snapshot
@@ -46,7 +47,7 @@ files must be chosen again after a reload.
 
 - Screens an editable universe of Oslo stocks using technical signals and
   liquidity checks, with a top-20 view passing the shared entry policy.
-- Groups daily reviews, research, portfolio tools and strategy experiments into four workspaces.
+- Groups daily reviews, research, portfolio tools and strategy experiments into dedicated workspaces.
 - Draws interactive price, log-scale, volume, momentum, drawdown and volatility charts,
   with period statistics and shared-date company comparisons.
 - Measures return horizons, ATR/ADX, trend consistency, volume and historical tail risk
@@ -86,6 +87,11 @@ keep backups and portfolio exports outside tracked source.
 The local application binds to `127.0.0.1:8000`. Remote hosting and authentication
 require separate setup. The GitHub Pages dashboard is a static UI connected to
 an authenticated API; Pages alone cannot run Python, research workers, or Ollama.
+Select **Remember this browser** on a trusted browser to stay signed in after restarting it.
+The browser stores a revocable session token. The access key stays out of persistent storage.
+Remembered sessions have no scheduled expiry. Clearing browser storage or choosing **Sign out**
+requires signing in again.
+
 Do not put access keys or portfolio data in `static/config.js`.
 
 ## Optional setup

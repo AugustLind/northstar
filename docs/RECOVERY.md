@@ -66,3 +66,10 @@ initial installer to repair a configured Pages server.
 Recovery is complete only after service status, authenticated release verification,
 and your portfolio/ledger records have been checked. Scheduled backups and automatic
 restore drills are not currently implemented.
+
+## Revoke remembered browsers
+
+Run `python3 app.py revoke-remembered-sessions` from the deployed checkout as the
+service account. This revokes every remembered browser for that database immediately.
+Use the usual access key to sign in again. Rotating the configured access key also
+invalidates sessions issued under the previous key once the service uses the new hash.
