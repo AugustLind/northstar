@@ -30,9 +30,9 @@ not guaranteed; offline operation depends on previously cached data.
 
 ## First visit
 
-Signed-in visits open **Portfolio** with current account value and Today’s performance.
-Use **Overview → Needs attention** to review items that need action, then check
-the separate **Buying candidates** list. Open **Advanced tools** in a workspace for its
+Portfolio opens by default with current account value and Today’s performance.
+Open **Candidates** to see ranked buying ideas or **Overview → Needs attention**
+to review items that need action. Open **Advanced tools** in a workspace for its
 specialist workflows. Explore Research immediately, or open
 Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is
 a watchlist entry. For actual account returns, verify cash and an opening snapshot
@@ -47,7 +47,7 @@ files must be chosen again after a reload.
 
 - Screens an editable universe of Oslo stocks using technical signals and
   liquidity checks, with a top-20 view passing the shared entry policy.
-- Groups daily reviews, research, portfolio tools and strategy experiments into four workspaces.
+- Groups daily reviews, research, portfolio tools and strategy experiments into dedicated workspaces.
 - Draws interactive price, log-scale, volume, momentum, drawdown and volatility charts,
   with period statistics and shared-date company comparisons.
 - Measures return horizons, ATR/ADX, trend consistency, volume and historical tail risk

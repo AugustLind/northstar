@@ -1,4 +1,4 @@
-/* Four-workspace router with legacy-hash aliases. Views register before bootstrap. */
+/* Workspace router with legacy-hash aliases. Views register before bootstrap. */
 const workspaceRoutes = {
   daily: 'daily',
   announcements: 'daily',
@@ -6,6 +6,7 @@ const workspaceRoutes = {
   method: 'daily',
   recommendations: 'recommendations',
   portfolio: 'portfolio',
+  candidates: 'candidates',
   fit: 'portfolio',
   activity: 'portfolio',
   validation: 'validation',
@@ -14,6 +15,7 @@ const workspaceTitles = {
   daily: 'Overview',
   recommendations: 'Research',
   portfolio: 'Portfolio',
+  candidates: 'Candidates',
   validation: 'Strategy lab',
 };
 function workspaceElement(id) {
@@ -105,9 +107,7 @@ function workspaceFromLocation() {
     ? hashTarget
     : location.pathname === '/recommendations'
     ? 'recommendations'
-    : $('#accountStatus').textContent === 'Connected'
-    ? 'portfolio'
-    : 'daily';
+    : 'portfolio';
 }
 function openWorkspace(target, updateHistory = true) {
   const destination = workspaceElement(target);
@@ -140,8 +140,10 @@ function openWorkspace(target, updateHistory = true) {
       history.pushState({ workspace: target }, '', nextUrl);
     lastWorkspaceLocation = nextUrl;
   }
-  if (page === 'daily') {
+  if (page === 'daily' || page === 'candidates') {
     if (typeof loadDaily === 'function') loadDaily();
+  }
+  if (page === 'daily') {
     if (typeof loadSystemStatus === 'function') loadSystemStatus();
   }
   if (page === 'portfolio') {

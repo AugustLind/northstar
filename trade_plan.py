@@ -155,17 +155,20 @@ def build(snapshot,report,profile,now=None):
     if profile['purchase_nok']==0:
         warnings.append('Set your total buy-plan budget in Portfolio fit to generate purchase quantities.')
     for card in ranked:
-        symbol=pf.canonical(card['symbol']);reason=None
+        symbol=pf.canonical(card['symbol']);reason=None;evidence_missing=False
         if not report_ok or not signal_current(card,now):
             reason='Current technical report and quote required.'
+            evidence_missing=True
         elif snapshot.get('ledger_reconciled') is False:
             reason='Reconcile holdings and cash against the ledger before sizing purchases.'
+            evidence_missing=True
         elif symbol in blocked_sales:
             reason='This stock has a sale-review quantity; no conflicting purchase is planned.'
         elif not buy_signal(card):
             reason='The complete technical buy screen is not met.'
         elif not ctx['complete'] or not ctx['total_nok']:
             reason='Complete tracked portfolio valuation required.'
+            evidence_missing=True
         elif left<minimum_order-1e-8:
             reason='Remaining shared budget is below '+str(round(minimum_order,2))+' NOK needed for your purchase-fee limit.'
         if reason is None:
@@ -173,12 +176,15 @@ def build(snapshot,report,profile,now=None):
         q=quote_for(working,symbol)
         if reason is None and (not pf.fresh(q,now) or q.get('currency')!='NOK'):
             reason='Fresh NOK price required.'
+            evidence_missing=True
         existing_entries=[p for p in working['positions'] if pf.canonical(p['symbol'],p['currency'])==symbol]
         if reason is None and (len(existing_entries)>1 or any(abs(p['shares']-round(p['shares']))>1e-8 for p in existing_entries)):
             reason='Resolve fractional or duplicate holding entries before planning a whole-share purchase.'
+            evidence_missing=True
         current=pf.context(working,working_profile,now)
         if reason is None and (not current['sectors_complete'] or not profile['sectors'].get(symbol)):
             reason='Classify this stock and every holding to confirm sector capacity.'
+            evidence_missing=True
         if reason is None:
             # Reserve all possible later buy fees so the entire plan respects final weights.
             reserve_fees=max(0,max_orders-len(buys)-1)*buy_fee
@@ -209,7 +215,7 @@ def build(snapshot,report,profile,now=None):
                 if old:
                     working['quotes'][old['symbol']]=q
         if reason:
-            blocked.append({'symbol':symbol,'buy_shares':0,'reason':reason})
+            blocked.append({'symbol':symbol,'buy_shares':0,'reason':reason,'evidence_missing':evidence_missing})
     result_ctx=pf.context(working,working_profile,now)
     sale_proceeds=sum(r['gross_proceeds_nok'] or 0 for r in sells)
     for row in sells:

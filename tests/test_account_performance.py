@@ -40,13 +40,25 @@ class AccountPerformanceTests(unittest.TestCase):
 
         today = ap.view(snapshot, baseline, [], now)['today']
         self.assertEqual(today['date'], '2025-01-03')
-        self.assertTrue(today['completed'])
+        self.assertFalse(today['live'])
         self.assertIsNone(today['change_nok'])
-        self.assertIn('A.OL: missing session close coverage for 2025-01-03.', today['coverage'])
+        self.assertIn('A.OL: missing close on 2025-01-03.', today['coverage'])
 
         prices['history'].extend(quote([('2025-01-03', 11)])['history'])
         today = ap.view(snapshot, baseline, [], now)['today']
         self.assertEqual(today['change_nok'], 10)
+        self.assertEqual(today['coverage'], [])
+
+    def test_previous_oslo_session_skips_easter_closures(self):
+        self.assertEqual(ap.previous_oslo_session(dt.date(2026, 4, 7)), dt.date(2026, 4, 1))
+
+    def test_today_full_sale_needs_only_the_previous_close_and_sale_proceeds(self):
+        events = [event(1, '2025-01-06', 'sell', cash=110, qty=1)]
+        snapshot, baseline = setup(events, quote([('2025-01-03', 100)]),
+                                   opening_shares=1, opening_cash=0)
+        today = ap.view(snapshot, baseline, events, now=NOW + 14 * 3600)['today']
+        self.assertEqual(today['change_nok'], 10)
+        self.assertEqual(today['change_pct'], 10)
         self.assertEqual(today['coverage'], [])
 
     def test_current_value_and_today_movement_use_current_quotes_and_recorded_cash(self):

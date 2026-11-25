@@ -2,18 +2,12 @@
 initExplorer();
 initChartTools();
 openWorkspace(workspaceFromLocation(), false);
-load()
-  .then(() => {
-    if (!location.hash && workspaceFromLocation() === 'portfolio') openWorkspace('portfolio', false);
-  })
-  .catch((e) => ($('#message').textContent = e.message));
+load().catch((e) => ($('#message').textContent = e.message));
 loadResearch().finally(restoreWorkspaceUiState);
 loadSystemStatus();
 setInterval(() => {
   loadResearch();
   load().catch(() => {});
-  if (!$('#portfolio').hidden && $('#accountStatus').textContent === 'Connected')
-    loadAccountPerformance();
 }, 15000);
 setInterval(() => {
   if (!$('#daily').hidden) loadSystemStatus();

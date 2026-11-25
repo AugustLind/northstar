@@ -12,6 +12,7 @@
     "holdings-import.js",
     "trade-plan.js",
     "ledger.js",
+    "account-performance.js",
     "daily.js",
     "advice.js",
     "explorer.js",
@@ -21,7 +22,6 @@
     "validation-view.js",
     "system-status.js",
     "chart-tools.js",
-    "account-performance.js",
     "archive-view.js",
     "bootstrap.js"
   ],
