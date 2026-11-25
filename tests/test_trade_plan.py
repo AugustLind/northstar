@@ -41,7 +41,8 @@ class TradePlanTests(unittest.TestCase):
 
     def test_entered_fee_assumptions_change_buy_and_sale_guidance(self):
         p=profile(buy_fee_nok=25,sell_fee_nok=12)
-        v=self.plan(snapshot(10),[card('A.OL',action='Consider taking profits'),card('B.OL',2)],p)
+        s=snapshot(10);s['positions'][0]['above']=100
+        v=self.plan(s,[card('A.OL',action='Consider taking profits'),card('B.OL',2)],p)
         self.assertEqual(v['buys'][0]['fee_nok'],25)
         sale=next(r for r in v['holdings'] if r['symbol']=='A.OL')
         self.assertEqual(sale['gross_proceeds_nok'],300)
@@ -120,7 +121,7 @@ class TradePlanTests(unittest.TestCase):
         self.assertIsNone(v['cash_after_sell_scenario_nok'])
 
     def test_sale_never_exceeds_owned_and_zero_review_is_explicit(self):
-        s=snapshot(1)
+        s=snapshot(1);s['positions'][0].update(below=100,above=100)
         v=self.plan(s,[card('A.OL',action='Review sell threshold')],profile(review_sell_pct=100))
         self.assertEqual(v['holdings'][0]['sell_shares'],1)
         self.assertEqual(v['holdings'][0]['remaining_shares'],0)

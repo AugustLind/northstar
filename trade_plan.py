@@ -27,6 +27,11 @@ buy_signal = policy.buy_signal
 def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
     import advice_state
     rows=[]
+    issuer_over_limit={r['issuer'] for r in ctx['issuer_exposure']
+                       if r['weight_pct'] is not None and r['weight_pct']>profile['max_stock_pct']+1e-8}
+    sector_over_limit={r['sector'] for r in ctx['sectors']
+                       if ctx['sectors_complete'] and r['weight_pct'] is not None
+                       and r['weight_pct']>profile['max_sector_pct']+1e-8}
     for h in ctx['holdings']:
         card=cards.get(h['symbol']);q=quote_for(snapshot,h['symbol'])
         aliases=[p for p in snapshot['positions'] if pf.canonical(p['symbol'],p['currency'])==h['symbol']]
@@ -39,9 +44,39 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
         break_even=(basis+(profile['buy_fee_nok']+profile['sell_fee_nok'])/h['shares']
                     if supported and basis_valid and profile['sell_fee_nok'] is not None and h['shares']>0 else None)
         target=position.get('above') if position else None
+        action=card.get('action') if report_ok and signal_current(card,now) else None
+        sell_action=action in SELL_SIGNALS
+        waiting=advice_state.gate(h['symbol'],'sell',snapshot,profile,now) if sell_action else None
+        level_key,level_reason={
+            'Review sell threshold':('below','Lower review price reached.'),
+            'Consider taking profits':('above','Upper review price reached.'),
+        }.get(action,(None,None))
+        technical_reason=(level_reason or (card.get('reasons') or [action])[0]
+                          if sell_action and not waiting else None)
+        review_price=position.get(level_key) if position and level_key else None
+        if level_key and technical_reason:
+            reached=(pf.fresh(q,now) and position and q.get('currency')==position['currency']
+                     and review_price is not None
+                     and (q['price']<=review_price if level_key=='below' else q['price']>=review_price))
+            if not reached:
+                technical_reason=None
+                waiting='Refresh the market report to confirm the current saved review price.'
+        weight=h['weight_pct']
+        limit_reason=(f"Above your {profile['max_stock_pct']}% position limit."
+                      if weight is not None and weight>profile['max_stock_pct']+1e-8 else None)
+        sizing_blocker=None
+        if snapshot.get('ledger_reconciled') is False:
+            sizing_blocker='Reconcile holdings and cash against the ledger before sizing sales.'
+        elif not ctx['complete'] or not supported:
+            sizing_blocker='Quantity unavailable: complete portfolio valuation, fresh NOK quotes and one whole-share Oslo entry per ticker are required.'
+        if sizing_blocker and not limit_reason:
+            if h['issuer'] in issuer_over_limit:
+                limit_reason=f"Combined share classes exceed your {profile['max_stock_pct']}% company limit."
+            elif h['sector'] in sector_over_limit:
+                limit_reason=f"{h['sector']} exceeds your {profile['max_sector_pct']}% sector limit."
         row={'symbol':h['symbol'],'name':(card or {}).get('name',h['symbol']),'owned':h['shares'],
-             'sell_shares':0 if ctx['complete'] and supported else None,'remaining_shares':h['shares'],
-             'gross_proceeds_nok':0. if ctx['complete'] and supported else None,
+             'sell_shares':0 if not sizing_blocker else None,'remaining_shares':h['shares'],
+             'gross_proceeds_nok':0. if not sizing_blocker else None,
              'price':q['price'] if supported else None,'quote_asof':q.get('asof') if q else None,
              'quote_source':q.get('source') if q else None,
              'quote_age_seconds':max(0,now-q['asof']) if q and isinstance(q.get('asof'),(int,float)) else None,
@@ -51,41 +86,44 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
              'limit_reference_note':'Current quote reference only; a limit order may not fill, especially if the limit is away from the market. You choose whether and how to place any order.',
              'target_price':target if supported and isinstance(target,(int,float)) and target>0 else None,
              'target_reason':'Your saved upper review level.' if supported and isinstance(target,(int,float)) and target>0 else None,
-             'sector':h['sector'],'reasons':[],'technical_action':(card or {}).get('action') if report_ok and signal_current(card,now) else 'Current technical signal unavailable'}
+             'sector':h['sector'],'reasons':[],'technical_action':action or 'Current technical signal unavailable',
+             'technical_review_reason':technical_reason,'technical_review_blocker':waiting,
+             'review_price':review_price if technical_reason else None,
+             'portfolio_review_reason':limit_reason,'sizing_blocker':sizing_blocker}
         if not basis_valid:
             row['break_even_status']='Break-even unavailable: enter a positive cost basis for this holding.'
         elif profile['sell_fee_nok'] is None:
             row['break_even_status']='Break-even unavailable: enter a sell-fee assumption; current sale fees are unknown.'
-        if row['sell_shares'] is None:
-            row['reasons'].append('Quantity unavailable: complete portfolio valuation, fresh NOK quotes and one whole-share Oslo entry per ticker are required.')
+        if sizing_blocker:
+            row['reasons'].append(sizing_blocker)
         rows.append(row)
-    if snapshot.get('ledger_reconciled') is False:
-        for r in rows:
-            r.update(sell_shares=None,gross_proceeds_nok=None,reasons=['Reconcile holdings and cash against the ledger before sizing sales.'])
-        return rows
     if not ctx['complete'] or not ctx['total_nok']:
         return rows
     total=ctx['total_nok']
-    def add(row,quantity,reason):
+    def add(row,quantity,reason,*,portfolio_limit=True):
         quantity=min(int(row['owned'])-row['sell_shares'],max(0,int(quantity)))
         if quantity:
             row['sell_shares']+=quantity
             row['remaining_shares']=row['owned']-row['sell_shares']
             row['gross_proceeds_nok']=row['sell_shares']*row['price']
             row['reasons'].append(reason)
+            if portfolio_limit and not row['portfolio_review_reason']:
+                row['portfolio_review_reason']=reason
     def ceil_shares(value,price):
         return max(0,math.ceil(value/price-1e-10))
     for row in rows:
         if row['sell_shares'] is None:
             continue
-        card=cards.get(row['symbol'])
-        if report_ok and signal_current(card,now) and card.get('action') in SELL_SIGNALS and profile['review_sell_pct']>0 and not advice_state.gate(row['symbol'],'sell',snapshot,profile,now):
-            add(row,math.ceil(row['owned']*profile['review_sell_pct']/100-1e-10),
-                card['action']+': your '+str(profile['review_sell_pct'])+'% sale-review setting, rounded up to whole shares.')
-        if report_ok and signal_current(card,now) and card.get('action') in SELL_SIGNALS and profile['review_sell_pct']==0:
-            row['reasons'].append('Technical sale review is active, but your sale-review size is 0%; no signal-based sale quantity assigned.')
-        waiting=advice_state.gate(row['symbol'],'sell',snapshot,profile,now) if report_ok and signal_current(card,now) and card.get('action') in SELL_SIGNALS else None
-        if waiting:row['reasons'].append(waiting)
+        if row['technical_review_reason']:
+            if profile['review_sell_pct']>0:
+                add(row,math.ceil(row['owned']*profile['review_sell_pct']/100-1e-10),
+                    row['technical_action']+': your '+str(profile['review_sell_pct'])+'% sale-review setting, rounded up to whole shares.',
+                    portfolio_limit=False)
+            else:
+                row['sizing_blocker']='Your sale-review size is 0%; no signal-based sale quantity assigned.'
+                row['reasons'].append(row['sizing_blocker'])
+        if row['technical_review_blocker']:
+            row['reasons'].append(row['technical_review_blocker'])
         excess=row['remaining_shares']*row['price']-total*profile['max_stock_pct']/100
         add(row,ceil_shares(excess,row['price']), 'Reduce to your '+str(profile['max_stock_pct'])+'% position limit before selling costs.')
     for issuer in sorted({h['issuer'] for h in ctx['holdings']}):

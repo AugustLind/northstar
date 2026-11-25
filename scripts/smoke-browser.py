@@ -8,12 +8,70 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
 from browser_fixture import Fixture
 from browser_client import Browser
 import app
+import advice_state
+import research
 
 
 def press_enter(browser):
     browser.call('Input.dispatchKeyEvent',{'type':'rawKeyDown','key':'Enter','code':'Enter','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
     browser.call('Input.dispatchKeyEvent',{'type':'char','key':'Enter','code':'Enter','text':'\r','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
     browser.call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Enter','code':'Enter','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
+
+
+def prove_holding_advice(browser):
+    report = app.read_meta('report')
+    preferences = app.read_meta('portfolio_preferences')
+    signals = app.read_meta('signal_state', {})
+    original = next(p for p in app.state()['positions'] if p['symbol'] == 'SYNTH.OL')
+    original['long_term'] = bool(original['long_term'])
+    current = {**preferences, 'max_stock_pct': 100, 'max_sector_pct': 100, 'reserve_pct': 0,
+               'review_sell_pct': 50, 'confirm_sessions': 1, 'signal_wait_hours': 0}
+    quote = app.state()['quotes']['SYNTH.OL']
+
+    def report_for(position):
+        return {**report, 'cards': [research.screen('SYNTH.OL', quote, position)]}
+
+    def check(*phrases):
+        browser.evaluate('loadDaily()')
+        checks = ' && '.join('cell.textContent.includes(' + json.dumps(phrase) + ')' for phrase in phrases)
+        browser.wait("(() => { const cell = document.querySelector('#holdings [data-holding-advice]');"
+                     "return cell && cell.getClientRects().length && " + checks + "; })()",
+                     'Portfolio holding advice: ' + ', '.join(phrases))
+
+    try:
+        app.write_meta('portfolio_preferences', current)
+        app.write_meta('report', report_for(original))
+        check('Hold', 'No confirmed sell trigger')
+        app.write_meta('portfolio_preferences', {**current, 'max_stock_pct': 20})
+        check('Sell review', '20.0% position limit', '1 share', '33.33%')
+        app.write_meta('portfolio_preferences', {**current, 'max_sector_pct': 20})
+        app.save_position({**original, 'shares': 3.5})
+        check('Sell review', '20.0% sector limit', 'Sizing unavailable', 'Reconcile holdings and cash')
+        app.write_meta('portfolio_preferences', current)
+        lower = {**original, 'below': 140}
+        app.save_position(lower)
+        technical = report_for(lower)
+        app.write_meta('report', technical)
+        app.write_meta('signal_state', {})
+        check('Insufficient data', 'Waiting for a matching dated signal')
+        app.write_meta('signal_state', advice_state.observe(technical, {}))
+        check('Sell review', 'Lower review price', '140', '2 shares', '66.67%')
+        upper = {**original, 'above': 120}
+        app.save_position(upper)
+        technical = report_for(upper)
+        app.write_meta('report', technical)
+        app.write_meta('signal_state', advice_state.observe(technical, {}))
+        check('Sell review', 'Upper review price', '120', '2 shares', '66.67%')
+        app.write_meta('portfolio_preferences', {**current, 'review_sell_pct': 0})
+        check('Sell review', 'Sizing unavailable', '0%')
+        app.write_meta('report', {**report, 'cards': []})
+        check('Insufficient data', 'No current technical assessment')
+    finally:
+        app.save_position(original)
+        app.write_meta('portfolio_preferences', preferences)
+        app.write_meta('report', report)
+        app.write_meta('signal_state', signals)
+        browser.evaluate('loadDaily()')
 
 
 def run():
@@ -48,20 +106,28 @@ def run():
             browser.evaluate('loadOverviewAccount()')
             browser.wait("document.querySelector('#overviewValue').textContent==='Unavailable' && document.querySelector('#overviewAccountStatus').textContent.includes('refresh for a current quote')",'incomplete current quote coverage')
             with app.connect() as db:
-                db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(original_quote),'SYNTH.OL'))
+                same_session = {**original_quote, 'asof': time.time(), 'price': 142.45}
+                db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(same_session),'SYNTH.OL'))
+            try:
+                browser.evaluate('loadOverviewAccount()')
+                browser.wait("document.querySelector('#overviewMove').textContent === money(30) + ' · 2.04%' && document.querySelector('#overviewMoveMeta').textContent.includes('cash flows excluded')", 'Today’s movement from the prior close and recorded cash')
+            finally:
+                with app.connect() as db:
+                    db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(original_quote),'SYNTH.OL'))
             browser.evaluate('loadOverviewAccount()')
-            browser.wait("document.querySelector('#overviewValue').textContent!=='Unavailable'",'account valuation recovery after quote refresh')
+            browser.wait("document.querySelector('#overviewValue').textContent === "+expected_value+" && document.querySelector('#overviewMove').textContent==='Unavailable'", 'account valuation recovery and prior-session movement withheld')
+            browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
+            browser.wait("!document.querySelector('#portfolio').hidden && !document.querySelector('#portfolioAdvanced').open && document.querySelector('#workspaceTitle').textContent==='Portfolio'", 'Portfolio landing page')
+            prove_holding_advice(browser)
             if width==1440:
-                browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
-                browser.wait("!document.querySelector('#portfolio').hidden",'Portfolio workspace for holding edit')
                 browser.evaluate("document.querySelector('#holdings button').click();const field=document.querySelector('#positionForm').elements.review;field.value='Unsaved reload draft';field.dispatchEvent(new Event('input',{bubbles:true}))")
                 browser.call('Page.reload',{'ignoreCache':True})
                 browser.wait("document.querySelector('#editor').open && document.querySelector('#positionForm').elements.review.value==='Unsaved reload draft'",'holding edit draft restoration')
                 if not browser.evaluate("document.querySelector('#positionForm').elements.symbol.readOnly"):
                     raise RuntimeError('Reloaded holding edit draft lost its protected ticker field.')
                 browser.evaluate("document.querySelector('#close').click()")
-                browser.evaluate("document.querySelector('[data-tab=\"daily\"]').click()")
-                browser.wait("document.querySelector('#workspaceTitle').textContent==='Overview'",'return to Overview after edit recovery')
+            browser.evaluate("document.querySelector('[data-tab=\"daily\"]').click()")
+            browser.wait("document.querySelector('#workspaceTitle').textContent==='Overview'", 'return to Overview')
             if not browser.evaluate("document.querySelector('#workspaceTitle').textContent==='Overview' && document.querySelector('#overviewMetrics').parentElement.id==='daily' && document.querySelector('[data-tab][aria-current=page]').textContent.trim()==='Overview'"):
                 raise RuntimeError('Overview account/section orientation failed.')
             if not browser.evaluate("['overviewAdvanced','researchAdvanced','portfolioAdvanced','strategyAdvanced'].every(id=>{const details=document.getElementById(id);return details&&!details.open&&details.querySelector(':scope > summary').textContent.trim()==='Advanced tools'})"):

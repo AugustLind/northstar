@@ -339,6 +339,7 @@ async function loadDaily() {
     if (token === dailyRequest) renderDaily(v);
   } catch (e) {
     if (token === dailyRequest) {
+      if (typeof updateHoldingAdvice === 'function') updateHoldingAdvice([]);
       $('#dailyStatus').textContent = 'Reviews unavailable: ' + e.message;
       $('#dailyTop').textContent =
         'Review data is unavailable. Check the connection and try again.';

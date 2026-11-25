@@ -1,4 +1,33 @@
 /* Holdings notebook, editor and local export. Depends on app.js and ui-common.js. */
+let holdingAdviceBySymbol = new Map();
+
+function renderHoldingAdvice(symbol, currency) {
+  const advice = holdingAdviceBySymbol.get(symbol);
+  if (!advice) return '<b>Insufficient data</b><small>No current holding advice.</small>';
+  const price =
+    advice.review_price == null
+      ? ''
+      : '<small>Saved review price: ' + esc(money(advice.review_price, currency)) + '</small>';
+  const sizing = advice.shares
+    ? '<small>Review ' +
+      esc(advice.shares) +
+      (advice.shares === 1 ? ' share' : ' shares') +
+      ' · ' +
+      advice.percent.toFixed(2) +
+      '% of holding</small>'
+    : advice.sizing_blocker
+    ? '<small>Sizing unavailable: ' + esc(advice.sizing_blocker) + '</small>'
+    : '';
+  return '<b>' + esc(advice.label) + '</b><small>' + esc(advice.reason) + '</small>' + price + sizing;
+}
+
+function updateHoldingAdvice(assessments) {
+  holdingAdviceBySymbol = new Map(assessments.map((a) => [a.position_symbol, a.advice]));
+  for (const cell of document.querySelectorAll('#holdings [data-holding-advice]')) {
+    cell.innerHTML = renderHoldingAdvice(cell.dataset.holdingAdvice, cell.dataset.currency);
+  }
+}
+
 function render() {
   const { positions, quotes } = state;
   const alerts = [],
@@ -15,7 +44,11 @@ function render() {
                 ? 'Long-term holding · keep under review'
                 : 'Holding'
               : 'Watchlist'
-          } · ${esc(p.currency)}</small></td><td>${p.shares}<small>${money(
+          } · ${esc(p.currency)}</small></td><td${
+            p.shares > 0
+              ? ` data-holding-advice="${esc(p.symbol)}" data-currency="${esc(p.currency)}"`
+              : ''
+          }>${p.shares > 0 ? renderHoldingAdvice(p.symbol, p.currency) : '—'}</td><td>${p.shares}<small>${money(
             p.cost,
             p.currency
           )}</small></td><td>${valid ? money(q.price, p.currency) : 'Unavailable'}<small>${
@@ -33,7 +66,7 @@ function render() {
           )}">Edit</button> <button data-delete="${esc(p.symbol)}">Remove</button></td></tr>`;
         })
         .join('')
-    : '<tr><td colspan="6">Your notebook is empty. Add your first holding or watchlist company.</td></tr>';
+    : '<tr><td colspan="7">Your notebook is empty. Add your first holding or watchlist company.</td></tr>';
   for (const p of positions) {
     const q = quotes[p.symbol],
       items = [];
@@ -124,6 +157,7 @@ function render() {
 }
 function renderHoldingAssessments(assessments) {
   if (!$('#holdingAssessments') || !Array.isArray(assessments)) return;
+  updateHoldingAdvice(assessments);
   const bySymbol = new Map(assessments.map((a) => [a.symbol, a]));
   $('#holdingAssessments').innerHTML =
     state.positions
@@ -194,6 +228,12 @@ function renderHoldingAssessments(assessments) {
       })
       .join('') || '<p>No holdings or watchlist entries are recorded.</p>';
 }
+async function reloadHoldings() {
+  updateHoldingAdvice([]);
+  await load();
+  await loadDaily();
+}
+
 async function load() {
   state = await api('state');
   $('#accountStatus').textContent = 'Connected';
@@ -272,7 +312,7 @@ $('#positionForm').onsubmit = async (e) => {
     await api('position', data);
     if (typeof clearWorkspaceUiFormState === 'function') clearWorkspaceUiFormState('positionForm');
     $('#editor').close();
-    await load();
+    await reloadHoldings();
   } catch (e) {
     $('#formError').textContent = e.message;
   }
@@ -284,7 +324,7 @@ $('#holdings').onclick = async (e) => {
   if (del && confirm(`Remove ${del} and its notes?`)) {
     try {
       await api('delete', { symbol: del });
-      await load();
+      await reloadHoldings();
     } catch (e) {
       $('#message').textContent = e.message;
     }
@@ -297,7 +337,7 @@ $('#refresh').onclick = async () => {
   $('#message').textContent = 'Fetching quotes. This may take a moment.';
   try {
     const r = await api('refresh', {});
-    await load();
+    await reloadHoldings();
     $('#message').textContent = r.errors.length
       ? r.errors.join('\n')
       : 'Refresh complete. Check provider timestamps before making a decision.';
