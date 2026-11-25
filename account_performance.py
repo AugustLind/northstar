@@ -164,8 +164,25 @@ def previous_oslo_session(date):
 def today_performance(snapshot, baseline, events, now):
     local = dt.datetime.fromtimestamp(now, OSLO)
     date = local.date()
-    completed = not oslo_trading_day(date) or local.hour < 9
-    session = previous_oslo_session(date) if completed else date
+    previous = previous_oslo_session(date)
+    if not oslo_trading_day(date) or local.hour < 9:
+        return session_performance(snapshot, baseline, events, now, previous, completed=True)
+    result = session_performance(snapshot, baseline, events, now, date, completed=False)
+    quotes = snapshot['quotes']
+    held = [p for p in snapshot['positions'] if p['shares'] > 0]
+    if result['coverage'] and held and not any(
+        pf.fresh(quote, now) and oslo_date(quote['asof']) == date
+        for p in held
+        if (quote := quotes.get(pf.canonical(p['symbol'], p['currency'])) or quotes.get(p['symbol']))
+    ):
+        prior = session_performance(snapshot, baseline, events, now, previous, completed=True)
+        if prior['change_nok'] is not None:
+            prior['coverage'] = [f'{date}: missing open-session quote coverage.']
+            return prior
+    return result
+
+
+def session_performance(snapshot, baseline, events, now, session, *, completed):
     previous = previous_oslo_session(session)
     out = {'date': session.isoformat(), 'completed': completed, 'holdings': [], 'curve': [],
            'change_nok': None, 'change_pct': None, 'external_nok': None, 'coverage': []}
@@ -199,6 +216,7 @@ def today_performance(snapshot, baseline, events, now):
         return out
     out['external_nok'] = external
     quotes = snapshot['quotes']
+    observations = []
 
     def prices(symbol, currency):
         quote = quotes.get(symbol) or quotes.get(symbol.removesuffix('.OL'))
@@ -209,10 +227,13 @@ def today_performance(snapshot, baseline, events, now):
         if quote.get('account_history_version') == 1:
             for bar in quote.get('history', ()):
                 if finite(bar.get('time')) and finite(bar.get('account_close')) and bar['account_close'] > 0:
-                    closes[oslo_date(bar['time'])] = bar['account_close']
+                    bar_date = oslo_date(bar['time'])
+                    if bar_date in (previous, session):
+                        closes[bar_date] = bar['account_close']
         start, end = closes.get(previous), closes.get(session) if completed else None
-        if pf.fresh(quote, now) and oslo_date(quote['asof']) == session:
+        if end is None and pf.fresh(quote, now) and oslo_date(quote['asof']) == session:
             end = quote['price']
+            observations.append(quote['asof'])
         if start is None or end is None:
             label = 'previous close' if start is None else 'latest session quote'
             out['coverage'].append(f'{symbol}: missing {label} coverage for {previous if start is None else session}.')
@@ -255,7 +276,7 @@ def today_performance(snapshot, baseline, events, now):
             out['change_pct'] = change / start_value * 100
             out['curve'] = [
                 {'time': dt.datetime.combine(previous, dt.time(16, 30), OSLO).timestamp(), 'close': 1},
-                {'time': dt.datetime.combine(session, dt.time(9), OSLO).timestamp(), 'close': 1 + change / start_value},
+                {'time': max(observations) if observations else dt.datetime.combine(session, dt.time(16, 30), OSLO).timestamp(), 'close': 1 + change / start_value},
             ]
     return out
 

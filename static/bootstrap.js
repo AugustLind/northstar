@@ -12,6 +12,8 @@ loadSystemStatus();
 setInterval(() => {
   loadResearch();
   load().catch(() => {});
+  if (!$('#portfolio').hidden && $('#accountStatus').textContent === 'Connected')
+    loadAccountPerformance();
 }, 15000);
 setInterval(() => {
   if (!$('#daily').hidden) loadSystemStatus();

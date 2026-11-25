@@ -43,9 +43,9 @@ class Fixture:
         self.requests=[];fixture=self
         class Handler(app.Handler):
             def log_message(self,*args):pass
-            def send_json(self, *args, **kwargs):
+            def handle(self):
                 try:
-                    return super().send_json(*args, **kwargs)
+                    super().handle()
                 except (BrokenPipeError, ConnectionResetError):
                     # Chrome can close while parallel startup requests are in flight.
                     pass

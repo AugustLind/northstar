@@ -84,6 +84,12 @@ async function revokeRememberedSession() {
 
 $('#connectionButton').onclick = () => showConnection();
 let changingConnection = false;
+if (window.addEventListener) {
+  window.addEventListener('storage', (event) => {
+    if (event.key === rememberedSessionKey && rememberedSession && !changingConnection)
+      finishSignOut();
+  });
+}
 $('#disconnect').onclick = async () => {
   if (changingConnection) return;
   changingConnection = true;

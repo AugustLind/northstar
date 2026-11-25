@@ -125,10 +125,19 @@ def check_portfolio_today(fixture, browser):
         set_account(100, 100000, [('deposit', 10000, 0)])
         current_time = stamp('2026-12-03T00:15')
         refresh()
-        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-02 · Europe/Oslo · Last completed session') && document.querySelector('#portfolioTodayChart svg')", 'Oslo date rollover and pre-open fallback')
+        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-02 · Europe/Oslo · Last completed session') && Boolean(document.querySelector('#portfolioTodayChart svg'))", 'Oslo date rollover and pre-open fallback')
+        current_time = stamp('2026-12-03T09:05')
+        refresh()
+        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-03: missing open-session quote coverage') && document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-02 · Europe/Oslo · Last completed session')", 'last completed session with open-session coverage warning before first quote')
+        with app.connect() as db:
+            quote = json.loads(db.execute("SELECT payload FROM quotes WHERE symbol='SYNTH.OL'").fetchone()[0])
+            quote.update(asof=stamp('2026-12-23T16:30'), history=[
+                {'time': stamp('2026-12-22T16:30'), 'account_close': 100},
+                {'time': stamp('2026-12-23T16:30'), 'account_close': 110}])
+            db.execute("UPDATE quotes SET payload=? WHERE symbol='SYNTH.OL'", (json.dumps(quote),))
         current_time = stamp('2026-12-26T12:00')
         refresh()
-        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-23 · Europe/Oslo · Last completed session')", 'scheduled Christmas closure')
+        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-23 · Europe/Oslo · Last completed session') && Boolean(document.querySelector('#portfolioTodayChart svg'))", 'priced last session during scheduled Christmas closure')
     if browser.errors:
         raise RuntimeError('Uncaught browser error during Portfolio Today workflow.')
     print('Portfolio landing and Today passed with dated chart, cash flows, holding movements, Oslo boundaries and coverage states.')
@@ -177,7 +186,7 @@ def run():
                 browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
                 browser.wait("!document.querySelector('#portfolio').hidden",'Portfolio workspace for holding edit')
                 browser.evaluate("document.querySelector('#holdings button').click();const field=document.querySelector('#positionForm').elements.review;field.value='Unsaved reload draft';field.dispatchEvent(new Event('input',{bubbles:true}))")
-                browser.call('Page.reload',{'ignoreCache':True})
+                browser.reload()
                 browser.wait("document.querySelector('#editor').open && document.querySelector('#positionForm').elements.review.value==='Unsaved reload draft'",'holding edit draft restoration')
                 if not browser.evaluate("document.querySelector('#positionForm').elements.symbol.readOnly"):
                     raise RuntimeError('Reloaded holding edit draft lost its protected ticker field.')
@@ -311,7 +320,7 @@ def run():
             if not browser.evaluate("document.querySelector('#portfolioAdvanced').open && document.activeElement.id==='fit'"):
                 raise RuntimeError('Direct tool link did not reveal its parent disclosure and identify the destination: '+str(browser.evaluate("({outer:document.querySelector('#portfolioAdvanced').open,inner:document.querySelector('#fitGroup').open,focus:document.activeElement.id,hash:location.hash})")))
             browser.evaluate("const budget=document.querySelector('#fitPreferences').elements.purchase_nok;budget.value='5791';budget.dispatchEvent(new Event('input',{bubbles:true}))")
-            browser.call('Page.reload',{'ignoreCache':True})
+            browser.reload()
             browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#fitGroup').open && document.querySelector('#fitStatus').textContent.includes('Current portfolio check:') && document.querySelector('#researchStatus').textContent.includes('Last report:')",'deep-link refresh and unsaved edit restoration')
             if not browser.evaluate("document.querySelector('#fitPreferences').elements.purchase_nok.value==='5791' && document.querySelector('#adviceFilter').value==='all' && document.querySelector('#portfolioAdvanced').open"):
                 raise RuntimeError('Refresh did not preserve the tool link, unsaved allocation edit, or Research selection: '+str(browser.evaluate("({value:document.querySelector('#fitPreferences').elements.purchase_nok.value,filter:document.querySelector('#adviceFilter').value,advanced:document.querySelector('#portfolioAdvanced').open,saved:sessionStorage.getItem('northstar-workspace-ui-v1')})")))

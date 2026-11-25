@@ -91,9 +91,19 @@ class Browser:
         target=self.call('Runtime.evaluate',{'expression':'window'})['result']['objectId']
         result=self.call('Runtime.callFunctionOn',{'objectId':target,'functionDeclaration':"function(key){document.querySelector('#backendAddress').value='';document.querySelector('#accessKey').value=key;document.querySelector('#connectionForm').requestSubmit();}",'arguments':[{'value':key}]})
         if 'exceptionDetails' in result:raise RuntimeError('Browser sign-in failed.')
-    def wait(self,expression,label,seconds=30):
-        end=time.monotonic()+seconds
-        while time.monotonic()<end:
-            if self.evaluate(expression):return
+    def reload(self):
+        previous = self.evaluate('performance.timeOrigin')
+        self.call('Page.reload', {'ignoreCache': True})
+        self.wait(f'performance.timeOrigin !== {previous} && document.readyState === "complete"',
+                  'new document after reload')
+
+    def wait(self, expression, label, seconds=30):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            try:
+                if self.evaluate(f"document.readyState !== 'loading' && Boolean(({expression}))"):
+                    return
+            except RuntimeError as error:
+                raise RuntimeError(f'{label}: {error}') from error
             time.sleep(.1)
-        raise RuntimeError('Timed out: '+label)
+        raise RuntimeError('Timed out: ' + label)

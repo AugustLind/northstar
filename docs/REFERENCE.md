@@ -240,6 +240,16 @@ allocation and transaction reconciliation.
 Legacy hashes such as `#fit`, `#activity` and `#announcements` still open the
 appropriate workspace and expand their section.
 
+Portfolio opens on Today’s performance for the reconciled ledger. The chart compares
+the previous Oslo session close with the latest session quotes. Before quotes arrive
+or on scheduled closures it shows the last completed session when priced, with a
+coverage warning for missing open-session quotes. The chart shows the change between
+those two valuations. Account P&L includes booked dividends and fees through net
+broker cash and separates deposits and withdrawals. The return percentage assumes
+end-of-day external cash flows. Holding movements use the same share count at both
+prices and translate USD holdings with dated USD/NOK. Missing prices and splits
+can withhold the comparison.
+
 Overview leads with a NOK valuation of recorded cash and held assets using fresh
 provider quotes, with the reporting date and quote timestamp shown. It is a quote
 valuation, not a live broker balance. A stale or incomplete holding withholds the
