@@ -19,11 +19,11 @@ class Layout(HTMLParser):
         else:self.stack.pop()
 
 class NavigationTests(unittest.TestCase):
-    def test_four_workspaces_preserve_merged_tools_and_valid_markup(self):
+    def test_workspaces_preserve_merged_tools_and_valid_markup(self):
         layout=Layout();layout.feed((Path(__file__).resolve().parents[1]/'static/index.html').read_text())
         self.assertEqual(layout.errors,[]);self.assertEqual(layout.stack,[])
         self.assertTrue(all(n==1 for n in Counter(layout.ids).values()))
-        self.assertEqual(layout.buttons,['daily','recommendations','portfolio','validation'])
+        self.assertEqual(layout.buttons,['portfolio','candidates','daily','recommendations','validation'])
         self.assertIn('workspaceTitle',layout.nodes)
         self.assertIn('accountName',layout.nodes)
         self.assertIn('accountStatus',layout.nodes)
@@ -34,13 +34,14 @@ class NavigationTests(unittest.TestCase):
         rendered=(Path(__file__).resolve().parents[1]/'static/index.html').read_text()
         self.assertIn('Single-stock previews passing technical and portfolio checks',rendered)
         self.assertIn('Passing this check does not guarantee an allocation in the ranked shared-budget plan below.',rendered)
-        self.assertLess(rendered.index('id="portfolioMetrics"'),rendered.index('id="todayChartTitle"'))
-        self.assertLess(rendered.index('id="needsAttentionTitle"'),rendered.index('id="buyCandidatesTitle"'))
+        self.assertLess(rendered.index('id="overviewMetrics"'),rendered.index('id="needsAttentionTitle"'))
+        self.assertIn('candidates',layout.nodes['buyCandidatesTitle']['ancestors'])
+        self.assertIn('portfolio',layout.nodes['todayTitle']['ancestors'])
         self.assertIn('portfolioAdvanced',layout.nodes['accountPerformance']['ancestors'])
         self.assertIn('researchAdvanced',layout.nodes['chartPlot']['ancestors'])
         self.assertIn('strategyAdvanced',layout.nodes['robustnessPanel']['ancestors'])
         self.assertIn('overviewAdvanced',layout.nodes['systemHealth']['ancestors'])
-        self.assertIn('portfolio',layout.nodes['portfolioMetrics']['ancestors'])
+        self.assertIn('daily',layout.nodes['overviewMetrics']['ancestors'])
         tabs={id for id,node in layout.nodes.items() if 'tab' in node['attrs'].get('class','').split()}
         self.assertEqual(tabs,set(layout.buttons))
         for id in ['systemHealth','portfolioRisk','stockDecision','financialTrendCharts','robustnessPanel','exportChartCSV','exportChartSVG','accountPerformance','researchArchive']:

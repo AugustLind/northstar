@@ -25,7 +25,7 @@ const chartStorage=new Map();
 const summaryFixture={symbol:'BOUV.OL',generated:now,current:true,qualifies:true,action:'Consider buying',why:['Measured entry evidence'],invalidation:['Below MA200 and negative momentum'],risks:['<untrusted>'],checks:[{label:'Close above MA200',passes:true}],portfolio:{buy_shares:0,reason:'Waiting for confirmation'},method:'Existing rules'};
 const riskFixture={generated:now,status:'available',observations:120,missing:[],volatility_pct:20,var95_pct:2,tail95_pct:3,concentration:{largest_company_pct:30},risk_contributions:[{symbol:'<untrusted>',weight_pct:30,annual_volatility_pct:20,risk_share_pct:100,volatility_contribution_pct:20}],correlations:[{symbol:'A.OL',values:[1]}],curve:history,scenarios:[{label:'Equities -20%',change_nok:-200,change_pct:-20,after_nok:800}],method:'Current-weight proxy'};
 const systemFixture={generated:now,uptime_seconds:120,state:'attention',components:[{label:'<untrusted>',state:'partial',detail:'1 stale quote',action:'Refresh market data'}],workers:[{name:'research',state:'running'}],email_history:[{kind:'test',status:'sent',created:now,attempts:1,sent:now}]};
-const workspaceNames=['daily','recommendations','portfolio','validation'];
+const workspaceNames=['daily','recommendations','portfolio','candidates','validation'];
 const workspaceSections=workspaceNames.map(id=>{const n=element();n.id=id;nodes['#'+id]=n;return n;});
 nodes['#workspaceTitle']=element();
 const workspaceButtons=workspaceNames.map(tab=>{const n=element();n.dataset.tab=tab;nodes['[data-tab="'+tab+'"]']=n;return n;});
@@ -47,26 +47,15 @@ setImmediate(async()=>{
  await vm.runInContext('loadAccountPerformance()',context);
  assert(nodes['#accountPerformanceStatus'].textContent.includes('Initialize a verified opening'));
  assert(nodes['#accountPerformanceChart'].innerHTML.includes('No complete'));
- await vm.runInContext('loadPortfolioAccount()',context);
- assert(nodes['#portfolioAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'));
+ await vm.runInContext('loadOverviewAccount()',context);
+ assert(nodes['#overviewAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'));
  let finishOverviewRequest;
  const accountOriginalFetch=context.fetch;
  context.fetch=(path,options)=>path.includes('/api/account-performance?')?new Promise(resolve=>{finishOverviewRequest=()=>resolve({ok:true,json:async()=>accountPerformanceFixture});}):accountOriginalFetch(path,options);
- const overviewRefresh=vm.runInContext('loadPortfolioAccount()',context);
- assert(nodes['#portfolioAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'),'Background refresh must not replace the last successful status with Loading.');
+ const overviewRefresh=vm.runInContext('loadOverviewAccount()',context);
+ assert(nodes['#overviewAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'),'Background refresh must not replace the last successful status with Loading.');
  finishOverviewRequest();
  await overviewRefresh;
- context.fetch=accountOriginalFetch;
- const holdingNotice='BOUV.OL: missing open-session quote.';
- const providerError='Watchlist quote refresh failed.';
- context.fetch=(path,options)=>path.endsWith('/api/refresh')
-   ?Promise.resolve({ok:true,json:async()=>({errors:[providerError]})})
-   :path.includes('/api/account-performance?')
-   ?Promise.resolve({ok:true,json:async()=>({...accountPerformanceFixture,current_coverage:[holdingNotice]})})
-   :accountOriginalFetch(path,options);
- await nodes['#refreshPortfolioAccount'].onclick();
- assert(nodes['#portfolioAccountStatus'].textContent.includes(holdingNotice));
- assert(nodes['#portfolioAccountStatus'].textContent.includes(providerError));
  context.fetch=accountOriginalFetch;
  await vm.runInContext('loadResearchArchive()',context);
  assert(nodes['#archiveMethod'].textContent.includes('Known since capture'));
@@ -87,12 +76,12 @@ setImmediate(async()=>{
  context.location.hash='';context.location.pathname='/';
  assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'portfolio');
  context.location.pathname='/recommendations';
- for(const [target,page] of [['unrecognised:hash','portfolio'],['fit','portfolio'],['activity','portfolio'],['announcements','daily'],['method','daily'],['validation','validation']]){
+ for(const [target,page] of [['unrecognised:hash','daily'],['fit','portfolio'],['activity','portfolio'],['announcements','daily'],['method','daily'],['validation','validation']]){
   vm.runInContext("openWorkspace('"+target+"')",context);
   assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
   assert.strictEqual(nodes['#'+page].hidden,false);
   assert.strictEqual(nodes['[data-tab="'+page+'"]'].attributes['aria-current'],'page');
-  assert.strictEqual(nodes['#workspaceTitle'].textContent,{daily:'Overview',recommendations:'Research',portfolio:'Portfolio',validation:'Strategy lab'}[page]);
+  assert.strictEqual(nodes['#workspaceTitle'].textContent,{daily:'Overview',recommendations:'Research',portfolio:'Portfolio',candidates:'Candidates',validation:'Strategy lab'}[page]);
   if(target!==page&&target!=='unrecognised:hash')assert(nodes['#'+target+'Group'].open);
  }
  assert(workspaceHistory.includes('/recommendations#fit'));
@@ -190,8 +179,8 @@ setImmediate(async()=>{
   vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:count},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
   assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,count);
  }
- vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:5},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
- assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,3);
+ vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:6},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
+ assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,5);
  assert(nodes['#buyCandidates'].innerHTML.includes('&lt;safe&gt;'));
  assert(!nodes['#buyCandidates'].innerHTML.includes('<safe>'));
  vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:true,buy_candidate_warnings:[]})",context);
@@ -263,6 +252,50 @@ setImmediate(async()=>{
  vm.runInContext("researchView.report.generated=Date.now()/1000-2*86400;renderAdvice()",context);
  assert(!nodes['#adviceCards'].innerHTML.includes('Hold / monitor'));
  assert(nodes['#adviceSummary'].textContent.includes('0 buy candidates'));
+ const performanceFetch=context.fetch;
+ const todayFixture={date:'2026-11-21',previous_date:'2026-11-20',live:false,coverage:[],change_nok:100,
+   change_pct:1,net_external_nok:0,opening_nok:10000,ending_nok:10100,holdings:[]};
+ context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:todayFixture})});
+ await vm.runInContext('loadOverviewAccount()',context);
+ const todayStatus=nodes['#todayStatus'];
+ const todayMetrics=nodes['#todayMetrics'].innerHTML;
+ const todayChart=nodes['#todayChart'].innerHTML;
+ assert(todayStatus.textContent.includes(todayFixture.date));
+ assert(todayMetrics.includes('Investment performance'));
+ assert(todayChart.includes('<svg'));
+ context.fetch=async()=>{throw Error('fixture disconnected');};
+ await vm.runInContext('loadOverviewAccount()',context);
+ assert(todayStatus.textContent.includes(todayFixture.date),'Retained figures must keep their session date.');
+ assert(todayStatus.textContent.includes('Refresh failed'));
+ assert.strictEqual(nodes['#todayMetrics'].innerHTML,todayMetrics);
+ assert.strictEqual(nodes['#todayChart'].innerHTML,todayChart);
+ context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:{...todayFixture,date:'2026-11-23',live:true}})});
+ await vm.runInContext('loadOverviewAccount()',context);
+ assert(todayStatus.textContent.includes('2026-11-23'));
+ assert(!todayStatus.textContent.includes('Refresh failed'));
+ const holdingNotice='BOUV.OL: missing session quote.';
+ const providerError='Watchlist quote refresh failed.';
+ context.fetch=async (url)=>({ok:true,json:async()=>url.endsWith('/api/refresh')
+   ? {errors:[providerError]}
+   : {...accountPerformanceFixture,today:{...todayFixture,coverage:[holdingNotice],change_nok:null}}});
+ const refreshToday=nodes['#refreshToday'];
+ await refreshToday.onclick({currentTarget:refreshToday});
+ assert(todayStatus.textContent.includes(holdingNotice));
+ assert(todayStatus.textContent.includes(providerError));
+ context.fetch=performanceFetch;
+
+ const rememberedKey='northstar-remembered-session';
+ const newSession={origin:'https://api.example.com',token:'ns-session-created-in-another-tab'};
+ chartStorage.set(rememberedKey,JSON.stringify(newSession));
+ context.window.localStorage.removeItem=(key)=>chartStorage.delete(key);
+ let reloaded=false;
+ context.location.reload=()=>{reloaded=true;};
+ await nodes['#disconnect'].onclick();
+ assert(requests.some(({path,options})=>path===newSession.origin+'/api/session/sign-out'
+   && options.headers.Authorization==='Bearer '+newSession.token));
+ assert(!chartStorage.has(rememberedKey));
+ assert(!browserStorage.has('northstar-key'));
+ assert(reloaded);
  console.log('UI contract and chart rendering smoke checks passed (not browser QA).');
  }catch(error){console.error(error);process.exitCode=1;}
 });

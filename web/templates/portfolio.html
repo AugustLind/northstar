@@ -1,42 +1,13 @@
 <section id="portfolio" class="tab">
-  <section
-    class="metrics portfolio-metrics"
-    id="portfolioMetrics"
-    aria-label="Portfolio account summary"
-  >
-    <article>
-      <small>Current value at provider quotes · NOK</small><strong id="portfolioValue">—</strong
-      ><small id="portfolioValueMeta">Loading recorded holdings, cash and quotes…</small>
-    </article>
-    <article>
-      <small>Today’s investment performance</small><strong id="portfolioMove">Unavailable</strong
-      ><small id="portfolioMoveMeta">Waiting for session prices</small>
-    </article>
-    <article>
-      <small>Investment gain / loss</small><strong id="portfolioPnl">Unavailable</strong
-      ><small id="portfolioPnlMeta">Requires verified opening history</small>
-    </article>
-    <article>
-      <small>Net external cash flow</small><strong id="todayExternalCash">—</strong>
-      <small>Deposits less withdrawals for the displayed session</small>
-    </article>
-    <p id="portfolioAccountStatus" class="portfolio-account-status" role="status">
-      Loading account summary…
-    </p>
-    <div class="researchtools portfolio-account-actions">
-      <button id="refreshPortfolioAccount" type="button">Refresh account value</button>
-      <button id="openAccountPerformance" type="button">Detailed performance</button>
-      <button id="openAccountSetup" type="button">Reconcile or set up activity &amp; cash</button>
+  <section class="card" aria-labelledby="todayTitle">
+    <div class="sectionhead">
+      <h2 id="todayTitle">Today’s performance</h2>
+      <button id="refreshToday" type="button">Refresh performance</button>
     </div>
-    <p class="muted portfolio-account-status">
-      Current value includes recorded NOK cash and held assets at provider quotes. Historical
-      investment gain/loss is measured from the verified opening snapshot to the last completed
-      priced date; deposits and withdrawals are excluded from investment return.
-    </p>
-  </section>
-  <section class="card" aria-labelledby="todayChartTitle">
-    <h2 id="todayChartTitle">Today’s performance</h2>
-    <div id="todayChart"></div>
+    <p id="todayStatus" role="status">Loading account performance…</p>
+    <div id="todayMetrics" class="metrics"></div>
+    <div id="todayChart" class="chartplot" hidden></div>
+    <div id="todayHoldings" class="tablewrap"></div>
   </section>
   <div class="sectionhead">
     <div>
@@ -87,7 +58,6 @@
           <th>Shares / avg. cost</th>
           <th>Latest price</th>
           <th>Unrealised return*</th>
-          <th>Session move · NOK</th>
           <th>Data timestamp</th>
           <th></th>
         </tr>

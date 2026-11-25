@@ -1,5 +1,4 @@
 """Isolated authenticated server for browser checks. No real account or provider access."""
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -44,9 +43,19 @@ class Fixture:
         self.requests=[];fixture=self
         class Handler(app.Handler):
             def log_message(self,*args):pass
+            def handle(self):
+                try:
+                    super().handle()
+                except (BrokenPipeError, ConnectionResetError):
+                    # Chrome can close while parallel startup requests are in flight.
+                    pass
             def do_GET(self):
                 if self.path.startswith('/api/'):fixture.requests.append(('GET',self.path,bool(self.headers.get('Authorization'))))
-                return super().do_GET()
+                try:
+                    return super().do_GET()
+                except (BrokenPipeError, ConnectionResetError):
+                    # The browser can cancel in-flight reads during navigation or sign-out.
+                    pass
             def do_POST(self):
                 fixture.requests.append(('POST',self.path,bool(self.headers.get('Authorization'))));return super().do_POST()
         self.server=app.ThreadingHTTPServer(('127.0.0.1',0),Handler);self.origin='http://127.0.0.1:'+str(self.server.server_port)
@@ -61,55 +70,83 @@ class Fixture:
         self.temp.cleanup()
 
 
-class SessionFixture(Fixture):
-    """A fixed Oslo reporting clock with known opening balances and cache states."""
+def seed_candidates():
+    """Six confirmed buys compete in the real shared-budget trade plan."""
+    import decision_policy
 
-    def __enter__(self):
-        self.account_now = self.stamp('2025-04-16T20:30')
-        super().__enter__()
-        # Use a second temporary database so the general smoke fixture remains independent.
-        app.DB = Path(self.temp.name) / 'session.db'
-        app.save_position({'symbol':'SYNTH.OL','currency':'NOK','shares':100,'cost':100})
-        app.save_position({'symbol':'US','currency':'USD','shares':10,'cost':100})
-        app.write_meta('portfolio_preferences',{'cash_nok':80000})
-        app.ledger_initialize({'date':'2025-04-14'})
-        self.quotes('2025-04-16')
-        self.events([('deposit',10000,0)])
-        return self
+    now = time.time()
+    symbols = [f'IDEA{rank}.OL' for rank in range(1, 7)]
+    report = app.read_meta('report')
+    report.update(generated=now, policy_version=decision_policy.VERSION,
+                  coverage={'requested': 6, 'analysed': 6, 'eligible': 6, 'unavailable': 0})
+    base_card = report['cards'][0]
+    report['cards'] = [
+        {**base_card, 'symbol': symbol, 'name': f'Synthetic idea {rank}', 'rank': rank,
+         'action': 'Consider buying', 'rank_eligible': True, 'composite': 100-rank,
+         'price': 10, 'asof': now}
+        for rank, symbol in reversed(list(enumerate(symbols, 1)))
+    ]
+    prefs = app.read_meta('portfolio_preferences')
+    sectors = ['Energy', 'Materials', 'Health care', 'Financials', 'Utilities', 'Real estate']
+    prefs['sectors'].update(zip(symbols, sectors))
+    prefs.update(purchase_nok=1000, buy_fee_nok=0, max_stock_pct=10, reserve_pct=0)
+    app.write_meta('portfolio_preferences', prefs)
+    app.write_meta('signal_state', {
+        symbol: {'policy_version': decision_policy.VERSION, 'intent': 'buy',
+                 'since': now-3*86400, 'sessions': ['2026-01-02', '2026-01-05']}
+        for symbol in symbols
+    })
+    with app.connect() as db:
+        db.executemany('INSERT INTO quotes VALUES (?,?)', [
+            (symbol, json.dumps({'price': 10, 'asof': now, 'currency': 'NOK'}))
+            for symbol in symbols
+        ])
+    app.write_meta('report', report)
+    return report
 
-    @staticmethod
-    def stamp(value):
-        return datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp()
 
-    def events(self, rows):
-        events = [
-            {'id':index,'uid':'session-'+kind,'error':None,'date':'2025-04-16',
-             'type':kind,'symbol':'SYNTH.OL' if kind == 'buy' else '', 'name':kind,
-             'currency':'NOK','quantity':quantity,'net_cash':value,'fee':None}
-            for index,(kind,value,quantity) in enumerate(rows, 1)
-        ]
-        snapshot = app.state()
-        with app.connect() as db:
-            result = transactions.apply(db,events,[{'id':row['id']} for row in events],
-                                        app.read_meta('ledger_state'),snapshot['manual_portfolio_preferences'],snapshot['positions'])
-            for key,value in [('ledger_state',result['ledger']),('portfolio_preferences',result['profile'])]:
-                db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',(key,json.dumps(value)))
+def session_timestamp(value):
+    from datetime import datetime
+    return datetime.fromisoformat(value).replace(tzinfo=app.account_performance.OSLO).timestamp()
 
-    def quotes(self, date, fx=10, missing_oslo=False, oslo_quote=None):
-        prices = {
-            'SYNTH.OL': ('NOK', {'2025-04-14':90, '2025-04-15':100, '2025-04-16':110}),
-            'US': ('USD', {'2025-04-14':100, '2025-04-15':100, '2025-04-16':100, '2025-04-17':100}),
-            'NOK=X': ('NOK', {'2025-04-14':10, '2025-04-15':10, '2025-04-16':fx, '2025-04-17':fx}),
-        }
-        with app.connect() as db:
-            for symbol,(currency, closes) in prices.items():
-                through = '2025-04-15' if missing_oslo and symbol == 'SYNTH.OL' else date
-                hour = '14:25' if symbol == 'SYNTH.OL' else '20:00'
-                history = [{'time':self.stamp(d+'T'+hour),'account_close':v}
-                           for d,v in closes.items() if d <= through]
-                bar = history[-1]
-                quote = {'price':bar['account_close'],'asof':bar['time'],'fetched':self.account_now,'currency':currency,
-                         'account_history_version':1,'history':history,'source':'Synthetic session quotes'}
-                if symbol == 'SYNTH.OL' and oslo_quote is not None:
-                    quote.update(price=oslo_quote, asof=bar['time']-3600)
-                db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)',(symbol,json.dumps(quote)))
+
+def seed_today(stock_price, cash_events, quote_date='2025-01-06', quote_time='16:00'):
+    """Start at NOK 100,000, with both NOK and USD exposure."""
+    opening = [
+        {'symbol': 'SYNTH.OL', 'currency': 'NOK', 'shares': 3, 'cost': 1000},
+        {'symbol': 'USDTEST', 'currency': 'USD', 'shares': 1, 'cost': 100},
+    ]
+    held = {row['symbol']: dict(row) for row in opening}
+    events = []
+    for number, (kind, amount, quantity) in enumerate(cash_events, 1):
+        row = {'uid': f'session-{number}', 'id': number, 'type': kind,
+               'date': '2025-01-06', 'currency': 'NOK', 'net_cash': amount,
+               'symbol': 'SYNTH.OL' if kind == 'buy' else '', 'quantity': quantity}
+        events.append(row)
+        app.account_performance.apply_event(held, row)
+    for row in held.values():
+        app.save_position(row)
+    cash = 96000.0 + sum(row['net_cash'] for row in events)
+    prefs = app.read_meta('portfolio_preferences')
+    app.write_meta('portfolio_preferences', {**prefs, 'cash_nok': cash})
+    positions = app.state()['positions']
+    app.write_meta('ledger_state', {'cutoff_date': '2025-01-02', 'opening_cash_nok': 96000,
+                                    'opening_positions': opening,
+                                    'fingerprint': transactions.fingerprint(positions, cash)})
+    rows = [('SYNTH.OL', 'NOK', stock_price, 1000), ('USDTEST', 'USD', 100, 100),
+            ('NOK=X', 'NOK', 11, 10)]
+    with app.connect() as db:
+        db.execute('DELETE FROM ledger_events')
+        db.executemany('INSERT INTO ledger_events VALUES (?,?,?)', [
+            (row['uid'], row['date'], json.dumps(row)) for row in events
+        ])
+        for symbol, currency, latest, close in rows:
+            observed = ('2025-01-04T00:00' if quote_date == '2025-01-03' else quote_date+'T'+quote_time)
+            quote = {'price': latest if quote_date == '2025-01-06' else close,
+                     'currency': currency, 'asof': session_timestamp(quote_date+'T'+quote_time),
+                     'fetched': session_timestamp(observed),
+                     'account_history_version': 1, 'history': [
+                         {'time': session_timestamp(date+'T16:30'), 'account_close': close, 'close': close}
+                         for date in ('2025-01-02', '2025-01-03')
+                     ]}
+            db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)', (symbol, json.dumps(quote)))

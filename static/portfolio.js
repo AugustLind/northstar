@@ -8,7 +8,6 @@ function render() {
         .map((p) => {
           const q = quotes[p.symbol],
             valid = q && q.currency === p.currency;
-          const symbol = p.currency === 'NOK' && !p.symbol.includes('.') ? p.symbol + '.OL' : p.symbol;
           const gain = valid && p.cost > 0 ? (q.price / p.cost - 1) * 100 : null;
           return `<tr><td><b>${esc(p.symbol)}</b><small>${
             p.shares
@@ -27,15 +26,14 @@ function render() {
               : 'Refresh or check ticker/currency'
           }</small></td><td class="${gain >= 0 ? 'positive' : 'negative'}">${
             gain === null ? '—' : gain.toFixed(2) + '%'
-          }</td><td ${p.shares > 0 ? `data-today-holding="${esc(symbol)}"` : ''}><span>—</span><small></small></td><td>${q ? esc(new Date(q.asof * 1000).toLocaleString()) : 'Not fetched'}<small>${
+          }</td><td>${q ? esc(new Date(q.asof * 1000).toLocaleString()) : 'Not fetched'}<small>${
             q ? esc(q.source) : 'No data'
           }</small></td><td><button data-edit="${esc(
             p.symbol
           )}">Edit</button> <button data-delete="${esc(p.symbol)}">Remove</button></td></tr>`;
         })
         .join('')
-    : '<tr><td colspan="7">Your notebook is empty. Add your first holding or watchlist company.</td></tr>';
-  renderTodayHoldingMoves();
+    : '<tr><td colspan="6">Your notebook is empty. Add your first holding or watchlist company.</td></tr>';
   for (const p of positions) {
     const q = quotes[p.symbol],
       items = [];
