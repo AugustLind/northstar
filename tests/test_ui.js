@@ -254,8 +254,10 @@ setImmediate(async()=>{
  assert(nodes['#adviceSummary'].textContent.includes('0 buy candidates'));
  const performanceFetch=context.fetch;
  const todayFixture={date:'2026-11-21',previous_date:'2026-11-20',live:false,coverage:[],change_nok:100,
-   change_pct:1,net_external_nok:0,opening_nok:10000,ending_nok:10100,holdings:[]};
- context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:todayFixture})});
+   change_pct:1,net_external_nok:0,opening_nok:10000,ending_nok:10100,holdings:[],
+   curve:[{date:'2026-11-20',adjusted_value_nok:10000},{date:'2026-11-21',adjusted_value_nok:10100}]};
+ const weekFixture={...todayFixture,window_start:'2026-11-15',window_end:'2026-11-21',closed_dates:['2026-11-21']};
+ context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:todayFixture,last_7_days:weekFixture})});
  await vm.runInContext('loadOverviewAccount()',context);
  const todayStatus=nodes['#todayStatus'];
  const todayMetrics=nodes['#todayMetrics'].innerHTML;
@@ -263,16 +265,30 @@ setImmediate(async()=>{
  assert(todayStatus.textContent.includes(todayFixture.date));
  assert(todayMetrics.includes('Investment performance'));
  assert(todayChart.includes('<svg'));
+ const weekChart=nodes['#weekChart'].innerHTML;
+ assert(weekChart.includes('<svg'));
  context.fetch=async()=>{throw Error('fixture disconnected');};
  await vm.runInContext('loadOverviewAccount()',context);
  assert(todayStatus.textContent.includes(todayFixture.date),'Retained figures must keep their session date.');
  assert(todayStatus.textContent.includes('Refresh failed'));
  assert.strictEqual(nodes['#todayMetrics'].innerHTML,todayMetrics);
  assert.strictEqual(nodes['#todayChart'].innerHTML,todayChart);
+ assert(nodes['#weekStatus'].textContent.includes('Refresh failed'));
+ assert(nodes['#weekStatus'].textContent.includes(weekFixture.window_start));
+ assert.strictEqual(nodes['#weekChart'].innerHTML,weekChart);
  context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:{...todayFixture,date:'2026-11-23',live:true}})});
  await vm.runInContext('loadOverviewAccount()',context);
  assert(todayStatus.textContent.includes('2026-11-23'));
  assert(!todayStatus.textContent.includes('Refresh failed'));
+ const holdingNotice='BOUV.OL: missing session quote.';
+ const providerError='Watchlist quote refresh failed.';
+ context.fetch=async (url)=>({ok:true,json:async()=>url.endsWith('/api/refresh')
+   ? {errors:[providerError]}
+   : {...accountPerformanceFixture,today:{...todayFixture,coverage:[holdingNotice],change_nok:null}}});
+ const refreshToday=nodes['#refreshToday'];
+ await refreshToday.onclick({currentTarget:refreshToday});
+ assert(todayStatus.textContent.includes(holdingNotice));
+ assert(todayStatus.textContent.includes(providerError));
  context.fetch=performanceFetch;
 
  const rememberedKey='northstar-remembered-session';

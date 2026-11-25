@@ -1,0 +1,20 @@
+name: Northstar checks
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/build-ui.py --check
+      - run: for file in static/*.js; do node --check "$file"; done
+      - run: node tests/test_charts.js && node tests/test_ui.js
+      - name: Authenticated synthetic browser workflow
+        run: python scripts/smoke-browser.py
+      - run: for script in scripts/*.sh; do bash -n "$script"; done
