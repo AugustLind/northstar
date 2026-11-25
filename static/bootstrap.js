@@ -2,7 +2,11 @@
 initExplorer();
 initChartTools();
 openWorkspace(workspaceFromLocation(), false);
-load().catch((e) => ($('#message').textContent = e.message));
+load()
+  .then(() => {
+    if (!location.hash && workspaceFromLocation() === 'portfolio') openWorkspace('portfolio', false);
+  })
+  .catch((e) => ($('#message').textContent = e.message));
 loadResearch().finally(restoreWorkspaceUiState);
 loadSystemStatus();
 setInterval(() => {

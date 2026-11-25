@@ -1,24 +1,53 @@
 /* API connection and session authentication. UI modules load before bootstrap. */
 let state = { positions: [], quotes: {} };
-let apiBase = (window.NORTHSTAR_CONFIG && window.NORTHSTAR_CONFIG.apiBase) || '',
-  accessKey = '';
+const rememberedSessionKey = 'northstar-remembered-session';
+const configuredApi = (window.NORTHSTAR_CONFIG && window.NORTHSTAR_CONFIG.apiBase) || '';
+let apiBase = configuredApi,
+  accessKey = '',
+  rememberedSession = null;
 try {
-  apiBase = sessionStorage.getItem('northstar-api') || apiBase;
-  accessKey = sessionStorage.getItem('northstar-key') || '';
+  rememberedSession = JSON.parse(window.localStorage.getItem(rememberedSessionKey) || 'null');
 } catch (e) {}
+try {
+  accessKey = sessionStorage.getItem('northstar-key') || '';
+  apiBase = sessionStorage.getItem('northstar-api') ?? configuredApi;
+} catch (e) {}
+if (!accessKey && rememberedSession) {
+  apiBase = rememberedSession.origin;
+  accessKey = rememberedSession.token;
+}
+
 function showConnection(message = '') {
   $('#connectionPanel').hidden = false;
   $('#backendAddress').value = apiBase;
   $('#connectionMessage').textContent = message;
 }
-async function api(path, data) {
-  if (location.hostname.endsWith('.github.io') && !apiBase) {
+function forgetRememberedSession() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(rememberedSessionKey) || 'null');
+    if (stored && stored.token === rememberedSession.token)
+      window.localStorage.removeItem(rememberedSessionKey);
+  } catch (e) {}
+  rememberedSession = null;
+}
+function finishSignOut() {
+  accessKey = '';
+  try {
+    sessionStorage.removeItem('northstar-key');
+  } catch (e) {}
+  clearWorkspaceUiState();
+  location.reload();
+}
+
+async function api(path, data, origin = apiBase, credential = accessKey) {
+  if (location.hostname.endsWith('.github.io') && !origin) {
     showConnection('Set your Oracle HTTPS server address to connect.');
     throw Error('Connect to your Oracle server first.');
   }
   const headers = {};
-  if (accessKey) headers.Authorization = 'Bearer ' + accessKey;
+  if (credential) headers.Authorization = 'Bearer ' + credential;
   const options = { headers, credentials: 'omit' };
+  if (path.startsWith('session/')) options.redirect = 'error';
   if (data !== undefined) {
     options.method = 'POST';
     headers['Content-Type'] = 'application/json';
@@ -26,37 +55,52 @@ async function api(path, data) {
   }
   let r;
   try {
-    r = await fetch(apiBase + '/api/' + path, options);
+    r = await fetch(origin + '/api/' + path, options);
   } catch (e) {
     throw Error(
       'Cannot reach your Northstar server. Check your connection and server address, then try again. If the problem continues, ask the server owner to check HTTPS and the allowed dashboard origin.'
     );
   }
   const body = await r.json();
-  if (r.status === 401) showConnection(body.error);
+  if (r.status === 401) {
+    if (path === 'session/sign-out') return;
+    if (credential === accessKey && origin === apiBase) {
+      if (rememberedSession && credential === rememberedSession.token) {
+        forgetRememberedSession();
+        finishSignOut();
+      }
+      showConnection(body.error);
+    }
+  }
   if (!r.ok) throw Error(body.error || 'Request failed');
   return body;
 }
+
+async function revokeRememberedSession() {
+  if (!rememberedSession) return;
+  await api('session/sign-out', {}, rememberedSession.origin, rememberedSession.token);
+  forgetRememberedSession();
+}
+
 $('#connectionButton').onclick = () => showConnection();
-$('#disconnect').onclick = () => {
-  accessKey = '';
+let changingConnection = false;
+$('#disconnect').onclick = async () => {
+  if (changingConnection) return;
+  changingConnection = true;
   try {
-    sessionStorage.removeItem('northstar-key');
-  } catch (e) {}
-  if (typeof clearWorkspaceUiState === 'function') clearWorkspaceUiState();
-  $('#accessKey').value = '';
-  state = { positions: [], quotes: {} };
-  $('#accountStatus').textContent = 'Not connected';
-  render();
-  $('#adviceCards').innerHTML = '';
-  $('#commentary').textContent = '';
-  $('#answer').textContent = '';
-  showConnection('Signed out.');
-  location.reload();
+    await revokeRememberedSession();
+    finishSignOut();
+  } catch (e) {
+    showConnection('Sign-out failed. ' + e.message);
+    changingConnection = false;
+  }
 };
 $('#connectionForm').onsubmit = async (e) => {
   e.preventDefault();
+  if (changingConnection) return;
+  changingConnection = true;
   const address = $('#backendAddress').value.trim().replace(/\/$/, '');
+  const key = $('#accessKey').value.trim();
   try {
     if (address) {
       const u = new URL(address);
@@ -71,20 +115,38 @@ $('#connectionForm').onsubmit = async (e) => {
         throw Error('Use an HTTPS server origin, such as https://northstar.example.com.');
     } else if (location.hostname.endsWith('.github.io'))
       throw Error('An HTTPS Oracle address is required.');
+    await api('state', undefined, address, key);
+    await revokeRememberedSession();
+    let credential = key;
+    if ($('#rememberBrowser').checked) {
+      const { token } = await api('session/remember', {}, address, key);
+      const session = { origin: address, token };
+      try {
+        window.localStorage.setItem(rememberedSessionKey, JSON.stringify(session));
+      } catch (error) {
+        await api('session/sign-out', {}, address, token);
+        throw Error('This browser could not store your remembered sign-in.');
+      }
+      rememberedSession = session;
+      credential = token;
+    }
     apiBase = address;
-    accessKey = $('#accessKey').value.trim();
-    await api('state');
+    accessKey = credential;
     try {
       sessionStorage.setItem('northstar-api', apiBase);
-      sessionStorage.setItem('northstar-key', accessKey);
+      if (rememberedSession) sessionStorage.removeItem('northstar-key');
+      else sessionStorage.setItem('northstar-key', accessKey);
     } catch (e) {}
     $('#accessKey').value = '';
+    $('#rememberBrowser').checked = false;
     $('#connectionPanel').hidden = true;
     $('#message').textContent = 'Connected to Northstar.';
     await load();
     if (typeof loadResearch === 'function') await loadResearch();
     openWorkspace(workspaceFromLocation(), false);
   } catch (e) {
-    $('#connectionMessage').textContent = e.message;
+    showConnection(e.message);
+  } finally {
+    changingConnection = false;
   }
 };

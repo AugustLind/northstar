@@ -23,7 +23,7 @@
         <p id="connectionHelp">
           Use the address and access key supplied by your server owner. The address is usually
           prefilled. When running locally, leave it blank. Your access key is kept only for this tab
-          session.
+          session. Remember this browser to stay signed in after closing your browser.
         </p>
         <form id="connectionForm">
           <label
@@ -38,6 +38,8 @@
               type="password"
               autocomplete="off"
               placeholder="Paste your website access key" /></label
+          ><label class="check"
+            ><input id="rememberBrowser" type="checkbox" /> Remember this browser</label
           ><button>Connect</button> <button type="button" id="disconnect">Sign out</button>
           <p id="connectionMessage" role="status"></p>
         </form>
@@ -700,6 +702,13 @@
         </details>
       </section>
       <section id="portfolio" class="tab" hidden>
+        <section class="card" aria-labelledby="portfolioTodayHeading">
+          <h2 id="portfolioTodayHeading">Today’s performance</h2>
+          <p id="portfolioTodayStatus" role="status">Loading session prices and recorded cash…</p>
+          <div id="portfolioTodayMetrics" class="diagnosticgrid"></div>
+          <div id="portfolioTodayChart" class="chartplot"></div>
+          <div id="portfolioTodayHoldings" class="tablewrap"></div>
+        </section>
         <div class="sectionhead">
           <div>
             <h2>Your companies</h2>
@@ -1331,9 +1340,9 @@
     </dialog>
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
-      <script src="./app.js?v=2b105bb82020"></script>
+      <script src="./app.js?v=f9a24c77f49d"></script>
       <script src="./portfolio.js?v=a5e7c51fcbea"></script>
-      <script src="./navigation.js?v=3ea4b075fe01"></script>
+      <script src="./navigation.js?v=fe311c3bd6c9"></script>
       <script src="./charts.js?v=540b385835d5"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=098d62b0f747"></script>
@@ -1350,8 +1359,8 @@
       <script src="./validation-view.js?v=54bf6067f20c"></script>
       <script src="./system-status.js?v=a12e1049a887"></script>
       <script src="./chart-tools.js?v=837395634dcd"></script>
-      <script src="./account-performance.js?v=6b9e443db403"></script>
+      <script src="./account-performance.js?v=7d05e09fd3c2"></script>
       <script src="./archive-view.js?v=0b37ca5c26ad"></script>
-      <script src="./bootstrap.js?v=2e28e49c6266"></script>
+      <script src="./bootstrap.js?v=48e09b06f122"></script>
   </body>
 </html>

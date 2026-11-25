@@ -74,7 +74,7 @@ setImmediate(async()=>{
  context.location.hash='#fit';
  assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'fit');
  context.location.hash='';context.location.pathname='/';
- assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'daily');
+ assert.strictEqual(vm.runInContext('workspaceFromLocation()',context),'portfolio');
  context.location.pathname='/recommendations';
  for(const [target,page] of [['unrecognised:hash','daily'],['fit','portfolio'],['activity','portfolio'],['announcements','daily'],['method','daily'],['validation','validation']]){
   vm.runInContext("openWorkspace('"+target+"')",context);

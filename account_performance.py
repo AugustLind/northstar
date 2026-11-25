@@ -128,6 +128,138 @@ def apply_event(holdings,e,reverse=False):
         p['shares']=max(0,p['shares']+delta)
 
 
+OSLO = ZoneInfo('Europe/Oslo')
+
+
+def oslo_date(timestamp):
+    return dt.datetime.fromtimestamp(timestamp, OSLO).date()
+
+
+def oslo_trading_day(date):
+    # Gregorian Easter (Meeus/Jones/Butcher), used for Oslo's movable holidays.
+    year = date.year
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month, day_index = divmod(h + l - 7 * m + 114, 31)
+    easter = dt.date(year, month, day_index + 1)
+    return (date.weekday() < 5 and
+            (date.month, date.day) not in {(1, 1), (5, 1), (5, 17), (12, 24), (12, 25), (12, 26), (12, 31)} and
+            (date - easter).days not in {-3, -2, 1, 39, 50})
+
+
+def previous_oslo_session(date):
+    date -= dt.timedelta(days=1)
+    while not oslo_trading_day(date):
+        date -= dt.timedelta(days=1)
+    return date
+
+
+def today_performance(snapshot, baseline, events, now):
+    local = dt.datetime.fromtimestamp(now, OSLO)
+    date = local.date()
+    completed = not oslo_trading_day(date) or local.hour < 9
+    session = previous_oslo_session(date) if completed else date
+    previous = previous_oslo_session(session)
+    out = {'date': session.isoformat(), 'completed': completed, 'holdings': [], 'curve': [],
+           'change_nok': None, 'change_pct': None, 'external_nok': None, 'coverage': []}
+    if not baseline or baseline['cutoff_date'] > previous.isoformat() or snapshot.get('ledger_reconciled') is not True:
+        out['coverage'].append('Ledger coverage requires reconciled holdings and cash and an opening snapshot by the previous close.')
+        return out
+
+    cash = snapshot['manual_portfolio_preferences'].get('cash_nok')
+    if not finite(cash):
+        out['coverage'].append('Recorded cash is unavailable.')
+        return out
+    opening_cash = ending_cash = cash
+    external = 0.
+    try:
+        opening = positions_map(snapshot['positions'])
+        ending = {symbol: dict(position) for symbol, position in opening.items()}
+        for event in sorted((e for e in events if e['date'] > previous.isoformat()), key=event_order, reverse=True):
+            amount = event.get('net_cash')
+            if (event.get('currency') != 'NOK' or not finite(amount) or
+                event['type'] not in ('buy', 'sell', 'split', 'deposit', 'withdrawal', 'dividend', 'interest', 'fee')):
+                raise ValueError('Unsupported ledger event in the session valuation.')
+            apply_event(opening, event, reverse=True)
+            opening_cash -= amount
+            if event['date'] > session.isoformat():
+                apply_event(ending, event, reverse=True)
+                ending_cash -= amount
+            elif event['type'] in ('deposit', 'withdrawal'):
+                external += amount
+    except (KeyError, TypeError, ValueError) as error:
+        out['coverage'].append(str(error))
+        return out
+    out['external_nok'] = external
+    quotes = snapshot['quotes']
+
+    def prices(symbol, currency):
+        quote = quotes.get(symbol) or quotes.get(symbol.removesuffix('.OL'))
+        if not quote or quote.get('currency') != currency:
+            out['coverage'].append(f'{symbol}: missing {currency} price coverage.')
+            return None, None
+        closes = {}
+        if quote.get('account_history_version') == 1:
+            for bar in quote.get('history', ()):
+                if finite(bar.get('time')) and finite(bar.get('account_close')) and bar['account_close'] > 0:
+                    closes[oslo_date(bar['time'])] = bar['account_close']
+        start, end = closes.get(previous), closes.get(session) if completed else None
+        if pf.fresh(quote, now) and oslo_date(quote['asof']) == session:
+            end = quote['price']
+        if start is None or end is None:
+            label = 'previous close' if start is None else 'latest session quote'
+            out['coverage'].append(f'{symbol}: missing {label} coverage for {previous if start is None else session}.')
+        return start, end
+
+    start_value, end_value = opening_cash, ending_cash
+    fx = None
+    for symbol in sorted(set(opening) | set(ending)):
+        start_shares = opening.get(symbol, {}).get('shares', 0)
+        end_shares = ending.get(symbol, {}).get('shares', 0)
+        if not (start_shares or end_shares):
+            continue
+        currency = (ending.get(symbol) or opening[symbol])['currency']
+        before, after = prices(symbol, currency)
+        if currency == 'USD':
+            if fx is None:
+                fx = prices('NOK=X', 'NOK')
+            before = before * fx[0] if before is not None and fx[0] is not None else None
+            after = after * fx[1] if after is not None and fx[1] is not None else None
+        if currency not in ('NOK', 'USD'):
+            out['coverage'].append(f'{symbol}: unsupported valuation currency.')
+        split = any(e['type'] == 'split' and pf.canonical(e['symbol']) == symbol and
+                    previous.isoformat() < e['date'] <= session.isoformat() for e in events)
+        quote = quotes.get(symbol) or quotes.get(symbol.removesuffix('.OL')) or {}
+        provider_split = any(e.get('kind') == 'split' and finite(e.get('time')) and
+                             previous < oslo_date(e['time']) <= session for e in quote.get('events', ()))
+        if split or provider_split:
+            out['coverage'].append(f'{symbol}: a split interrupts the session price comparison.')
+            before = after = None
+        if end_shares:
+            out['holdings'].append({'symbol': symbol,
+                'change_nok': end_shares * (after - before) if before is not None and after is not None else None,
+                'change_pct': (after / before - 1) * 100 if before is not None and after is not None else None})
+        start_value += start_shares * (before or 0)
+        end_value += end_shares * (after or 0)
+    if not out['coverage']:
+        change = end_value - start_value - external
+        out['change_nok'] = change
+        if start_value > 0:
+            out['change_pct'] = change / start_value * 100
+            out['curve'] = [
+                {'time': dt.datetime.combine(previous, dt.time(16, 30), OSLO).timestamp(), 'close': 1},
+                {'time': dt.datetime.combine(session, dt.time(9), OSLO).timestamp(), 'close': 1 + change / start_value},
+            ]
+    return out
+
+
 def view(snapshot,baseline,events,now=None,allow_prior_close=False):
     now=time.time() if now is None else now
     out={'version':VERSION,'generated':now,'status':'unavailable','method':METHOD,'curve':[],'coverage':[],
@@ -135,6 +267,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
          'daily_linked_return_pct':None,'modified_dietz_pct':None,'realized_trade_pnl_nok':None,
          'income_nok':None,'reported_fees_nok':None,'carried_valuations':0,'excluded_later_events':0,'opening_basis':None}
     out.update(current_summary(snapshot,now,events))
+    out['today'] = today_performance(snapshot, baseline, events, now)
     def block(reason):
         if reason not in out['coverage']:out['coverage'].append(reason)
     if not baseline:

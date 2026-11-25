@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import signal
 import socket
 import struct
 import subprocess
@@ -14,13 +13,18 @@ from urllib.parse import urlsplit
 from urllib.request import urlopen
 
 class Browser:
+    def __init__(self, profile_path=None):
+        self.profile_path=profile_path
+
     def __enter__(self):
-        self.profile=tempfile.TemporaryDirectory(prefix='northstar-browser-');self.log=tempfile.TemporaryFile();self.errors=[];self.seq=0
+        self.profile=None if self.profile_path else tempfile.TemporaryDirectory(prefix='northstar-browser-');self.log=tempfile.TemporaryFile();self.errors=[];self.seq=0
+        profile_path=Path(self.profile_path or self.profile.name)
+        info=profile_path/'DevToolsActivePort'
+        info.unlink(missing_ok=True)
         chrome=shutil.which('google-chrome') or shutil.which('chromium') or ('/opt/google/chrome/chrome' if Path('/opt/google/chrome/chrome').is_file() else None)
         if not chrome:raise RuntimeError('Chrome is required for the browser smoke check.')
-        self.process=subprocess.Popen([chrome,'--headless','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--remote-debugging-port=0','--user-data-dir='+self.profile.name,'about:blank'],stdout=self.log,stderr=self.log,start_new_session=True)
+        self.process=subprocess.Popen([chrome,'--headless','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--remote-debugging-port=0','--user-data-dir='+str(profile_path),'about:blank'],stdout=self.log,stderr=self.log,start_new_session=True)
         try:
-            info=Path(self.profile.name)/'DevToolsActivePort'
             for _ in range(100):
                 if info.exists():break
                 time.sleep(.1)
@@ -37,10 +41,23 @@ class Browser:
             self.call('Page.enable');self.call('Runtime.enable');return self
         except Exception:self.__exit__(None,None,None);raise
     def __exit__(self,*args):
-        if hasattr(self,'sock'):self.sock.close()
         if hasattr(self,'process') and self.process.poll() is None:
-            os.killpg(self.process.pid,signal.SIGTERM);self.process.wait(timeout=10)
-        self.log.close();self.profile.cleanup()
+            try:
+                if hasattr(self, 'sock'):
+                    self.call('Browser.close')
+            except (OSError, RuntimeError):
+                pass
+            try:
+                if hasattr(self, 'sock'):
+                    self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+            if self.process.poll() is None:
+                self.process.terminate()
+                self.process.wait(timeout=10)
+        if hasattr(self,'sock'):self.sock.close()
+        self.log.close()
+        if self.profile:self.profile.cleanup()
     def exact(self,n):
         out=b''
         while len(out)<n:

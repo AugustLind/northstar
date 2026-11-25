@@ -105,6 +105,8 @@ function workspaceFromLocation() {
     ? hashTarget
     : location.pathname === '/recommendations'
     ? 'recommendations'
+    : $('#accountStatus').textContent === 'Connected'
+    ? 'portfolio'
     : 'daily';
 }
 function openWorkspace(target, updateHistory = true) {

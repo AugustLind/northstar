@@ -1,8 +1,11 @@
 """Authenticated browser flow against synthetic data using the real application code."""
+from datetime import datetime
 from pathlib import Path
 import json
 import sys
+from tempfile import TemporaryDirectory
 import time
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
 from browser_fixture import Fixture
@@ -16,11 +19,130 @@ def press_enter(browser):
     browser.call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Enter','code':'Enter','windowsVirtualKeyCode':13,'nativeVirtualKeyCode':13})
 
 
+def check_remembered_browser(fixture):
+    def visit(browser):
+        browser.call('Page.navigate', {'url': fixture.origin})
+        browser.wait("document.readyState==='complete' && Boolean(document.querySelector('#connectionPanel'))", 'dashboard loaded')
+
+    with TemporaryDirectory(prefix='northstar-restart-') as profile:
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("!document.querySelector('#connectionPanel').hidden", 'anonymous sign-in')
+            browser.evaluate("document.querySelector('#rememberBrowser').click()")
+            browser.fill_key(fixture.key)
+            browser.wait("document.querySelector('#accountStatus').textContent==='Connected'", 'remembered sign-in')
+            if browser.evaluate("Boolean(sessionStorage.getItem('northstar-key')) || !localStorage.getItem('northstar-remembered-session')"):
+                raise RuntimeError('Remembered sign-in did not replace the access key with a session token.')
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("document.querySelector('#accountStatus').textContent==='Connected' && document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#holdings').textContent.includes('SYNTH.OL')", 'remembered sign-in after complete Chrome restart')
+            browser.evaluate("document.querySelector('#connectionButton').click();document.querySelector('#disconnect').click()")
+            browser.wait("!document.querySelector('#connectionPanel').hidden && !localStorage.getItem('northstar-remembered-session') && !document.querySelector('#holdings').textContent.includes('SYNTH.OL')", 'remembered sign-out')
+        with Browser(profile) as browser:
+            visit(browser)
+            browser.wait("!document.querySelector('#connectionPanel').hidden && document.querySelector('#accountStatus').textContent==='Not connected'", 'sign-in required after restarting following sign-out')
+    print('Remembered sign-in and sign-out passed across complete Chrome restarts.')
+
+
+def check_portfolio_today(fixture, browser):
+    oslo = app.account_performance.OSLO
+
+    def stamp(date_time):
+        return datetime.fromisoformat(date_time).replace(tzinfo=oslo).timestamp()
+
+    session = '2026-12-02'
+    previous = '2026-12-01'
+    current_time = stamp(session + 'T12:00')
+    initial_report = app.account_performance.view
+
+    def set_account(shares, cash, rows, price=110, quote_date=session, currency='NOK', fx=None):
+        snapshot = app.state()
+        app.save_position({'symbol': 'SYNTH.OL', 'currency': currency, 'shares': shares, 'cost': 100})
+        app.write_meta('portfolio_preferences', {'cash_nok': cash})
+        baseline = app.read_meta('ledger_state')
+        baseline['cutoff_date'] = previous
+        baseline['opening_cash_nok'] = 90000
+        baseline['opening_positions'] = [{'symbol': 'SYNTH.OL', 'currency': currency, 'shares': 100, 'cost': 100}]
+        baseline['fingerprint'] = app.transactions.fingerprint(app.state()['positions'], float(cash))
+        app.write_meta('ledger_state', baseline)
+        quote = {**snapshot['quotes']['SYNTH.OL'], 'currency': currency, 'price': price,
+                 'asof': stamp(quote_date + 'T11:00'),
+                 'history': [{'time': stamp(previous + 'T16:30'), 'account_close': 100 if currency == 'NOK' else 10},
+                             {'time': stamp(session + 'T16:30'), 'account_close': price}]}
+        with app.connect() as db:
+            db.execute('DELETE FROM ledger_events')
+            for kind, amount, quantity in rows:
+                payload = {'date': session, 'type': kind, 'net_cash': amount, 'currency': 'NOK',
+                           'symbol': 'SYNTH.OL' if kind == 'buy' else '', 'quantity': quantity, 'fee': None}
+                db.execute('INSERT INTO ledger_events (uid,date,payload) VALUES (?,?,?)', (kind, session, json.dumps(payload)))
+            db.execute('UPDATE quotes SET payload=? WHERE symbol=?', (json.dumps(quote), 'SYNTH.OL'))
+            if fx:
+                rate = {**quote, 'currency': 'NOK', 'price': fx,
+                        'history': [{'time': stamp(previous + 'T16:30'), 'account_close': 10},
+                                    {'time': stamp(session + 'T16:30'), 'account_close': fx}]}
+                db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)', ('NOK=X', json.dumps(rate)))
+
+    def refresh():
+        browser.evaluate('loadAccountPerformance()')
+
+    def metrics(value, pnl, pct, external):
+        browser.wait(
+            "(() => {const cards=document.querySelector('#portfolioTodayMetrics').textContent;"
+            f"return cards.includes(money({value})) && cards.includes('+'+money({pnl})+' ({pct}%)')"
+            f" && cards.includes({json.dumps('+' if external > 0 else '')}+money({external}));}})()",
+            f'visible current value {value}, investment performance {pnl} ({pct}%) and external flow {external}',
+        )
+
+    with patch.object(app.account_performance, 'view',
+                      side_effect=lambda snapshot, baseline, events, **kwargs:
+                      initial_report(snapshot, baseline, events, now=current_time, **kwargs)):
+        set_account(100, 100000, [('deposit', 10000, 0)])
+        browser.call('Page.navigate', {'url': fixture.origin})
+        browser.wait("document.querySelector('#connectionPanel') && !document.querySelector('#connectionPanel').hidden", 'sign-in before Portfolio landing')
+        browser.fill_key(fixture.key)
+        browser.wait("document.querySelector('#accountStatus').textContent==='Connected' && document.querySelector('#workspaceTitle').textContent==='Portfolio' && !location.hash && document.querySelector('[data-tab=portfolio]').getAttribute('aria-current')==='page'", 'signed-in Portfolio landing')
+        metrics(111000, 1000, '+1.0', 10000)
+        browser.wait("document.querySelector('#portfolioTodayChart svg') && document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-02 · Europe/Oslo') && document.querySelector('#portfolioTodayMetrics').textContent.includes('day end')", 'dated Today chart and cash-flow assumption')
+        browser.wait("document.querySelector('#portfolioTodayHoldings').textContent.includes('+'+money(1000)+' (+10.0%)')", 'holding session movement')
+
+        set_account(110, 88720, [('withdrawal', -200, 0), ('dividend', 30, 0), ('fee', -10, 0), ('buy', -1100, 10)])
+        refresh()
+        metrics(100820, 1020, '+1.0', -200)
+
+        set_account(110, 89000, [('buy', -1000, 10)], price=100)
+        refresh()
+        browser.wait("document.querySelector('#portfolioTodayHoldings').textContent.includes(money(0)+' (0.0%)')", 'additional shares at the same NOK price are not price movement')
+
+        set_account(100, 90000, [], price=10, currency='USD', fx=11)
+        refresh()
+        metrics(101000, 1000, '+1.0', 0)
+        browser.wait("document.querySelector('#portfolioTodayHoldings').textContent.includes('+'+money(1000)+' (+10.0%)')", 'holding movement includes USD/NOK')
+
+        set_account(100, 100000, [('deposit', 10000, 0)], quote_date=previous)
+        refresh()
+        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('missing latest session quote coverage') && !document.querySelector('#portfolioTodayChart svg')", 'missing open-session quote flagged')
+
+        set_account(100, 100000, [('deposit', 10000, 0)])
+        current_time = stamp('2026-12-03T00:15')
+        refresh()
+        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-02 · Europe/Oslo · Last completed session') && document.querySelector('#portfolioTodayChart svg')", 'Oslo date rollover and pre-open fallback')
+        current_time = stamp('2026-12-26T12:00')
+        refresh()
+        browser.wait("document.querySelector('#portfolioTodayStatus').textContent.includes('2026-12-23 · Europe/Oslo · Last completed session')", 'scheduled Christmas closure')
+    if browser.errors:
+        raise RuntimeError('Uncaught browser error during Portfolio Today workflow.')
+    print('Portfolio landing and Today passed with dated chart, cash flows, holding movements, Oslo boundaries and coverage states.')
+
+
 def run():
+    with Fixture() as fixture:
+        check_remembered_browser(fixture)
+    with Fixture() as fixture, Browser() as browser:
+        check_portfolio_today(fixture, browser)
     with Fixture() as fixture,Browser() as browser:
         for width,height in ((1440,1000),(390,900)):
             browser.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':height,'deviceScaleFactor':1,'mobile':width<600})
-            browser.call('Page.navigate',{'url':fixture.origin+'/?smoke_width='+str(width)})
+            browser.call('Page.navigate',{'url':fixture.origin+'/?smoke_width='+str(width)+'#daily'})
             browser.wait("document.readyState==='complete' && location.search==='?smoke_width="+str(width)+"'",'fresh browser navigation')
             browser.wait("document.querySelector('#connectionPanel') && !document.querySelector('#connectionPanel').hidden",'sign-in panel')
             browser.fill_key(fixture.key)

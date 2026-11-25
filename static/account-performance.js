@@ -6,10 +6,15 @@ async function loadAccountPerformance() {
     const value = await api(
       'account-performance?allow_prior_close=' + ($('#allowPriorClose').checked ? '1' : '0')
     );
-    if (token === accountPerformanceRequest) renderAccountPerformance(value);
+    if (token === accountPerformanceRequest) {
+      renderAccountPerformance(value);
+      renderPortfolioToday(value);
+    }
   } catch (error) {
-    if (token === accountPerformanceRequest)
+    if (token === accountPerformanceRequest) {
       $('#accountPerformanceStatus').textContent = error.message;
+      $('#portfolioTodayStatus').textContent = error.message;
+    }
   }
 }
 function renderAccountPerformance(value) {
@@ -95,3 +100,41 @@ function renderAccountPerformance(value) {
 }
 $('#refreshAccountPerformance').onclick = loadAccountPerformance;
 $('#allowPriorClose').onchange = loadAccountPerformance;
+
+function renderPortfolioToday(value) {
+  const today = value.today;
+  if (!today) return;
+  const signed = (amount, format) =>
+    amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + format(amount);
+  const move = (amount, pct) =>
+    signed(amount, money) + (pct == null ? '' : ' (' + signed(pct, (n) => n.toFixed(1) + '%') + ')');
+  $('#portfolioTodayStatus').textContent = [
+    today.date + ' · Europe/Oslo' + (today.completed ? ' · Last completed session' : ''),
+    ...today.coverage,
+  ].join('. ');
+  $('#portfolioTodayMetrics').innerHTML = [
+    toolTile(
+      'Current account value',
+      value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok),
+      value.current_value_nok == null ? (value.current_coverage || []).join(' ') : 'Recorded holdings and NOK cash'
+    ),
+    toolTile('Investment performance', move(today.change_nok, today.change_pct), 'Percentage assumes external flows occur at day end.'),
+    toolTile('Net external cash flow', signed(today.external_nok, money), 'Deposits less withdrawals'),
+  ].join('');
+  const curve = today.curve;
+  $('#portfolioTodayChart').innerHTML = curve.length
+    ? ChartKit.svg(curve, {
+        symbol: 'Investment performance · ' + today.date,
+        percent: true,
+        start: 0,
+        end: curve.length - 1,
+        compact: window.innerWidth <= 600,
+      })
+    : '';
+  $('#portfolioTodayHoldings').innerHTML = today.holdings.length
+    ? toolTable(
+        ['Holding', 'Price movement in NOK'],
+        today.holdings.map((row) => [esc(row.symbol), esc(move(row.change_nok, row.change_pct))])
+      )
+    : '';
+}
