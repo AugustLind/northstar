@@ -233,6 +233,13 @@ Signed-in visits open **Portfolio**. Choose **Candidates** from the same navigat
 to see up to five qualifying buys in shared-budget trade-plan order. Each idea explains
 which limits its sizing meets and links to its Research analysis. A valid empty list
 has its own state, separate from stale research and missing sizing evidence.
+**Keep or switch** compares the current portfolio with a single reviewed sale
+and the highest-ranked purchase that can use its net proceeds. It shows both
+orders, entered fee assumptions, cash and reserve weight, and the affected
+company and sector weights. The purchase must need those proceeds at the
+shown size and both orders must leave the portfolio within the configured
+limits. The comparison uses current quotes and excludes taxes. Missing fee
+or sizing inputs can make the comparison unavailable.
 **Overview** groups priority reviews with email, issuer notices and methodology.
 Legacy hashes such as `#fit`, `#activity` and `#announcements` still open the
 appropriate workspace and expand their section.

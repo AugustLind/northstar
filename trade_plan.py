@@ -185,8 +185,143 @@ def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
     return rows
 
 
-def build(snapshot,report,profile,now=None):
+def buy_inputs(card,snapshot,ctx,profile,report_ok,blocked_sales,budget,minimum_order,now):
     import advice_state
+
+    symbol=pf.canonical(card['symbol'])
+    if not report_ok or not signal_current(card,now):
+        return None,'Current technical report and quote required.',True
+    if snapshot.get('ledger_reconciled') is False:
+        return None,'Reconcile holdings and cash against the ledger before sizing purchases.',True
+    if symbol in blocked_sales:
+        return None,'This stock has a sale-review quantity; no conflicting purchase is planned.',False
+    if not buy_signal(card):
+        return None,'The complete technical buy screen is not met.',False
+    if not ctx['complete'] or not ctx['total_nok']:
+        return None,'Complete tracked portfolio valuation required.',True
+    if budget<minimum_order-1e-8:
+        return None,'Remaining shared budget is below '+str(round(minimum_order,2))+' NOK needed for your purchase-fee limit.',False
+    waiting=advice_state.gate(symbol,'buy',snapshot,profile,now)
+    if waiting:
+        return None,waiting,False
+    q=quote_for(snapshot,symbol)
+    if not pf.fresh(q,now) or q.get('currency')!='NOK':
+        return None,'Fresh NOK price required.',True
+    entries=[p for p in snapshot['positions'] if pf.canonical(p['symbol'],p['currency'])==symbol]
+    if len(entries)>1 or any(abs(p['shares']-round(p['shares']))>1e-8 for p in entries):
+        return None,'Resolve fractional or duplicate holding entries before planning a whole-share purchase.',True
+    if not ctx['sectors_complete'] or not profile['sectors'].get(symbol):
+        return None,'Classify this stock and every holding to confirm sector capacity.',True
+    return q,None,False
+
+
+def buy_quantity(symbol,quote,ctx,profile,budget,reserve_fees=0):
+    buy_fee=profile['buy_fee_nok']
+    final_total=ctx['total_nok']-buy_fee-reserve_fees
+    held=sum(h['value_nok'] for h in ctx['holdings'] if h['issuer']==company_data.issuer(symbol))
+    sector_value=sum(h['value_nok'] for h in ctx['holdings'] if h['sector']==profile['sectors'][symbol])
+    capacity=min(budget-buy_fee,profile['max_stock_pct']/100*final_total-held,
+                 profile['max_sector_pct']/100*final_total-sector_value,
+                 ctx['cash_nok']-buy_fee-reserve_fees-profile['reserve_pct']/100*final_total)
+    shares=max(0,math.floor(capacity/quote['price']))
+    value=shares*quote['price']
+    return shares,value,buy_fee/value*100 if value else None
+
+
+def add_purchase(snapshot,symbol,quote,shares):
+    old=next((p for p in snapshot['positions'] if p['currency']=='NOK' and pf.canonical(p['symbol'])==symbol),None)
+    if old:
+        old['shares']+=shares
+    else:
+        snapshot['positions'].append({'symbol':symbol,'currency':'NOK','shares':shares})
+    snapshot['quotes'][symbol]=quote
+    if old:
+        snapshot['quotes'][old['symbol']]=quote
+
+
+def funded_switch(snapshot,report,plan):
+    """Compare one reviewed sale and one ranked purchase against keeping the portfolio."""
+    profile=snapshot['portfolio_preferences']
+    now=plan['generated']
+    sales=[row for row in plan['holdings'] if row['sell_shares']]
+    report_ok=policy.current_report(report,now)
+    missing=None
+    if not report_ok or (report or {}).get('coverage',{}).get('unavailable'):
+        missing='Current research coverage is incomplete.'
+    if not profile['purchase_nok']:
+        return {'status':'unavailable','reason':missing} if missing else {'status':'none'}
+
+    # Use the trade-plan clock for both sides of the comparison.
+    ctx=pf.context(snapshot,profile,now)
+    if not ctx['complete'] or snapshot.get('ledger_reconciled') is False:
+        return {'status':'unavailable','reason':'Complete portfolio valuation and ledger reconciliation are required.'}
+    blocked_sales={row['symbol'] for row in sales}
+    for row in plan['holdings']:
+        if row['sell_shares'] is None and (row['technical_review_reason'] or row['portfolio_review_reasons']):
+            missing=row['sizing_blocker']
+    if not sales:
+        return {'status':'unavailable','reason':missing} if missing else {'status':'none'}
+
+    budget=profile['purchase_nok']
+    buy_fee=profile['buy_fee_nok']
+    minimum_order=buy_fee*(1+100/profile['max_buy_fee_pct'])
+    cards={pf.canonical(card['symbol']):card for card in (report or {}).get('cards',[])}
+    ranked=policy.recommendations(cards.values(),(report or {}).get('promoted_model'))
+    for card in ranked:
+        symbol=pf.canonical(card['symbol'])
+        quote,reason,evidence_missing=buy_inputs(card,snapshot,ctx,profile,report_ok,
+                                                blocked_sales,budget,minimum_order,now)
+        if evidence_missing:
+            missing=reason
+        if reason:
+            continue
+        for sale in sales:
+            # A zero fee gives an upper bound on available proceeds when the assumption is missing.
+            sale_fee=sale['fee_nok'] or 0.
+            proceeds=sale['gross_proceeds_nok']-sale_fee
+            if proceeds<=0:
+                continue
+            sold=sale['symbol']
+            working={**snapshot,'positions':[dict(p) for p in snapshot['positions']],
+                     'quotes':dict(snapshot['quotes'])}
+            position=next(p for p in working['positions'] if pf.canonical(p['symbol'],p['currency'])==sold)
+            position['shares']=sale['remaining_shares']
+            funded={**profile,'cash_nok':ctx['cash_nok']+proceeds}
+            after_sale=pf.context(working,funded,now)
+            shares,value,fee_pct=buy_quantity(symbol,quote,after_sale,funded,budget)
+            if not shares or fee_pct>profile['max_buy_fee_pct']+1e-8:
+                continue
+            keep_reserve=(ctx['total_nok']-buy_fee)*profile['reserve_pct']/100
+            if ctx['cash_nok']-value-buy_fee>=keep_reserve-1e-8:
+                continue
+            add_purchase(working,symbol,quote,shares)
+            funded['cash_nok']-=value+buy_fee
+            after=pf.context(working,funded,now)
+            if (after['cash_pct']<profile['reserve_pct']-1e-8
+                or any(row['weight_pct']>profile['max_stock_pct']+1e-8 for row in after['issuer_exposure'])
+                or any(row['weight_pct']>profile['max_sector_pct']+1e-8 for row in after['sectors'])):
+                continue
+            if sale['fee_nok'] is None:
+                missing='Enter a sell-fee assumption to confirm net sale proceeds.'
+                continue
+            companies=dict.fromkeys((company_data.issuer(sold),company_data.issuer(symbol)))
+            sectors=dict.fromkeys((profile['sectors'][sold],profile['sectors'][symbol]))
+            def weights(key,category,names):
+                before={row[category]:row['weight_pct'] for row in ctx[key]}
+                final={row[category]:row['weight_pct'] for row in after[key]}
+                return [{'name':name,'keep_pct':before.get(name,0.),'switch_pct':final.get(name,0.)}
+                        for name in names]
+            return {'status':'feasible','sell_symbol':sold,'sell_shares':sale['sell_shares'],
+                    'buy_symbol':symbol,'buy_shares':shares,'sell_fee_nok':sale_fee,'buy_fee_nok':buy_fee,
+                    'keep_cash_nok':ctx['cash_nok'],'switch_cash_nok':after['cash_nok'],
+                    'keep_cash_pct':ctx['cash_pct'],'switch_cash_pct':after['cash_pct'],
+                    'reserve_pct':profile['reserve_pct'],
+                    'companies':weights('issuer_exposure','issuer',companies),
+                    'sectors':weights('sectors','sector',sectors)}
+    return {'status':'unavailable','reason':missing} if missing else {'status':'none'}
+
+
+def build(snapshot,report,profile,now=None):
     now=time.time() if now is None else now
     profile=pf.preferences(profile)
     ctx=pf.context(snapshot,profile,now)
@@ -206,47 +341,14 @@ def build(snapshot,report,profile,now=None):
     if profile['purchase_nok']==0:
         warnings.append('Set your total buy-plan budget in Portfolio fit to generate purchase quantities.')
     for card in ranked:
-        symbol=pf.canonical(card['symbol']);reason=None;evidence_missing=False
-        if not report_ok or not signal_current(card,now):
-            reason='Current technical report and quote required.'
-            evidence_missing=True
-        elif snapshot.get('ledger_reconciled') is False:
-            reason='Reconcile holdings and cash against the ledger before sizing purchases.'
-            evidence_missing=True
-        elif symbol in blocked_sales:
-            reason='This stock has a sale-review quantity; no conflicting purchase is planned.'
-        elif not buy_signal(card):
-            reason='The complete technical buy screen is not met.'
-        elif not ctx['complete'] or not ctx['total_nok']:
-            reason='Complete tracked portfolio valuation required.'
-            evidence_missing=True
-        elif left<minimum_order-1e-8:
-            reason='Remaining shared budget is below '+str(round(minimum_order,2))+' NOK needed for your purchase-fee limit.'
-        if reason is None:
-            reason=advice_state.gate(symbol,'buy',snapshot,profile,now)
-        q=quote_for(working,symbol)
-        if reason is None and (not pf.fresh(q,now) or q.get('currency')!='NOK'):
-            reason='Fresh NOK price required.'
-            evidence_missing=True
-        existing_entries=[p for p in working['positions'] if pf.canonical(p['symbol'],p['currency'])==symbol]
-        if reason is None and (len(existing_entries)>1 or any(abs(p['shares']-round(p['shares']))>1e-8 for p in existing_entries)):
-            reason='Resolve fractional or duplicate holding entries before planning a whole-share purchase.'
-            evidence_missing=True
+        symbol=pf.canonical(card['symbol'])
         current=pf.context(working,working_profile,now)
-        if reason is None and (not current['sectors_complete'] or not profile['sectors'].get(symbol)):
-            reason='Classify this stock and every holding to confirm sector capacity.'
-            evidence_missing=True
+        q,reason,evidence_missing=buy_inputs(card,working,current,working_profile,report_ok,
+                                             blocked_sales,left,minimum_order,now)
         if reason is None:
             # Reserve all possible later buy fees so the entire plan respects final weights.
             reserve_fees=max(0,max_orders-len(buys)-1)*buy_fee
-            final_total=current['total_nok']-buy_fee-reserve_fees
-            held=sum(h['value_nok'] for h in current['holdings'] if h['issuer']==company_data.issuer(symbol))
-            sector_value=sum(h['value_nok'] for h in current['holdings'] if h['sector']==profile['sectors'][symbol])
-            capacity=min(left-buy_fee,profile['max_stock_pct']/100*final_total-held,
-                         profile['max_sector_pct']/100*final_total-sector_value,
-                         working_profile['cash_nok']-buy_fee-reserve_fees-profile['reserve_pct']/100*final_total)
-            n=max(0,math.floor(capacity/q['price']))
-            value=n*q['price'];fee_pct=buy_fee/value*100 if value else None
+            n, value, fee_pct=buy_quantity(symbol,q,current,working_profile,left,reserve_fees)
             if not n or fee_pct>profile['max_buy_fee_pct']+1e-8:
                 reason='No whole-share purchase fits your remaining budget, allocation limits, reserve and purchase-fee limit.'
             else:
@@ -257,14 +359,7 @@ def build(snapshot,report,profile,now=None):
                              'reason':'Meets the technical buy screen; sized in rank order within one shared budget and your limits.',
                              'portfolio_reason':'Fits your '+profile['sectors'][symbol]+' sector and company limits; '+str(n)+' whole shares fit your remaining shared budget, cash reserve and purchase-fee limit.'})
                 left-=total;spent+=total;fees+=buy_fee;working_profile['cash_nok']-=total
-                old=next((p for p in working['positions'] if p['currency']=='NOK' and pf.canonical(p['symbol'])==symbol),None)
-                if old:
-                    old['shares']+=n
-                else:
-                    working['positions'].append({'symbol':symbol,'currency':'NOK','shares':n})
-                working['quotes'][symbol]=q
-                if old:
-                    working['quotes'][old['symbol']]=q
+                add_purchase(working,symbol,q,n)
         if reason:
             blocked.append({'symbol':symbol,'buy_shares':0,'reason':reason,'evidence_missing':evidence_missing})
     result_ctx=pf.context(working,working_profile,now)
