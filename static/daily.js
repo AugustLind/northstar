@@ -10,6 +10,7 @@ async function loadOverviewAccount() {
   try {
     const value = await api('account-performance?allow_prior_close=0');
     if (token !== overviewAccountRequest) return;
+    renderToday(value);
     $('#overviewValue').textContent =
       value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
     $('#overviewValueMeta').textContent =
@@ -42,6 +43,7 @@ async function loadOverviewAccount() {
     overviewAccountLoaded = true;
   } catch (error) {
     if (token === overviewAccountRequest) {
+      renderToday({ today: { coverage: [error.message] } });
       $('#overviewValue').textContent = 'Unavailable';
       $('#overviewMove').textContent = 'Unavailable';
       $('#overviewPnl').textContent = 'Unavailable';
@@ -286,7 +288,7 @@ function renderBuyCandidates(v) {
   const status = $('#buyCandidatesStatus'),
     list = $('#buyCandidates'),
     recovery = $('#buyCandidatesRecovery');
-  const candidates = Array.isArray(v.buy_candidates) ? v.buy_candidates.slice(0, 3) : [];
+  const candidates = Array.isArray(v.buy_candidates) ? v.buy_candidates.slice(0, 5) : [];
   list.innerHTML = '';
   recovery.hidden = true;
   if (v.buy_candidates_stale) {
@@ -321,10 +323,15 @@ function renderBuyCandidates(v) {
           '">Review in Research</button></article>'
       )
       .join('');
+  } else if (v.buy_candidate_research_incomplete) {
+    status.textContent = 'Buying candidates unavailable. Some companies lack usable research evidence.';
+    recovery.textContent = 'Refresh research';
+    recovery.dataset.action = 'refresh';
+    recovery.hidden = false;
   } else {
     const warnings = Array.isArray(v.buy_candidate_warnings) ? v.buy_candidate_warnings : [];
     status.textContent = warnings.length
-      ? 'No candidates can be sized with the current portfolio inputs. ' + warnings[0]
+      ? 'Buying candidates unavailable with the current portfolio inputs. ' + warnings[0]
       : 'No eligible buying candidates under the current portfolio settings.';
     recovery.textContent = warnings.length ? 'Review portfolio inputs' : 'Explore Research';
     recovery.dataset.action = warnings.length ? 'portfolio' : 'research';
@@ -353,22 +360,26 @@ async function loadDaily() {
   }
 }
 $('#refreshDaily').onclick = loadDaily;
-$('#refreshOverviewAccount').onclick = async () => {
-  const button = $('#refreshOverviewAccount');
+async function refreshAccountMarketData(button, status) {
+  const label = button.textContent;
   button.disabled = true;
   button.textContent = 'Refreshing market data…';
   try {
     const result = await api('refresh', {});
     await loadOverviewAccount();
     if (result.errors && result.errors.length)
-      $('#overviewAccountStatus').textContent = result.errors.join(' ');
+      status.textContent += ' ' + result.errors.join(' ');
   } catch (error) {
-    $('#overviewAccountStatus').textContent = error.message;
+    status.textContent = error.message;
   } finally {
     button.disabled = false;
-    button.textContent = 'Refresh account value';
+    button.textContent = label;
   }
-};
+}
+$('#refreshOverviewAccount').onclick = (event) =>
+  refreshAccountMarketData(event.currentTarget, $('#overviewAccountStatus'));
+$('#refreshToday').onclick = (event) =>
+  refreshAccountMarketData(event.currentTarget, $('#todayStatus'));
 $('#openAccountPerformance').onclick = () => {
   openWorkspace('accountPerformance');
 };
@@ -475,8 +486,7 @@ $('#buyCandidatesRecovery').onclick = async (e) => {
     return;
   }
   if (action === 'portfolio') {
-    document.querySelector('[data-tab="portfolio"]').click();
-    location.hash = '#fit';
+    openWorkspace('fit');
     return;
   }
   if (action === 'research') {

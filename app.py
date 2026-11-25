@@ -324,6 +324,14 @@ def announcement_view(symbol=None, scope='focus'):
                   progress=read_meta('announcements_progress'))
     return result
 
+def ledger_reconciliation(positions, profile, baseline, cash_check):
+    if cash_check.get('mismatch_active'):
+        return False
+    if baseline:
+        return baseline['fingerprint'] == transactions.fingerprint(positions, profile['cash_nok'])
+    return None
+
+
 def state(include_fundamentals=False):
     with connect() as db:
         result = {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
@@ -337,7 +345,8 @@ def state(include_fundamentals=False):
         result['signal_state']=read_meta('signal_state',{})
         result['last_trades']=read_meta('last_trades',{})
         baseline=read_meta('ledger_state')
-        result['ledger_reconciled']=(False if read_meta('broker_cash_check',{}).get('mismatch_active') else (baseline['fingerprint']==transactions.fingerprint(result['positions'],result['manual_portfolio_preferences']['cash_nok'])) if baseline else None)
+        result['ledger_reconciled']=ledger_reconciliation(result['positions'], result['manual_portfolio_preferences'],
+                                                        baseline, read_meta('broker_cash_check',{}))
         result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
         return result
 
@@ -545,9 +554,12 @@ def broker_cash_check(data):
 def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
-    result['buy_candidates']=plan['buys'][:3]
+    result['buy_candidates']=plan['buys'][:5]
     result['buy_candidates_stale']=not decision_policy.current_report(report,time.time())
-    result['buy_candidate_warnings']=plan['warnings']
+    result['buy_candidate_warnings']=[
+        row['symbol']+': '+row['reason'] for row in plan['blocked_buys'] if row['evidence_missing']
+    ]
+    result['buy_candidate_research_incomplete']=bool((report or {}).get('coverage', {}).get('unavailable'))
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
     result['email']=email_worker().status()
@@ -704,11 +716,20 @@ def archive_run(report,snapshot,config):
 
 
 def account_view(allow_prior_close=False):
-    snapshot=state()
     with connect() as db:
         transactions.schema(db)
-        events=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM ledger_events ORDER BY date,uid')]
-    return account_performance.view(snapshot,read_meta('ledger_state'),events,allow_prior_close=allow_prior_close)
+        db.execute('BEGIN')
+        positions = [dict(row) for row in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        quotes = {row['symbol']: json.loads(row['payload']) for row in db.execute('SELECT * FROM quotes')}
+        metadata = {row['key']: json.loads(row['payload']) for row in db.execute(
+            "SELECT * FROM metadata WHERE key IN ('portfolio_preferences', 'ledger_state', 'broker_cash_check')")}
+        events = [json.loads(row['payload']) for row in db.execute('SELECT payload FROM ledger_events ORDER BY date,uid')]
+    profile = portfolio_fit.preferences(metadata.get('portfolio_preferences', {}))
+    baseline = metadata.get('ledger_state')
+    reconciled = ledger_reconciliation(positions, profile, baseline, metadata.get('broker_cash_check', {}))
+    snapshot = {'positions': positions, 'quotes': quotes, 'manual_portfolio_preferences': profile,
+                'ledger_reconciled': reconciled}
+    return account_performance.view(snapshot, baseline, events, allow_prior_close=allow_prior_close)
 
 
 class Handler(BaseHTTPRequestHandler):

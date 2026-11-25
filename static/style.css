@@ -1183,6 +1183,10 @@ summary:focus-visible {
   }
 }
 
+#todayChart {
+  touch-action: auto;
+  cursor: auto;
+}
 #accountPerformanceChart {
   margin: 20px 0;
 }

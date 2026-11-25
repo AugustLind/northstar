@@ -95,3 +95,63 @@ function renderAccountPerformance(value) {
 }
 $('#refreshAccountPerformance').onclick = loadAccountPerformance;
 $('#allowPriorClose').onchange = loadAccountPerformance;
+
+function renderToday(value) {
+  const today = value.today || {};
+  const signedMoney = (amount) =>
+    amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + money(amount);
+  const signedPercent = (amount) =>
+    amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + amount.toFixed(1) + '%';
+  const dateLabel = today.date
+    ? (today.live ? 'Session ' : 'Last completed session ') + today.date + ' (Europe/Oslo)'
+    : '';
+  $('#todayStatus').textContent = [dateLabel, ...(today.coverage || [])]
+    .filter(Boolean)
+    .join(' · ');
+  $('#todayMetrics').innerHTML = [
+    toolTile(
+      'Current account value',
+      value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok),
+      'Recorded cash and holdings at provider quotes'
+    ),
+    toolTile(
+      'Investment performance',
+      signedMoney(today.change_nok) + ' · ' + signedPercent(today.change_pct),
+      'Return assumes external cash flows occur at day end'
+    ),
+    toolTile(
+      'Net external cash flow',
+      signedMoney(today.net_external_nok),
+      'Deposits less withdrawals'
+    ),
+  ].join('');
+  $('#todayChart').hidden = today.change_nok == null;
+  $('#todayChart').innerHTML =
+    today.change_nok == null
+      ? ''
+      : ChartKit.svg(
+          [
+            { time: Date.parse(today.previous_date) / 1000, close: today.opening_nok },
+            { time: Date.parse(today.date) / 1000, close: today.ending_nok - today.net_external_nok },
+          ],
+          {
+            symbol:
+              'Investment value excluding net external flow · ' +
+              today.previous_date +
+              ' to ' +
+              today.date,
+            valueLabel: 'Investment value · NOK',
+            compact: window.innerWidth <= 600,
+          }
+        );
+  $('#todayHoldings').innerHTML = today.holdings?.length
+    ? toolTable(
+        ['Holding', 'Price change per share in NOK', 'Price change %'],
+        today.holdings.map((row) => [
+          esc(row.symbol),
+          esc(signedMoney(row.change_nok)),
+          signedPercent(row.change_pct),
+        ])
+      )
+    : '';
+}

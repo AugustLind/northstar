@@ -1,4 +1,14 @@
-<section id="portfolio" class="tab" hidden>
+<section id="portfolio" class="tab">
+  <section class="card" aria-labelledby="todayTitle">
+    <div class="sectionhead">
+      <h2 id="todayTitle">Today’s performance</h2>
+      <button id="refreshToday" type="button">Refresh performance</button>
+    </div>
+    <p id="todayStatus" role="status">Loading account performance…</p>
+    <div id="todayMetrics" class="metrics"></div>
+    <div id="todayChart" class="chartplot" hidden></div>
+    <div id="todayHoldings" class="tablewrap"></div>
+  </section>
   <div class="sectionhead">
     <div>
       <h2>Your companies</h2>
