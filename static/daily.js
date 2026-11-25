@@ -128,6 +128,7 @@ function renderDaily(v) {
   if (typeof renderHoldingAssessments === 'function')
     renderHoldingAssessments(v.holding_assessments);
   renderBuyCandidates(v);
+  renderFundedSwitch(v.funded_switch);
   $('#dailyStatus').textContent =
     'Updated ' +
     new Date(v.generated * 1000).toLocaleString() +
@@ -339,6 +340,47 @@ function renderBuyCandidates(v) {
     recovery.hidden = false;
   }
 }
+function renderFundedSwitch(comparison) {
+  const status = $('#switchStatus'),
+    container = $('#switchComparison');
+  container.innerHTML = '';
+  if (!comparison || comparison.status === 'unavailable') {
+    status.textContent =
+      'Comparison unavailable.' + (comparison?.reason ? ' ' + comparison.reason : '');
+    return;
+  }
+  if (comparison.status === 'none') {
+    status.textContent = 'No switch qualifies.';
+    return;
+  }
+  status.textContent =
+    'This ranked purchase uses proceeds from an existing sell review. Amounts are estimates before tax.';
+  const pct = (value) => value.toFixed(1) + '%';
+  const weightRows = (rows, label) =>
+    rows.map((r) => [r.name + ' ' + label, pct(r.keep_pct), pct(r.switch_pct)]);
+  const rows = [
+    [comparison.sell_symbol + ' shares sold', 0, comparison.sell_shares],
+    [comparison.buy_symbol + ' shares bought', 0, comparison.buy_shares],
+    ['Sale fee', money(0), money(comparison.sell_fee_nok)],
+    ['Purchase fee', money(0), money(comparison.buy_fee_nok)],
+    ['Cash after trades', money(comparison.keep_cash_nok), money(comparison.switch_cash_nok)],
+    [
+      'Cash reserve (minimum ' + comparison.reserve_pct + '%)',
+      pct(comparison.keep_cash_pct),
+      pct(comparison.switch_cash_pct),
+    ],
+    ...weightRows(comparison.companies, 'company weight'),
+    ...weightRows(comparison.sectors, 'sector weight'),
+  ];
+  container.innerHTML =
+    '<table aria-labelledby="switchTitle"><thead><tr><th scope="col">Measure</th><th scope="col">Keep</th><th scope="col">Switch</th></tr></thead><tbody>' +
+    rows
+      .map(([label, keep, change]) =>
+        `<tr><th scope="row">${esc(label)}</th><td>${esc(keep)}</td><td>${esc(change)}</td></tr>`
+      )
+      .join('') +
+    '</tbody></table>';
+}
 async function loadDaily() {
   const token = ++dailyRequest;
   loadOverviewAccount();
@@ -353,6 +395,7 @@ async function loadDaily() {
         'Review data is unavailable. Check the connection and try again.';
       $('#portfolioReviewEntry').textContent =
         'Needs attention is unavailable until the review request succeeds.';
+      renderFundedSwitch();
       $('#buyCandidates').innerHTML = '';
       $('#buyCandidatesStatus').textContent = 'Buying candidates could not be loaded. ' + e.message;
       $('#buyCandidatesRecovery').textContent = 'Retry';

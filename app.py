@@ -574,6 +574,7 @@ def broker_cash_check(data):
 def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
+    result['funded_switch']=trade_plan.funded_switch(snapshot,report,plan)
     result['buy_candidates']=plan['buys'][:5]
     result['buy_candidates_stale']=not decision_policy.current_report(report,time.time())
     result['buy_candidate_warnings']=[

@@ -100,6 +100,66 @@ def check_remembered_browser(fixture):
     print('Remembered sign-in and sign-out passed across complete Chrome restarts.')
 
 
+def prove_funded_switch(browser, report):
+    prefs = app.read_meta('portfolio_preferences')
+    signals = app.read_meta('signal_state')
+    original_quote = app.state()['quotes']['SYNTH.OL']
+    now = time.time()
+    sale = {**report['cards'][0], 'symbol': 'SYNTH.OL', 'name': 'Synthetic holding',
+            'action': 'Consider reducing / selling',
+            'rank_eligible': False, 'price': 100, 'asof': now}
+    app.write_meta('report', {**report, 'cards': [*report['cards'], sale]})
+    app.write_meta('signal_state', {**signals, 'SYNTH.OL': {
+        'policy_version': app.decision_policy.VERSION, 'intent': 'sell',
+        'since': now-3*86400, 'sessions': ['2026-01-02', '2026-01-05']}})
+    with app.connect() as db:
+        db.execute('UPDATE quotes SET payload=? WHERE symbol=?',
+                   (json.dumps({**original_quote, 'price': 100, 'asof': now}), 'SYNTH.OL'))
+
+    settings = {**prefs, 'purchase_nok': 120, 'buy_fee_nok': 2, 'sell_fee_nok': 5,
+                'max_buy_fee_pct': 5, 'max_stock_pct': 50, 'reserve_pct': 76}
+    app.write_meta('portfolio_preferences', settings)
+    browser.evaluate('loadDaily()')
+    browser.wait("""(() => {
+        const comparison = document.querySelector('#switchComparison table');
+        if (!comparison || !comparison.checkVisibility()) return false;
+        const rows = Array.from(comparison.tBodies[0].rows,
+            row => Array.from(row.cells, cell => cell.textContent));
+        return JSON.stringify(rows) === JSON.stringify([
+            ['SYNTH.OL shares sold', '0', '1'],
+            ['IDEA1.OL shares bought', '0', '11'],
+            ['Sale fee', money(0), money(5)],
+            ['Purchase fee', money(0), money(2)],
+            ['Cash after trades', money(1070), money(1053)],
+            ['Cash reserve (minimum 76%)', '78.1%', '77.3%'],
+            ['SYNTH.OL company weight', '21.9%', '14.7%'],
+            ['IDEA1.OL company weight', '0.0%', '8.1%'],
+            ['Industrials sector weight', '21.9%', '14.7%'],
+            ['Energy sector weight', '0.0%', '8.1%'],
+        ]);
+    })()""", 'funded switch shows exact quantities, fees, reserve and concentration')
+
+    for changes, label, reason in (
+        # At this reserve, the entered sale fee can change the reviewed share count.
+        ({'sell_fee_nok': None, 'reserve_pct': 85.4}, 'Comparison unavailable', 'Enter a sell-fee assumption'),
+        ({'sell_fee_nok': 100}, 'No switch qualifies', ''),
+        ({'sectors': {'SYNTH.OL': 'Industrials'}}, 'Comparison unavailable', 'Classify this stock'),
+        ({'reserve_pct': 75}, 'No switch qualifies', ''),
+        ({'max_stock_pct': 14.62}, 'No switch qualifies', ''),
+    ):
+        app.write_meta('portfolio_preferences', {**settings, **changes})
+        browser.evaluate('loadDaily()')
+        browser.wait("document.querySelector('#switchStatus').textContent.includes("+json.dumps(label)+
+                     ") && document.querySelector('#switchStatus').textContent.includes("+json.dumps(reason)+
+                     ") && !document.querySelector('#switchComparison table')", label+' '+reason)
+
+    app.write_meta('portfolio_preferences', prefs)
+    app.write_meta('signal_state', signals)
+    app.write_meta('report', report)
+    with app.connect() as db:
+        db.execute('UPDATE quotes SET payload=? WHERE symbol=?', (json.dumps(original_quote), 'SYNTH.OL'))
+
+
 def prove_portfolio_and_candidates():
     from unittest.mock import patch
 
@@ -129,6 +189,7 @@ def prove_portfolio_and_candidates():
         if not all(actual[:2] == wanted[:2] and 'Fits your '+wanted[2]+' sector' in actual[2]
                    for actual, wanted in zip(cards, expected)):
             raise RuntimeError('Ranked candidates or portfolio reasons differ: '+str(cards))
+        prove_funded_switch(browser, report)
 
         browser.evaluate("document.querySelector('[data-tab=portfolio]').click()")
         browser.wait("document.querySelector('#todayTitle').checkVisibility()", 'Candidates back to Portfolio')
@@ -240,7 +301,8 @@ def prove_portfolio_and_candidates():
                 !document.querySelector('#weekChart svg')""", 'missing Wednesday session quote is a coverage gap')
         if browser.errors:
             raise RuntimeError('Uncaught browser error during Portfolio and Candidates checks.')
-    print('Synthetic Portfolio landing, Today figures and coverage, Last 7 days figures and coverage, and Candidates navigation, ranking and terminal states passed.')
+    print('Synthetic Portfolio landing, Today and Last 7 days figures and coverage, '
+          'and Candidates navigation, ranking, and funded switch states passed.')
 
 
 def run():
