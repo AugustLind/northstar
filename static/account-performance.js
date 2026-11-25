@@ -131,8 +131,8 @@ function renderToday(value) {
       ? ''
       : ChartKit.svg(
           [
-            { time: Date.parse(today.previous_date), close: today.opening_nok },
-            { time: Date.parse(today.date), close: today.ending_nok - today.net_external_nok },
+            { time: Date.parse(today.previous_date) / 1000, close: today.opening_nok },
+            { time: Date.parse(today.date) / 1000, close: today.ending_nok - today.net_external_nok },
           ],
           {
             symbol:
@@ -155,4 +155,3 @@ function renderToday(value) {
       )
     : '';
 }
-$('#refreshToday').onclick = loadOverviewAccount;

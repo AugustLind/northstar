@@ -259,7 +259,7 @@ def session_performance(snapshot, baseline, events, now):
         if not split_ok:
             coverage.append(f'{symbol}: provider and ledger splits need reconciliation.')
         before = nok_price(symbol, row['currency'], prior, False)
-        after = nok_price(symbol, row['currency'], date, live)
+        after = nok_price(symbol, row['currency'], date, live) if last else None
         valid &= split_ok and (not first or before is not None) and (not last or after is not None)
         begin += first * (before or 0)
         end += last * (after or 0)

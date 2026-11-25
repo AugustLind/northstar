@@ -360,22 +360,26 @@ async function loadDaily() {
   }
 }
 $('#refreshDaily').onclick = loadDaily;
-$('#refreshOverviewAccount').onclick = async () => {
-  const button = $('#refreshOverviewAccount');
+async function refreshAccountMarketData(button, status) {
+  const label = button.textContent;
   button.disabled = true;
   button.textContent = 'Refreshing market data…';
   try {
     const result = await api('refresh', {});
     await loadOverviewAccount();
     if (result.errors && result.errors.length)
-      $('#overviewAccountStatus').textContent = result.errors.join(' ');
+      status.textContent += ' ' + result.errors.join(' ');
   } catch (error) {
-    $('#overviewAccountStatus').textContent = error.message;
+    status.textContent = error.message;
   } finally {
     button.disabled = false;
-    button.textContent = 'Refresh account value';
+    button.textContent = label;
   }
-};
+}
+$('#refreshOverviewAccount').onclick = (event) =>
+  refreshAccountMarketData(event.currentTarget, $('#overviewAccountStatus'));
+$('#refreshToday').onclick = (event) =>
+  refreshAccountMarketData(event.currentTarget, $('#todayStatus'));
 $('#openAccountPerformance').onclick = () => {
   openWorkspace('accountPerformance');
 };

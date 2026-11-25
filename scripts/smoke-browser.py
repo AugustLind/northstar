@@ -66,6 +66,7 @@ def prove_portfolio_and_candidates():
         app.write_meta('report', original_report)
 
         seed_today(1300, [('deposit', 10000, 0)], quote_time='09:06')
+        provider_quotes = app.state()['quotes']
         view = app.account_performance.view
         now = session_timestamp('2025-01-06T09:07')
         with patch.object(app.account_performance, 'view', side_effect=lambda *args, **kwargs: view(*args, **kwargs, now=now)):
@@ -88,13 +89,15 @@ def prove_portfolio_and_candidates():
             wait_today(111000, 1000, '+1.0%', 10000)
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('2025-01-06 (Europe/Oslo)') &&
                 document.querySelector('#todayChart svg title').textContent.includes('2025-01-03 to 2025-01-06') &&
+                ['2025-01-03', '2025-01-06'].every(date =>
+                    Array.from(document.querySelectorAll('#todayChart svg text')).some(label => label.textContent === date)) &&
                 document.querySelector('#todayMetrics').textContent.includes('day end') &&
                 Array.from(document.querySelectorAll('#todayHoldings tbody tr')).find(row => row.textContent.includes('USDTEST')).textContent.includes('+10.0%')
                 """, 'dated close-to-quote basis, end-of-day assumption and USD FX move')
 
             now = session_timestamp('2025-01-06T15:00')
             seed_today(1000, [('buy', -1000, 1), ('withdrawal', -2000, 0), ('dividend', 50, 0), ('fee', -30, 0)])
-            browser.evaluate("document.querySelector('#refreshToday').onclick()")
+            browser.evaluate('loadOverviewAccount()')
             wait_today(98120, 120, '+0.1%', -2000)
             browser.wait("""Array.from(document.querySelectorAll('#todayHoldings tbody tr'))
                 .find(row => row.textContent.includes('SYNTH.OL')).cells[1].textContent === money(0)
@@ -103,15 +106,20 @@ def prove_portfolio_and_candidates():
             seed_today(1000, [], quote_date='2025-01-03')
             for local_time in ('2025-01-05T15:00', '2025-01-06T00:30', '2025-01-06T08:50', '2025-01-06T09:05'):
                 now = session_timestamp(local_time)
-                browser.evaluate("document.querySelector('#refreshToday').onclick()")
+                browser.evaluate('loadOverviewAccount()')
                 browser.wait("document.querySelector('#todayStatus').textContent.includes('Last completed session 2025-01-03')",
                              'dated completed session on closure, at Oslo date boundary and before the first quote')
                 wait_today(100000, 0, '0.0%', 0)
 
             now = session_timestamp('2025-01-06T15:00')
-            browser.evaluate("document.querySelector('#refreshToday').onclick()")
+            browser.evaluate('loadOverviewAccount()')
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('missing session quote on 2025-01-06') &&
                 !document.querySelector('#todayChart svg')""", 'missing open-session quote coverage gap')
+
+            seed_today(1300, [('deposit', 10000, 0)], quote_date='2025-01-03')
+            with patch.object(app, 'fetch_quote', side_effect=provider_quotes.__getitem__):
+                browser.evaluate("document.querySelector('#refreshToday').click()")
+                wait_today(111000, 1000, '+1.0%', 10000)
         if browser.errors:
             raise RuntimeError('Uncaught browser error during Portfolio and Candidates checks.')
     print('Synthetic Portfolio landing, Today figures and coverage, and Candidates navigation, ranking and terminal states passed.')
