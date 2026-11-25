@@ -204,9 +204,43 @@ def prove_portfolio_and_candidates():
             with patch.object(app, 'fetch_quote', side_effect=provider_quotes.__getitem__):
                 browser.evaluate("document.querySelector('#refreshToday').click()")
                 wait_today(111000, 1000, '+1.0%', 10000)
+            now = session_timestamp('2025-01-15T15:00')
+            close_dates = ('2025-01-08', '2025-01-09', '2025-01-10', '2025-01-13', '2025-01-14')
+            weekly_events = [('deposit', 10000, 0, '2025-01-09'), ('buy', -1300, 1), ('withdrawal', -2000, 0),
+                             ('dividend', 50, 0), ('fee', -30, 0)]
+            seed_today(1300, weekly_events, quote_date='2025-01-15', session_date='2025-01-15',
+                       close_dates=close_dates)
+            browser.evaluate('loadOverviewAccount()')
+            browser.wait("""(() => {
+                const status = document.querySelector('#weekStatus').textContent;
+                const metrics = Array.from(document.querySelectorAll('#weekMetrics strong'), n => n.textContent);
+                const chart = document.querySelector('#weekChart svg');
+                const path = chart?.querySelector('path');
+                const points = path?.getAttribute('d').match(/[ML][^ ]+/g) || [];
+                const holdings = document.querySelector('#weekHoldings').textContent;
+                return status.includes('2025-01-09 to 2025-01-15 (Europe/Oslo)') &&
+                    status.includes('Prior closes carried on 2025-01-11, 2025-01-12') &&
+                    metrics[0] === '+' + money(1020) + ' · +0.9%' &&
+                    metrics[1] === '+' + money(8000) &&
+                    chart?.querySelector('title').textContent.includes('2025-01-08 to 2025-01-15') &&
+                    points.length === 8 && points.slice(2, 5).every(point => point.split(',')[1] === points[2].split(',')[1]) &&
+                    holdings.includes('+30.0%') && holdings.includes('+10.0%');
+            })()""", 'Wednesday window, carried weekend closes, cash flows, and share-count-independent NOK holding moves')
+
+            seed_today(1300, weekly_events, quote_date='2025-01-15', session_date='2025-01-15',
+                       close_dates=tuple(day for day in close_dates if day != '2025-01-13'))
+            browser.evaluate('loadOverviewAccount()')
+            browser.wait("""document.querySelector('#weekStatus').textContent.includes('missing close on 2025-01-13') &&
+                document.querySelector('#weekMetrics strong').textContent.includes('Unavailable') &&
+                !document.querySelector('#weekChart svg')""", 'missing Monday close is a coverage gap')
+            seed_today(1300, weekly_events, quote_date='2025-01-14', session_date='2025-01-15',
+                       close_dates=close_dates)
+            browser.evaluate('loadOverviewAccount()')
+            browser.wait("""document.querySelector('#weekStatus').textContent.includes('missing session quote on 2025-01-15') &&
+                !document.querySelector('#weekChart svg')""", 'missing Wednesday session quote is a coverage gap')
         if browser.errors:
             raise RuntimeError('Uncaught browser error during Portfolio and Candidates checks.')
-    print('Synthetic Portfolio landing, Today figures and coverage, and Candidates navigation, ranking and terminal states passed.')
+    print('Synthetic Portfolio landing, Today figures and coverage, Last 7 days figures and coverage, and Candidates navigation, ranking and terminal states passed.')
 
 
 def run():

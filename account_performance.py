@@ -158,8 +158,8 @@ def previous_oslo_session(date):
     return date
 
 
-def session_performance(snapshot, baseline, events, now):
-    """Value recorded holdings and cash on either side of one Oslo session."""
+def portfolio_performance(snapshot, baseline, events, now):
+    """Measure Today and the calendar week on the same ledger and price basis."""
     local_now = dt.datetime.fromtimestamp(now, OSLO)
     date = local_now.date()
     opening = dt.datetime.combine(date, dt.time(9), OSLO).timestamp()
@@ -183,19 +183,16 @@ def session_performance(snapshot, baseline, events, now):
                             for symbol in [*held_symbols, 'OSEBX.OL'])
     live = (oslo_session(date) and now >= opening and
             (not held_symbols or has_session_quote or now >= opening + 15 * 60))
-    if not live:
-        date = previous_oslo_session(date)
-    prior = previous_oslo_session(date)
-    result = {'date': date.isoformat(), 'previous_date': prior.isoformat(), 'live': live,
-              'coverage': [], 'holdings': [], 'opening_nok': None, 'ending_nok': None,
-              'change_nok': None, 'change_pct': None, 'net_external_nok': None}
-    coverage = result['coverage']
+    session_date = date if live else previous_oslo_session(date)
+    week_start = date - dt.timedelta(days=6)
+    week_end = date if live or not oslo_session(date) else date - dt.timedelta(days=1)
 
     def quote_day(timestamp):
         return dt.datetime.fromtimestamp(timestamp, OSLO).date()
 
-    def price(symbol, currency, report_date, latest, required):
+    def price(symbol, currency, report_date, latest, coverage):
         quote = quotes.get(symbol, {})
+        source_date = report_date if oslo_session(report_date) else previous_oslo_session(report_date)
         if quote.get('currency') == currency:
             if latest:
                 if session_quote(quote):
@@ -203,78 +200,132 @@ def session_performance(snapshot, baseline, events, now):
             elif quote.get('account_history_version') == 1:
                 for bar in reversed(quote.get('history', [])):
                     value = bar.get('account_close')
-                    if quote_day(bar['time']) == report_date and finite(value) and value > 0:
+                    if quote_day(bar['time']) == source_date and finite(value) and value > 0:
                         return value
-        if required:
-            coverage.append(f'{symbol}: missing {"session quote" if latest else "close"} on {report_date}.')
+        if coverage is not None:
+            coverage.append(f'{symbol}: missing {"session quote" if latest else "close"} on {source_date}.')
         return None
 
-    def nok_price(symbol, currency, report_date, latest, required=True):
-        asset = price(symbol, currency, report_date, latest, required)
-        fx = price('NOK=X', 'NOK', report_date, latest, required) if currency == 'USD' else 1
+    def nok_price(symbol, currency, report_date, coverage):
+        latest = live and report_date == date
+        asset = price(symbol, currency, report_date, latest, coverage)
+        fx = price('NOK=X', 'NOK', report_date, latest, coverage) if currency == 'USD' else 1
         return asset * fx if asset is not None and fx is not None else None
 
-    try:
-        ending = positions_map(snapshot['positions'])
-        starting = {symbol: dict(row) for symbol, row in ending.items()}
-        since_prior = sorted((e for e in events if e['date'] > prior.isoformat()), key=event_order)
-        if any(e.get('currency') != 'NOK' or not finite(e.get('net_cash')) or
-               e['type'] not in {'buy', 'sell', 'split', 'deposit', 'withdrawal', 'dividend', 'interest', 'fee'}
-               for e in since_prior):
-            raise ValueError('Unsupported ledger activity in the measurement period.')
-        cash = snapshot['manual_portfolio_preferences']['cash_nok']
-        for event in reversed(since_prior):
-            apply_event(starting, event, reverse=True)
-        start_cash = cash - sum(e['net_cash'] for e in since_prior)
-        for event in reversed(since_prior):
-            if event['date'] > date.isoformat():
-                apply_event(ending, event, reverse=True)
-                cash -= event['net_cash']
-        external = sum(e['net_cash'] for e in since_prior if e['date'] <= date.isoformat()
-                       and e['type'] in ('deposit', 'withdrawal'))
-    except (ValueError, KeyError, TypeError) as error:
-        coverage.append(str(error))
-        return result
+    def provider_splits(symbol, start, end):
+        ratios = {}
+        for action in quotes.get(symbol, {}).get('events', []):
+            if action.get('kind') == 'split':
+                action_date = quote_day(action['time'])
+                if start < action_date <= end:
+                    ratios[action_date] = ratios.get(action_date, 1.) * action['ratio']
+        return ratios
 
-    reconciled = (snapshot.get('ledger_reconciled') is True and baseline
-                  and baseline['cutoff_date'] <= prior.isoformat())
-    if not reconciled:
-        coverage.append('Reconcile holdings and cash with a verified opening snapshot before the session.')
-    else:
-        result['net_external_nok'] = external
-    begin, end = start_cash, cash
-    valid = bool(reconciled)
-    for symbol in sorted(set(starting) | set(ending)):
-        row = ending.get(symbol) or starting[symbol]
-        first = starting.get(symbol, {}).get('shares', 0)
-        last = ending.get(symbol, {}).get('shares', 0)
-        if not first and not last:
-            continue
-        quote = quotes.get(symbol, {})
-        ledger_splits = [e['split_ratio'] for e in since_prior if e['type'] == 'split'
-                         and pf.canonical(e['symbol']) == symbol and e['date'] <= date.isoformat()]
-        provider_splits = [e['ratio'] for e in quote.get('events', []) if e.get('kind') == 'split'
-                           and prior < quote_day(e['time']) <= date]
-        split_ratio = math.prod(ledger_splits)
-        split_ok = math.isclose(split_ratio, math.prod(provider_splits))
-        if not split_ok:
-            coverage.append(f'{symbol}: provider and ledger splits need reconciliation.')
-        before = nok_price(symbol, row['currency'], prior, False, required=first > 0)
-        after = nok_price(symbol, row['currency'], date, live) if last else None
-        valid &= split_ok and (not first or before is not None) and (not last or after is not None)
-        begin += first * (before or 0)
-        end += last * (after or 0)
-        if last:
-            comparable = before / split_ratio if before is not None else None
-            change = after - comparable if split_ok and comparable and after is not None else None
+    def measure(dates):
+        prior, end = dates[0], dates[-1]
+        result = {'date': end.isoformat(), 'previous_date': prior.isoformat(), 'live': live,
+                  'coverage': [], 'holdings': [], 'opening_nok': None, 'ending_nok': None,
+                  'change_nok': None, 'change_pct': None, 'net_external_nok': None, 'curve': []}
+        coverage = result['coverage']
+        opening = prior.isoformat()
+        since_prior = sorted((e for e in events if e['date'] > opening), key=event_order)
+        reconciled = (snapshot.get('ledger_reconciled') is True and baseline
+                      and baseline['cutoff_date'] <= opening)
+        if not reconciled:
+            coverage.append('Reconcile holdings and cash with a verified opening snapshot before the period.')
+        try:
+            holdings = positions_map(snapshot['positions'])
+            cash = snapshot['manual_portfolio_preferences']['cash_nok']
+            if any(e.get('currency') != 'NOK' or not finite(e.get('net_cash')) or
+                   e['type'] not in {'buy', 'sell', 'split', 'deposit', 'withdrawal', 'dividend', 'interest', 'fee'}
+                   for e in since_prior):
+                raise ValueError('Unsupported ledger activity in the measurement period.')
+            for event in reversed(since_prior):
+                apply_event(holdings, event, reverse=True)
+                cash -= event['net_cash']
+        except (ValueError, KeyError, TypeError) as error:
+            coverage.append(str(error))
+            return result
+
+        external = 0.
+        linked = 1.
+        previous_value = None
+        curve = []
+        opening_prices = {}
+        unmatched_splits = set()
+        pending = iter(since_prior)
+        event = next(pending, None)
+        for report_date in dates:
+            external_today = 0.
+            ledger_splits = {}
+            held_before = {symbol for symbol, row in holdings.items() if row['shares'] > 0}
+            while event and event['date'] <= report_date.isoformat():
+                if event['type'] in ('deposit', 'withdrawal'):
+                    external_today += event['net_cash']
+                if event['type'] == 'split':
+                    ratios = ledger_splits.setdefault(pf.canonical(event['symbol']), {})
+                    action_date = dt.date.fromisoformat(event['date'])
+                    ratios[action_date] = ratios.get(action_date, 1.) * event['split_ratio']
+                apply_event(holdings, event)
+                cash += event['net_cash']
+                event = next(pending, None)
+            external += external_today
+            held = {symbol for symbol, row in holdings.items() if row['shares'] > 0}
+            if report_date != prior:
+                for symbol in held_before | held:
+                    provider = provider_splits(symbol, previous_date, report_date)
+                    ledger = ledger_splits.get(symbol, {})
+                    for action_date in provider.keys() | ledger.keys():
+                        if not math.isclose(ledger.get(action_date, 1.), provider.get(action_date, 1.)):
+                            unmatched_splits.add(symbol)
+                            coverage.append(f'{symbol}: provider and ledger splits need reconciliation.')
+            prices = {symbol: nok_price(symbol, holdings[symbol]['currency'], report_date, coverage)
+                      for symbol in sorted(held)}
+            if report_date == prior:
+                opening_prices = prices
+            value = (cash + sum(holdings[symbol]['shares'] * price for symbol, price in prices.items())
+                     if all(price is not None for price in prices.values()) else None)
+            if report_date != prior:
+                if (linked is not None and previous_value is not None and previous_value > 0
+                    and value is not None and value >= external_today):
+                    linked *= (value - external_today) / previous_value
+                else:
+                    linked = None
+            curve.append({'date': report_date.isoformat(),
+                          'adjusted_value_nok': value - external if value is not None else None})
+            previous_value = value
+            previous_date = report_date
+
+        if reconciled:
+            result['net_external_nok'] = external
+        for symbol, after in prices.items():
+            before = opening_prices.get(symbol)
+            if symbol not in opening_prices:
+                before = nok_price(symbol, holdings[symbol]['currency'], prior, None)
+            split_factor = math.prod(provider_splits(symbol, prior, end).values())
+            comparable = before / split_factor if before is not None else None
+            change = after - comparable if symbol not in unmatched_splits and comparable and after is not None else None
             result['holdings'].append({'symbol': symbol, 'change_nok': change,
                                        'change_pct': change / comparable * 100 if change is not None else None})
-    if valid:
-        change = end - begin - external
-        result.update(opening_nok=begin, ending_nok=end, change_nok=change,
-                      change_pct=change / begin * 100 if begin > 0 and end - external >= 0 else None)
-    result['coverage'] = list(dict.fromkeys(coverage))
-    return result
+        if reconciled and not coverage:
+            begin = curve[0]['adjusted_value_nok']
+            change = value - begin - external
+            percent = None
+            if linked is not None:
+                percent = change / begin * 100 if len(dates) == 2 else (linked - 1) * 100
+            result.update(opening_nok=begin, ending_nok=value, change_nok=change,
+                          change_pct=percent, curve=curve)
+        result['coverage'] = list(dict.fromkeys(coverage))
+        return result
+
+    prior = previous_oslo_session(session_date)
+    today = measure((prior, session_date))
+    week_prior = week_start - dt.timedelta(days=1)
+    days = [week_prior + dt.timedelta(days=i) for i in range((week_end - week_prior).days + 1)]
+    week = measure(days)
+    week.update(window_start=week_start.isoformat(), window_end=date.isoformat(),
+                closed_dates=[d.isoformat() for d in days[1:] if not oslo_session(d)])
+    return today, week
 
 
 def view(snapshot,baseline,events,now=None,allow_prior_close=False):
@@ -284,7 +335,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
          'daily_linked_return_pct':None,'modified_dietz_pct':None,'realized_trade_pnl_nok':None,
          'income_nok':None,'reported_fees_nok':None,'carried_valuations':0,'excluded_later_events':0,'opening_basis':None}
     out.update(current_summary(snapshot,now,events))
-    out['today'] = session_performance(snapshot,baseline,events,now)
+    out['today'], out['last_7_days'] = portfolio_performance(snapshot,baseline,events,now)
     def block(reason):
         if reason not in out['coverage']:out['coverage'].append(reason)
     if not baseline:

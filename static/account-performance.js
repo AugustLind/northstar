@@ -96,71 +96,107 @@ function renderAccountPerformance(value) {
 $('#refreshAccountPerformance').onclick = loadAccountPerformance;
 $('#allowPriorClose').onchange = loadAccountPerformance;
 
-let todaySessionStatus = '';
-function showTodayRefreshFailure(error) {
-  const failure = 'Refresh failed. ' + error.message;
-  $('#todayStatus').textContent = todaySessionStatus
-    ? todaySessionStatus + ' Showing last loaded figures. ' + failure
-    : failure;
+function signedMoney(amount) {
+  return amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + money(amount);
 }
-
-function renderToday(value) {
-  const today = value.today || {};
-  const signedMoney = (amount) =>
-    amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + money(amount);
-  const signedPercent = (amount) =>
-    amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + amount.toFixed(1) + '%';
-  const dateLabel = today.date
-    ? (today.live ? 'Session ' : 'Last completed session ') + today.date + ' (Europe/Oslo)'
-    : '';
-  todaySessionStatus = [dateLabel, ...(today.coverage || [])]
-    .filter(Boolean)
-    .join(' · ');
-  $('#todayStatus').textContent = todaySessionStatus;
-  $('#todayMetrics').innerHTML = [
-    toolTile(
-      'Current account value',
-      value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok),
-      'Recorded cash and holdings at provider quotes'
-    ),
+function signedPercent(amount) {
+  return amount == null ? 'Unavailable' : (amount > 0 ? '+' : '') + amount.toFixed(1) + '%';
+}
+function portfolioPeriodTiles(period, returnBasis) {
+  return [
     toolTile(
       'Investment performance',
-      signedMoney(today.change_nok) + ' · ' + signedPercent(today.change_pct),
-      'Return assumes external cash flows occur at day end'
+      signedMoney(period.change_nok) + ' · ' + signedPercent(period.change_pct),
+      returnBasis
     ),
     toolTile(
       'Net external cash flow',
-      signedMoney(today.net_external_nok),
+      signedMoney(period.net_external_nok),
       'Deposits less withdrawals'
     ),
   ].join('');
-  $('#todayChart').hidden = today.change_nok == null;
-  $('#todayChart').innerHTML =
-    today.change_nok == null
-      ? ''
-      : ChartKit.svg(
-          [
-            { time: Date.parse(today.previous_date) / 1000, close: today.opening_nok },
-            { time: Date.parse(today.date) / 1000, close: today.ending_nok - today.net_external_nok },
-          ],
-          {
-            symbol:
-              'Investment value excluding net external flow · ' +
-              today.previous_date +
-              ' to ' +
-              today.date,
-            valueLabel: 'Investment value · NOK',
-            compact: window.innerWidth <= 600,
-          }
-        );
-  $('#todayHoldings').innerHTML = today.holdings?.length
+}
+function holdingMovements(holdings) {
+  return holdings?.length
     ? toolTable(
         ['Holding', 'Price change per share in NOK', 'Price change %'],
-        today.holdings.map((row) => [
+        holdings.map((row) => [
           esc(row.symbol),
           esc(signedMoney(row.change_nok)),
           signedPercent(row.change_pct),
         ])
       )
     : '';
+}
+
+const portfolioPeriodStatus = { today: '', week: '' };
+function showPortfolioRefreshFailure(error) {
+  const failure = 'Refresh failed. ' + error.message;
+  for (const [period, status] of Object.entries(portfolioPeriodStatus)) {
+    $('#' + period + 'Status').textContent = status
+      ? status + ' Showing last loaded figures. ' + failure
+      : failure;
+  }
+}
+
+function renderToday(value) {
+  const today = value.today || {};
+  const dateLabel = today.date
+    ? (today.live ? 'Session ' : 'Last completed session ') + today.date + ' (Europe/Oslo)'
+    : '';
+  portfolioPeriodStatus.today = [dateLabel, ...(today.coverage || [])].filter(Boolean).join(' · ');
+  $('#todayStatus').textContent = portfolioPeriodStatus.today;
+  $('#todayMetrics').innerHTML =
+    toolTile(
+      'Current account value',
+      value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok),
+      'Recorded cash and holdings at provider quotes'
+    ) + portfolioPeriodTiles(today, 'Return assumes external cash flows occur at day end');
+  renderPerformanceChart('today', today);
+  $('#todayHoldings').innerHTML = holdingMovements(today.holdings);
+}
+
+function renderLast7Days(week = {}) {
+  const windowLabel = week.window_start
+    ? week.window_start + ' to ' + week.window_end + ' (Europe/Oslo)'
+    : '';
+  const latest =
+    week.date && week.date !== week.window_end ? 'Latest valuation date ' + week.date : '';
+  const closures =
+    week.curve?.length && week.closed_dates.length
+      ? 'Prior closes carried on ' + week.closed_dates.join(', ')
+      : '';
+  portfolioPeriodStatus.week = [windowLabel, latest, closures, ...(week.coverage || [])]
+    .filter(Boolean)
+    .join(' · ');
+  $('#weekStatus').textContent = portfolioPeriodStatus.week;
+  $('#weekMetrics').innerHTML = portfolioPeriodTiles(
+    week,
+    'Daily-linked return assumes external cash flows occur at day end'
+  );
+  renderPerformanceChart('week', week);
+  $('#weekHoldings').innerHTML = holdingMovements(week.holdings);
+}
+
+function renderPerformanceChart(prefix, period) {
+  const chart = $('#' + prefix + 'Chart');
+  const curve = period.curve || [];
+  chart.hidden = curve.length < 2;
+  chart.innerHTML = chart.hidden
+    ? ''
+    : ChartKit.svg(
+        curve.map((point) => ({
+          time: Date.parse(point.date) / 1000,
+          close: point.adjusted_value_nok,
+        })),
+        {
+          symbol:
+            'Investment value excluding net external flow · ' +
+            period.previous_date +
+            ' to ' +
+            period.date,
+          valueLabel: 'Investment value · NOK',
+          compact: window.innerWidth <= 600,
+        }
+      );
 }
