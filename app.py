@@ -165,6 +165,7 @@ def fetch_quote(symbol):
     # Unofficial public endpoint: errors are surfaced, never replaced with sample prices.
     url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol, safe='') + '?range=5y&interval=1d&events=div%2Csplits'
     req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    observed = time.time()
     with urlopen(req, timeout=12) as response:
         result = json.load(response)['chart']['result'][0]
     meta = result['meta']
@@ -220,7 +221,8 @@ def fetch_quote(symbol):
             point['raw_close']=raw_close
             point['account_close']=raw_close*factor
     return {'price': price, 'currency': meta['currency'], 'asof': meta['regularMarketTime'],
-            'fetched': time.time(), 'source': 'Yahoo Finance (unofficial)',
+            'fetched': observed, 'source': 'Yahoo Finance (unofficial)',
+            'regular_session_end': (meta.get('currentTradingPeriod') or {}).get('regular', {}).get('end'),
             'history': history, 'history_basis': 'Dividend/split adjusted close' if adjusted else 'Provider daily close',
             'history_version':3,'events_version':1,'account_history_version':1,
             'account_price_basis':'Provider split-only close restored to historical share units using sourced split events; dividends not added.','events':sorted(events,key=lambda e:e['time']),

@@ -40,6 +40,31 @@ class AccountPerformanceTests(unittest.TestCase):
         snapshot['quotes']={}
         self.assertIsNone(ap.current_summary(snapshot,stamp('2025-01-06')+21*3600)['current_value_nok'])
 
+    def test_cached_intraday_bar_cannot_become_a_completed_session_overnight(self):
+        q=quote([('2025-01-02',10),('2025-01-03',12)])
+        q.update(price=12,asof=stamp('2025-01-03T12:00'),fetched=stamp('2025-01-03T12:01'))
+        snapshot,_=setup([],q)
+        now=stamp('2025-01-06T07:00')
+        value=ap.current_summary(snapshot,now)
+        self.assertEqual(value['today_date'],'2025-01-03')
+        self.assertIsNone(value['today_change_nok'])
+        self.assertTrue(any('missing session close' in notice for notice in value['current_coverage']))
+
+        q['fetched']=stamp('2025-01-03T16:00')
+        self.assertEqual(ap.current_summary(snapshot,now)['today_change_nok'],20)
+
+    def test_same_date_equity_quote_before_open_does_not_count_as_live(self):
+        q=quote([('2025-01-03',10)])
+        q.update(price=12,asof=stamp('2025-01-06T07:55'),fetched=stamp('2025-01-06T08:02'))
+        snapshot,_=setup([],q)
+        now=stamp('2025-01-06T08:02')
+        value=ap.current_summary(snapshot,now)
+        self.assertIsNone(value['today_change_nok'])
+        self.assertTrue(any('missing open-session quote' in notice for notice in value['current_coverage']))
+
+        q['asof']=stamp('2025-01-06T08:00')
+        self.assertEqual(ap.current_summary(snapshot,now)['today_change_nok'],20)
+
     def test_empty_account_does_not_invent_zero_value(self):
         snapshot={'positions':[],'quotes':{},'manual_portfolio_preferences':{'cash_nok':0}}
         self.assertIsNone(ap.current_summary(snapshot,NOW)['current_value_nok'])

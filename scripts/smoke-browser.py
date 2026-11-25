@@ -60,24 +60,25 @@ def verify_today_performance():
             browser.wait("""document.querySelector('[data-today-holding="SYNTH.OL"] span').textContent===money(-2200)+' (-20.0%)'""",
                          'signed negative holding and account movement')
 
-            fixture.quotes('2025-04-15', fx=11)
             fixture.account_now = fixture.stamp('2025-04-16T06:00')
+            fixture.quotes('2025-04-15', fx=11)
             refresh()
             browser.wait("document.querySelector('#todayChartTitle').textContent==='Last completed session · 2025-04-15' && document.querySelector('#todayChart').textContent.includes(money(99000)) && document.querySelector('#todayChart').textContent.includes(money(100000)) && document.querySelector('#todayExternalCash').textContent===money(0)",
                          'before the first quote, show the previous close and reverse later ledger events')
 
-            fixture.quotes('2025-04-16', fx=11, missing_oslo=True)
             fixture.account_now = fixture.stamp('2025-04-16T20:30')
+            fixture.quotes('2025-04-16', fx=11, missing_oslo=True)
             refresh()
             browser.wait("document.querySelector('#portfolioMove').textContent==='Unavailable' && document.querySelector('#todayChart').textContent.includes('unavailable') && document.querySelector('#portfolioAccountStatus').textContent.includes('SYNTH.OL: missing open-session quote') && document.querySelector('[data-today-holding=US] span').textContent.includes('+10.0%')",
                          'missing open-session quote with available cash flow and other holding movement')
 
-            fixture.quotes('2025-04-16', fx=11, oslo_quote=108)
             fixture.account_now = fixture.stamp('2025-04-16T22:15')
+            fixture.quotes('2025-04-16', fx=11, oslo_quote=108)
             refresh()
             check_account('money(110030)', "'+'+money(2250)+' (+2.3%)'", "'+'+money(8000)", 'Last completed session · 2025-04-16')
             browser.wait("document.querySelector('#portfolioValueMeta').textContent.includes('reporting date 2025-04-17')",
                          'Europe/Oslo reporting date rolls over before UTC')
+            fixture.account_now = fixture.stamp('2025-04-18T16:00')
             fixture.quotes('2025-04-17', fx=11)
             for date in ('2025-04-18T16:00','2025-04-19T16:00'):
                 fixture.account_now = fixture.stamp(date)

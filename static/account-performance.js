@@ -153,7 +153,7 @@ function renderTodayPerformance(value) {
   }).join('');
 }
 
-async function loadPortfolioAccount() {
+async function loadPortfolioAccount(refreshErrors = []) {
   const token = ++portfolioAccountRequest;
   if (!portfolioAccountLoaded)
     $('#portfolioAccountStatus').textContent = 'Loading current valuation and ledger performance…';
@@ -176,7 +176,7 @@ async function loadPortfolioAccount() {
     $('#portfolioPnlMeta').textContent = verified
       ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
       : 'Requires reconciled ledger, comparable valuations and verified opening history.';
-    const notices = (value.current_coverage || []).concat(value.coverage || []);
+    const notices = (value.current_coverage || []).concat(value.coverage || [], refreshErrors);
     $('#portfolioAccountStatus').textContent = notices.length
       ? notices.join(' ')
       : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';
@@ -186,7 +186,7 @@ async function loadPortfolioAccount() {
       $('#portfolioValue').textContent = 'Unavailable';
       renderTodayPerformance({});
       $('#portfolioPnl').textContent = 'Unavailable';
-      $('#portfolioAccountStatus').textContent = error.message;
+      $('#portfolioAccountStatus').textContent = [error.message, ...refreshErrors].join(' ');
     }
   }
 }
@@ -196,9 +196,7 @@ $('#refreshPortfolioAccount').onclick = async () => {
   button.textContent = 'Refreshing market data…';
   try {
     const result = await api('refresh', {});
-    await loadPortfolioAccount();
-    if (result.errors && result.errors.length)
-      $('#portfolioAccountStatus').textContent = result.errors.join(' ');
+    await loadPortfolioAccount(result.errors || []);
   } catch (error) {
     $('#portfolioAccountStatus').textContent = error.message;
   } finally {

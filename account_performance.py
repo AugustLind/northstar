@@ -83,15 +83,28 @@ def latest_session(date, currency, now):
     return date
 
 
-def session_price(quote, date, currency, now, live=False):
+def session_price(quote, date, currency, now, live=False, fx=False):
     if not quote or quote.get('currency') != currency:
         return None
     if live and date == reporting_date(now):
         stamp, price = quote.get('asof'), quote.get('price')
-        if finite(stamp) and stamp <= now and reporting_date(stamp) == date and finite(price) and price > 0:
+        opening = market_open(date, currency) if not fx else None
+        if (finite(stamp) and stamp <= now and reporting_date(stamp) == date
+            and (fx or (opening is not None and stamp >= opening)) and finite(price) and price > 0):
             return price
         return None
     if quote.get('account_history_version') != 1:
+        return None
+    if fx:
+        # FX marks are grouped by Oslo reporting date.
+        close = dt.datetime.combine(date + ONE_DAY, dt.time.min, OSLO).timestamp()
+    else:
+        close = quote.get('regular_session_end')
+        if not finite(close) or reporting_date(close) != date:
+            zone, close_time = (OSLO, dt.time(16, 30)) if currency == 'NOK' else (NEW_YORK, dt.time(16))
+            close = dt.datetime.combine(date, close_time, zone).timestamp()
+    observed = quote.get('fetched', quote.get('asof'))
+    if not finite(observed) or not close <= observed <= now:
         return None
     return next((point['account_close'] for point in reversed(quote.get('history', []))
                  if finite(point.get('time')) and point['time'] <= now and reporting_date(point['time']) == date
@@ -168,7 +181,7 @@ def current_summary(snapshot, now, events=(), baseline=None):
 
     def nok_price(symbol, currency, date, live=False):
         price = session_price(quotes.get(symbol), date, currency, now, live)
-        fx = session_price(quotes.get('NOK=X'), date, 'NOK', now, live) if currency == 'USD' else 1
+        fx = session_price(quotes.get('NOK=X'), date, 'NOK', now, live, fx=True) if currency == 'USD' else 1
         return price * fx if price is not None and fx is not None else None
 
     total, asofs, valuation_coverage = quote_valuation(held, quotes, sessions, cash, now)

@@ -57,6 +57,17 @@ setImmediate(async()=>{
  finishOverviewRequest();
  await overviewRefresh;
  context.fetch=accountOriginalFetch;
+ const holdingNotice='BOUV.OL: missing open-session quote.';
+ const providerError='Watchlist quote refresh failed.';
+ context.fetch=(path,options)=>path.endsWith('/api/refresh')
+   ?Promise.resolve({ok:true,json:async()=>({errors:[providerError]})})
+   :path.includes('/api/account-performance?')
+   ?Promise.resolve({ok:true,json:async()=>({...accountPerformanceFixture,current_coverage:[holdingNotice]})})
+   :accountOriginalFetch(path,options);
+ await nodes['#refreshPortfolioAccount'].onclick();
+ assert(nodes['#portfolioAccountStatus'].textContent.includes(holdingNotice));
+ assert(nodes['#portfolioAccountStatus'].textContent.includes(providerError));
+ context.fetch=accountOriginalFetch;
  await vm.runInContext('loadResearchArchive()',context);
  assert(nodes['#archiveMethod'].textContent.includes('Known since capture'));
  vm.runInContext('renderStockDecision('+JSON.stringify(summaryFixture)+')',context);

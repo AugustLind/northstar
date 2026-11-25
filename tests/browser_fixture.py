@@ -108,7 +108,7 @@ class SessionFixture(Fixture):
                 history = [{'time':self.stamp(d+'T'+hour),'account_close':v}
                            for d,v in closes.items() if d <= through]
                 bar = history[-1]
-                quote = {'price':bar['account_close'],'asof':bar['time'],'currency':currency,
+                quote = {'price':bar['account_close'],'asof':bar['time'],'fetched':self.account_now,'currency':currency,
                          'account_history_version':1,'history':history,'source':'Synthetic session quotes'}
                 if symbol == 'SYNTH.OL' and oslo_quote is not None:
                     quote.update(price=oslo_quote, asof=bar['time']-3600)
