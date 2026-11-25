@@ -284,7 +284,7 @@ function renderBuyCandidates(v) {
 }
 async function loadDaily() {
   const token = ++dailyRequest;
-  loadOverviewAccount();
+  loadPortfolioAccount();
   try {
     const v = await api('daily');
     if (token === dailyRequest) renderDaily(v);

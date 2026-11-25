@@ -95,7 +95,7 @@ class SessionFixture(Fixture):
             for key,value in [('ledger_state',result['ledger']),('portfolio_preferences',result['profile'])]:
                 db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',(key,json.dumps(value)))
 
-    def quotes(self, date, fx=10, missing_oslo=False):
+    def quotes(self, date, fx=10, missing_oslo=False, oslo_quote=None):
         prices = {
             'SYNTH.OL': ('NOK', {'2025-04-14':90, '2025-04-15':100, '2025-04-16':110}),
             'US': ('USD', {'2025-04-14':100, '2025-04-15':100, '2025-04-16':100, '2025-04-17':100}),
@@ -110,4 +110,6 @@ class SessionFixture(Fixture):
                 bar = history[-1]
                 quote = {'price':bar['account_close'],'asof':bar['time'],'currency':currency,
                          'account_history_version':1,'history':history,'source':'Synthetic session quotes'}
+                if symbol == 'SYNTH.OL' and oslo_quote is not None:
+                    quote.update(price=oslo_quote, asof=bar['time']-3600)
                 db.execute('INSERT OR REPLACE INTO quotes VALUES (?,?)',(symbol,json.dumps(quote)))

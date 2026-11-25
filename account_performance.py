@@ -86,14 +86,38 @@ def latest_session(date, currency, now):
 def session_price(quote, date, currency, now, live=False):
     if not quote or quote.get('currency') != currency:
         return None
-    stamp, price = quote.get('asof'), quote.get('price')
-    if live and finite(stamp) and stamp <= now and reporting_date(stamp) == date and finite(price) and price > 0:
-        return price
-    if (live and date == reporting_date(now)) or quote.get('account_history_version') != 1:
+    if live and date == reporting_date(now):
+        stamp, price = quote.get('asof'), quote.get('price')
+        if finite(stamp) and stamp <= now and reporting_date(stamp) == date and finite(price) and price > 0:
+            return price
+        return None
+    if quote.get('account_history_version') != 1:
         return None
     return next((point['account_close'] for point in reversed(quote.get('history', []))
                  if finite(point.get('time')) and point['time'] <= now and reporting_date(point['time']) == date
                  and finite(point.get('account_close')) and point['account_close'] > 0), None)
+
+
+def quote_valuation(holdings, quotes, sessions, cash, now):
+    coverage = []
+    total = cash
+    asofs = []
+    for p in holdings:
+        symbol, currency = p['symbol'], p['currency']
+        sources = [quotes.get(symbol)] + ([quotes.get('NOK=X')] if currency == 'USD' else [])
+        expected = sessions[currency]
+        # A scheduled closure can legitimately leave the last closing quote several days old.
+        for quote, expected_currency in zip(sources, (currency, 'NOK')):
+            if (not quote or quote.get('currency') != expected_currency
+                or not finite(quote.get('price')) or quote['price'] <= 0
+                or not finite(quote.get('asof')) or quote['asof'] > now
+                or (not pf.fresh(quote, now) and reporting_date(quote['asof']) != expected)):
+                coverage.append(symbol + ': refresh for a current quote or NOK conversion rate.')
+                break
+        else:
+            total += p['shares'] * math.prod(quote['price'] for quote in sources)
+            asofs.extend(quote['asof'] for quote in sources)
+    return total, asofs, coverage
 
 
 def current_summary(snapshot, now, events=(), baseline=None):
@@ -147,23 +171,8 @@ def current_summary(snapshot, now, events=(), baseline=None):
         fx = session_price(quotes.get('NOK=X'), date, 'NOK', now, live) if currency == 'USD' else 1
         return price * fx if price is not None and fx is not None else None
 
-    total = cash
-    asofs = []
-    for p in held:
-        symbol, currency = p['symbol'], p['currency']
-        sources = [quotes.get(symbol)] + ([quotes.get('NOK=X')] if currency == 'USD' else [])
-        expected = sessions[currency]
-        # A scheduled closure can legitimately leave the last closing quote several days old.
-        for quote, expected_currency in zip(sources, (currency, 'NOK')):
-            if (not quote or quote.get('currency') != expected_currency
-                or not finite(quote.get('price')) or quote['price'] <= 0
-                or not finite(quote.get('asof')) or quote['asof'] > now
-                or (not pf.fresh(quote, now) and reporting_date(quote['asof']) != expected)):
-                coverage.append(symbol + ': refresh for a current quote or NOK conversion rate.')
-                break
-        else:
-            total += p['shares'] * math.prod(quote['price'] for quote in sources)
-            asofs.extend(quote['asof'] for quote in sources)
+    total, asofs, valuation_coverage = quote_valuation(held, quotes, sessions, cash, now)
+    coverage.extend(valuation_coverage)
     if not coverage:
         result.update(current_value_nok=total, current_asof=min(asofs, default=None), current_status='available')
 
@@ -216,14 +225,18 @@ def current_summary(snapshot, now, events=(), baseline=None):
         start_date = latest_session(prior_session, currency, now)
         last = nok_price(symbol, currency, end_date, live=True)
         first = nok_price(symbol, currency, start_date, live=end_date == start_date)
-        if last is None or first is None:
+        if (end_shares and last is None) or (start_shares and first is None):
             complete = False
-            if last is None and end_date == today:
+        if end_shares and last is None:
+            if end_date == today:
                 coverage.append(f'{symbol}: missing open-session quote or NOK conversion for {end_date}.')
             else:
-                coverage.append(f'{symbol}: missing session price or prior close for {end_date}.')
-        else:
+                coverage.append(f'{symbol}: missing session close or NOK conversion for {end_date}.')
+        if start_shares and first is None:
+            coverage.append(f'{symbol}: missing prior close or NOK conversion for {start_date}.')
+        if last is not None:
             ending_total += end_shares * last
+        if first is not None:
             opening_total += start_shares * first
 
         # Compare on a constant current-session share count and on today's share units.
@@ -231,16 +244,18 @@ def current_summary(snapshot, now, events=(), baseline=None):
                   if e.get('kind') == 'split' and finite(e.get('time'))
                   and finite(e.get('ratio')) and e['ratio'] > 0}
         account_split = math.prod(ratio for date, ratio in splits.items() if start_date < date <= end_date)
-        ledger_splits = [e['split_ratio'] for e in session_rows
-                         if e['type'] == 'split' and pf.canonical(e['symbol']) == symbol]
-        split_matches = math.isclose(account_split, math.prod(ledger_splits))
-        if opening is not None and not split_matches:
-            complete = False
-            coverage.append(f'{symbol}: provider and ledger splits must agree for account performance.')
+        if opening is not None:
+            ledger_split = math.prod(e['split_ratio'] for e in session_rows
+                                     if e['type'] == 'split' and pf.canonical(e['symbol']) == symbol)
+            if not math.isclose(account_split, ledger_split):
+                complete = False
+                coverage.append(f'{symbol}: provider and ledger splits must agree for account performance.')
         if end_shares:
             holding_prior = latest_session(end_date - ONE_DAY, currency, now)
             holding_close = first if holding_prior == start_date else nok_price(symbol, currency, holding_prior)
             holding_split = math.prod(ratio for date, ratio in splits.items() if holding_prior < date <= end_date)
+            if holding_close is None and (not start_shares or holding_prior != start_date):
+                coverage.append(f'{symbol}: missing holding prior close or NOK conversion for {holding_prior}.')
             reference = holding_close / holding_split if holding_close is not None else None
             move = last - reference if last is not None and reference is not None else None
             result['today_holdings'].append({

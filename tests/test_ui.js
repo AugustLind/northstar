@@ -47,13 +47,13 @@ setImmediate(async()=>{
  await vm.runInContext('loadAccountPerformance()',context);
  assert(nodes['#accountPerformanceStatus'].textContent.includes('Initialize a verified opening'));
  assert(nodes['#accountPerformanceChart'].innerHTML.includes('No complete'));
- await vm.runInContext('loadOverviewAccount()',context);
- assert(nodes['#overviewAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'));
+ await vm.runInContext('loadPortfolioAccount()',context);
+ assert(nodes['#portfolioAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'));
  let finishOverviewRequest;
  const accountOriginalFetch=context.fetch;
  context.fetch=(path,options)=>path.includes('/api/account-performance?')?new Promise(resolve=>{finishOverviewRequest=()=>resolve({ok:true,json:async()=>accountPerformanceFixture});}):accountOriginalFetch(path,options);
- const overviewRefresh=vm.runInContext('loadOverviewAccount()',context);
- assert(nodes['#overviewAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'),'Background refresh must not replace the last successful status with Loading.');
+ const overviewRefresh=vm.runInContext('loadPortfolioAccount()',context);
+ assert(nodes['#portfolioAccountStatus'].textContent.includes('Today’s movement needs a reconciled ledger.'),'Background refresh must not replace the last successful status with Loading.');
  finishOverviewRequest();
  await overviewRefresh;
  context.fetch=accountOriginalFetch;

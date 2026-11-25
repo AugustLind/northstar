@@ -254,7 +254,7 @@ Before opening or during a scheduled closure, the latest completed session is
 dated explicitly. Each holding uses its own market session and previous close,
 with dated USD/NOK conversion where applicable and a constant share count. In a
 mixed portfolio, a market that is closed contributes its previous closing mark.
-A missing expected quote or prior close withholds the account move. Extraordinary
+A missing price for a held endpoint withholds the account move. Extraordinary
 market closures and halts can appear as missing coverage. Reconciled holdings and
 cash are required for account performance. The detailed historical workflow
 remains available under Portfolio → Advanced tools.

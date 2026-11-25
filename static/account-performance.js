@@ -97,8 +97,8 @@ $('#refreshAccountPerformance').onclick = loadAccountPerformance;
 $('#allowPriorClose').onchange = loadAccountPerformance;
 
 
-let overviewAccountRequest = 0;
-let overviewAccountLoaded = false;
+let portfolioAccountRequest = 0;
+let portfolioAccountLoaded = false;
 let todayHoldingMoves = new Map();
 
 function signedMove(nok, percent) {
@@ -123,8 +123,8 @@ function renderTodayPerformance(value) {
   const date = value.today_date;
   const label = date === value.current_date ? 'Today’s performance' : 'Last completed session';
   $('#todayChartTitle').textContent = date ? label + ' · ' + date : 'Today’s performance';
-  $('#overviewMove').textContent = signedMove(value.today_change_nok, value.today_change_pct);
-  $('#overviewMoveMeta').textContent = date
+  $('#portfolioMove').textContent = signedMove(value.today_change_nok, value.today_change_pct);
+  $('#portfolioMoveMeta').textContent = date
     ? label + ' · ' + date + ' (Europe/Oslo)' +
       (value.today_change_pct != null && value.today_has_external_cash
         ? ' · Percentage assumes end-of-day external cash flows'
@@ -153,16 +153,16 @@ function renderTodayPerformance(value) {
   }).join('');
 }
 
-async function loadOverviewAccount() {
-  const token = ++overviewAccountRequest;
-  if (!overviewAccountLoaded)
-    $('#overviewAccountStatus').textContent = 'Loading current valuation and ledger performance…';
+async function loadPortfolioAccount() {
+  const token = ++portfolioAccountRequest;
+  if (!portfolioAccountLoaded)
+    $('#portfolioAccountStatus').textContent = 'Loading current valuation and ledger performance…';
   try {
     const value = await api('account-performance?allow_prior_close=0');
-    if (token !== overviewAccountRequest) return;
-    $('#overviewValue').textContent =
+    if (token !== portfolioAccountRequest) return;
+    $('#portfolioValue').textContent =
       value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
-    $('#overviewValueMeta').textContent =
+    $('#portfolioValueMeta').textContent =
       (value.current_price_basis || 'Provider quote basis') +
       ' · reporting date ' +
       (value.current_date || 'unavailable') +
@@ -172,35 +172,35 @@ async function loadOverviewAccount() {
     renderTodayPerformance(value);
     const verified =
       ['available', 'estimated'].includes(value.status) && value.investment_pnl_nok != null;
-    $('#overviewPnl').textContent = verified ? money(value.investment_pnl_nok) : 'Unavailable';
-    $('#overviewPnlMeta').textContent = verified
+    $('#portfolioPnl').textContent = verified ? money(value.investment_pnl_nok) : 'Unavailable';
+    $('#portfolioPnlMeta').textContent = verified
       ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
       : 'Requires reconciled ledger, comparable valuations and verified opening history.';
     const notices = (value.current_coverage || []).concat(value.coverage || []);
-    $('#overviewAccountStatus').textContent = notices.length
+    $('#portfolioAccountStatus').textContent = notices.length
       ? notices.join(' ')
       : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';
-    overviewAccountLoaded = true;
+    portfolioAccountLoaded = true;
   } catch (error) {
-    if (token === overviewAccountRequest) {
-      $('#overviewValue').textContent = 'Unavailable';
+    if (token === portfolioAccountRequest) {
+      $('#portfolioValue').textContent = 'Unavailable';
       renderTodayPerformance({});
-      $('#overviewPnl').textContent = 'Unavailable';
-      $('#overviewAccountStatus').textContent = error.message;
+      $('#portfolioPnl').textContent = 'Unavailable';
+      $('#portfolioAccountStatus').textContent = error.message;
     }
   }
 }
-$('#refreshOverviewAccount').onclick = async () => {
-  const button = $('#refreshOverviewAccount');
+$('#refreshPortfolioAccount').onclick = async () => {
+  const button = $('#refreshPortfolioAccount');
   button.disabled = true;
   button.textContent = 'Refreshing market data…';
   try {
     const result = await api('refresh', {});
-    await loadOverviewAccount();
+    await loadPortfolioAccount();
     if (result.errors && result.errors.length)
-      $('#overviewAccountStatus').textContent = result.errors.join(' ');
+      $('#portfolioAccountStatus').textContent = result.errors.join(' ');
   } catch (error) {
-    $('#overviewAccountStatus').textContent = error.message;
+    $('#portfolioAccountStatus').textContent = error.message;
   } finally {
     button.disabled = false;
     button.textContent = 'Refresh account value';

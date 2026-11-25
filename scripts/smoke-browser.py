@@ -24,7 +24,7 @@ def verify_today_performance():
             return real_view(*args, now=fixture.account_now, **kwargs)
 
         def check_account(value, performance, external, title):
-            checks = {'overviewValue':value, 'overviewMove':performance, 'todayExternalCash':external}
+            checks = {'portfolioValue':value, 'portfolioMove':performance, 'todayExternalCash':external}
             expression = ' && '.join(
                 f"document.getElementById('{key}').textContent==={expected}"
                 for key,expected in checks.items()
@@ -33,7 +33,7 @@ def verify_today_performance():
                          title + ' with expected value, investment return and cash flow')
 
         def refresh():
-            browser.evaluate('loadOverviewAccount()')
+            browser.evaluate('loadPortfolioAccount()')
 
         with patch.object(app.account_performance, 'view', dated_view):
             browser.call('Page.navigate', {'url':fixture.origin+'/'})
@@ -43,16 +43,22 @@ def verify_today_performance():
             browser.wait("!document.querySelector('#portfolio').hidden && document.querySelector('[aria-current=page]').dataset.tab==='portfolio'",
                          'unlinked Portfolio landing')
             check_account('money(111000)', "'+'+money(1000)+' (+1.0%)'", "'+'+money(10000)", 'Today’s performance · 2025-04-16')
-            browser.wait("document.querySelector('#overviewMoveMeta').textContent.includes('end-of-day external cash flows') && document.querySelector('#todayChart').textContent.includes(money(100000)) && document.querySelector('#todayChart').textContent.includes(money(101000))",
+            browser.wait("document.querySelector('#portfolioMoveMeta').textContent.includes('end-of-day external cash flows') && document.querySelector('#todayChart').textContent.includes(money(100000)) && document.querySelector('#todayChart').textContent.includes(money(101000))",
                          'dated chart and explicit cash-flow timing assumption')
 
             fixture.events([('withdrawal',-2000,0),('dividend',300,0),('fee',-50,0),('buy',-1100,10)])
             fixture.quotes('2025-04-16',fx=11)
-            browser.evaluate('load();loadOverviewAccount()')
+            browser.evaluate('load();loadPortfolioAccount()')
             check_account('money(110250)', "'+'+money(2250)+' (+2.3%)'", "'+'+money(8000)", 'Today’s performance · 2025-04-16')
             browser.wait("""document.querySelector('[data-today-holding="SYNTH.OL"] span').textContent==='+'+money(1100)+' (+10.0%)' &&
                             document.querySelector('[data-today-holding="US"] span').textContent==='+'+money(1000)+' (+10.0%)'""",
                          'holding returns exclude share-count changes and include USD/NOK movement')
+
+            fixture.quotes('2025-04-16', fx=11, oslo_quote=80)
+            refresh()
+            check_account('money(106950)', "money(-1050)+' (-1.1%)'", "'+'+money(8000)", 'Today’s performance · 2025-04-16')
+            browser.wait("""document.querySelector('[data-today-holding="SYNTH.OL"] span').textContent===money(-2200)+' (-20.0%)'""",
+                         'signed negative holding and account movement')
 
             fixture.quotes('2025-04-15', fx=11)
             fixture.account_now = fixture.stamp('2025-04-16T06:00')
@@ -63,14 +69,14 @@ def verify_today_performance():
             fixture.quotes('2025-04-16', fx=11, missing_oslo=True)
             fixture.account_now = fixture.stamp('2025-04-16T20:30')
             refresh()
-            browser.wait("document.querySelector('#overviewMove').textContent==='Unavailable' && document.querySelector('#todayChart').textContent.includes('unavailable') && document.querySelector('#overviewAccountStatus').textContent.includes('SYNTH.OL: missing open-session quote') && document.querySelector('[data-today-holding=US] span').textContent.includes('+10.0%')",
+            browser.wait("document.querySelector('#portfolioMove').textContent==='Unavailable' && document.querySelector('#todayChart').textContent.includes('unavailable') && document.querySelector('#portfolioAccountStatus').textContent.includes('SYNTH.OL: missing open-session quote') && document.querySelector('[data-today-holding=US] span').textContent.includes('+10.0%')",
                          'missing open-session quote with available cash flow and other holding movement')
 
-            fixture.quotes('2025-04-16', fx=11)
+            fixture.quotes('2025-04-16', fx=11, oslo_quote=108)
             fixture.account_now = fixture.stamp('2025-04-16T22:15')
             refresh()
-            check_account('money(110250)', "'+'+money(2250)+' (+2.3%)'", "'+'+money(8000)", 'Last completed session · 2025-04-16')
-            browser.wait("document.querySelector('#overviewValueMeta').textContent.includes('reporting date 2025-04-17')",
+            check_account('money(110030)', "'+'+money(2250)+' (+2.3%)'", "'+'+money(8000)", 'Last completed session · 2025-04-16')
+            browser.wait("document.querySelector('#portfolioValueMeta').textContent.includes('reporting date 2025-04-17')",
                          'Europe/Oslo reporting date rolls over before UTC')
             fixture.quotes('2025-04-17', fx=11)
             for date in ('2025-04-18T16:00','2025-04-19T16:00'):
@@ -78,7 +84,7 @@ def verify_today_performance():
                 refresh()
                 check_account('money(110250)', "money(0)+' (0.0%)'", 'money(0)', 'Last completed session · 2025-04-17')
             if browser.errors:
-                raise RuntimeError('Uncaught browser error during session performance checks: '+str(browser.errors))
+                raise RuntimeError('Uncaught browser error during session performance checks.')
         print('Today’s performance passed in Chrome: worked cash flows, holding FX and quantities, Oslo midnight, pre-open, holiday, weekend and missing quotes.')
 
 
@@ -93,34 +99,34 @@ def run():
             browser.wait("document.querySelector('#connectionPanel').hidden && document.querySelector('#holdings').textContent.includes('SYNTH.OL') && document.querySelector('#accountStatus').textContent==='Connected'",'authenticated account context')
             browser.evaluate('loadDaily()')
             browser.wait("document.querySelector('#dailyStatus').textContent.startsWith('Updated') && document.querySelector('#holdingAssessments').textContent.includes('Policy result:') && !document.querySelector('#buyCandidatesStatus').textContent.includes('Loading eligible candidates')",'authenticated holding assessment and buying-candidate response')
-            browser.wait("!document.querySelector('#overviewAccountStatus').textContent.includes('Loading')",'current account summary response')
+            browser.wait("!document.querySelector('#portfolioAccountStatus').textContent.includes('Loading')",'current account summary response')
             browser.wait("document.querySelector('#researchStatus').textContent.includes('Last report:') && document.querySelector('#workspaceTitle').textContent==='Portfolio'",'completed sign-in workspace startup')
-            if browser.evaluate("document.querySelector('#overviewValue').textContent==='Unavailable' || document.querySelector('#overviewValue').textContent==='—'"):
-                raise RuntimeError('Current account value unavailable: '+str(browser.evaluate("document.querySelector('#overviewValueMeta').textContent+' '+document.querySelector('#overviewAccountStatus').textContent")))
-            if browser.evaluate("document.querySelector('#overviewPnl').textContent==='Unavailable'"):
-                raise RuntimeError('Verified historical investment P&L unavailable: '+str(browser.evaluate("document.querySelector('#overviewPnlMeta').textContent+' '+document.querySelector('#overviewAccountStatus').textContent")))
+            if browser.evaluate("document.querySelector('#portfolioValue').textContent==='Unavailable' || document.querySelector('#portfolioValue').textContent==='—'"):
+                raise RuntimeError('Current account value unavailable: '+str(browser.evaluate("document.querySelector('#portfolioValueMeta').textContent+' '+document.querySelector('#portfolioAccountStatus').textContent")))
+            if browser.evaluate("document.querySelector('#portfolioPnl').textContent==='Unavailable'"):
+                raise RuntimeError('Verified historical investment P&L unavailable: '+str(browser.evaluate("document.querySelector('#portfolioPnlMeta').textContent+' '+document.querySelector('#portfolioAccountStatus').textContent")))
             expected_value="new Intl.NumberFormat('nb-NO',{style:'currency',currency:'NOK',maximumFractionDigits:2}).format("+str(fixture.expected_current_value_nok)+")"
-            if not browser.evaluate("document.querySelector('#overviewValue').textContent==="+expected_value):
+            if not browser.evaluate("document.querySelector('#portfolioValue').textContent==="+expected_value):
                 raise RuntimeError('Current value does not match synthetic holdings plus recorded cash.')
-            if not browser.evaluate("document.querySelector('#overviewValueMeta').textContent.includes('NOK cash') && document.querySelector('#overviewValueMeta').textContent.includes('reporting date') && document.querySelector('#overviewPnlMeta').textContent.includes(' to ')"):
-                raise RuntimeError('Overview account dates, cash scope or price basis are missing.')
+            if not browser.evaluate("document.querySelector('#portfolioValueMeta').textContent.includes('NOK cash') && document.querySelector('#portfolioValueMeta').textContent.includes('reporting date') && document.querySelector('#portfolioPnlMeta').textContent.includes(' to ')"):
+                raise RuntimeError('Portfolio account dates, cash scope or price basis are missing.')
             with app.connect() as db:
                 row=db.execute('SELECT payload FROM quotes WHERE symbol=?',('SYNTH.OL',)).fetchone()
                 original_quote=json.loads(row['payload'])
-                stale_quote={**original_quote,'asof':time.time()-5*86400}
+                stale_quote={**original_quote,'asof':time.time()-30*86400}
                 db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(stale_quote),'SYNTH.OL'))
-            browser.evaluate('loadOverviewAccount()')
-            browser.wait("document.querySelector('#overviewValue').textContent==='Unavailable' && document.querySelector('#overviewAccountStatus').textContent.includes('refresh for a current quote')",'incomplete current quote coverage')
+            browser.evaluate('loadPortfolioAccount()')
+            browser.wait("document.querySelector('#portfolioValue').textContent==='Unavailable' && document.querySelector('#portfolioAccountStatus').textContent.includes('refresh for a current quote')",'incomplete current quote coverage')
             with app.connect() as db:
                 db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(original_quote),'SYNTH.OL'))
-            browser.evaluate('loadOverviewAccount()')
-            browser.wait("document.querySelector('#overviewValue').textContent!=='Unavailable'",'account valuation recovery after quote refresh')
+            browser.evaluate('loadPortfolioAccount()')
+            browser.wait("document.querySelector('#portfolioValue').textContent!=='Unavailable'",'account valuation recovery after quote refresh')
             if width==1440:
                 browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
                 browser.wait("!document.querySelector('#portfolio').hidden",'Portfolio workspace for holding edit')
                 browser.evaluate("document.querySelector('#holdings button').click();const field=document.querySelector('#positionForm').elements.review;field.value='Unsaved reload draft';field.dispatchEvent(new Event('input',{bubbles:true}))")
                 browser.call('Page.reload',{'ignoreCache':True})
-                browser.wait("document.querySelector('#editor').open && document.querySelector('#positionForm').elements.review.value==='Unsaved reload draft'",'holding edit draft restoration')
+                browser.wait("document.querySelector('#editor')?.open && document.querySelector('#positionForm').elements.review.value==='Unsaved reload draft'",'holding edit draft restoration')
                 if not browser.evaluate("document.querySelector('#positionForm').elements.symbol.readOnly"):
                     raise RuntimeError('Reloaded holding edit draft lost its protected ticker field.')
                 browser.evaluate("document.querySelector('#close').click()")
@@ -249,12 +255,12 @@ def run():
             if not browser.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):raise RuntimeError('Workspace overflows the viewport.')
             browser.call('Page.navigate',{'url':fixture.origin+'/#fit'})
             browser.wait("location.hash==='#fit'",'direct advanced-tool URL')
-            browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#fitGroup').open",'direct advanced-tool workspace')
+            browser.wait("document.readyState==='complete' && document.querySelector('#workspaceTitle')?.textContent==='Portfolio' && document.querySelector('#fitGroup')?.open",'direct advanced-tool workspace')
             if not browser.evaluate("document.querySelector('#portfolioAdvanced').open && document.activeElement.id==='fit'"):
                 raise RuntimeError('Direct tool link did not reveal its parent disclosure and identify the destination: '+str(browser.evaluate("({outer:document.querySelector('#portfolioAdvanced').open,inner:document.querySelector('#fitGroup').open,focus:document.activeElement.id,hash:location.hash})")))
             browser.evaluate("const budget=document.querySelector('#fitPreferences').elements.purchase_nok;budget.value='5791';budget.dispatchEvent(new Event('input',{bubbles:true}))")
             browser.call('Page.reload',{'ignoreCache':True})
-            browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#fitGroup').open && document.querySelector('#fitStatus').textContent.includes('Current portfolio check:') && document.querySelector('#researchStatus').textContent.includes('Last report:')",'deep-link refresh and unsaved edit restoration')
+            browser.wait("document.readyState==='complete' && document.querySelector('#workspaceTitle')?.textContent==='Portfolio' && document.querySelector('#fitGroup')?.open && document.querySelector('#fitStatus').textContent.includes('Current portfolio check:') && document.querySelector('#researchStatus').textContent.includes('Last report:')",'deep-link refresh and unsaved edit restoration')
             if not browser.evaluate("document.querySelector('#fitPreferences').elements.purchase_nok.value==='5791' && document.querySelector('#adviceFilter').value==='all' && document.querySelector('#portfolioAdvanced').open"):
                 raise RuntimeError('Refresh did not preserve the tool link, unsaved allocation edit, or Research selection: '+str(browser.evaluate("({value:document.querySelector('#fitPreferences').elements.purchase_nok.value,filter:document.querySelector('#adviceFilter').value,advanced:document.querySelector('#portfolioAdvanced').open,saved:sessionStorage.getItem('northstar-workspace-ui-v1')})")))
             browser.wait("document.querySelector('#accountStatus').textContent==='Connected'",'connected account after direct route')
@@ -265,8 +271,8 @@ def run():
             browser.evaluate("document.querySelector('#disconnect').click()")
             browser.wait("document.querySelector('#connectionPanel') && !document.querySelector('#connectionPanel').hidden && !sessionStorage.getItem('northstar-key') && !sessionStorage.getItem('northstar-workspace-ui-v1') && document.querySelector('#accountStatus').textContent==='Not connected' && !document.querySelector('#holdings').textContent.includes('SYNTH.OL')",'sign-out data clearing')
             browser.call('Page.navigate',{'url':fixture.origin+'/#portfolio'})
-            browser.wait("document.querySelector('#overviewValue').textContent==='Unavailable' && document.querySelector('#overviewAccountStatus').textContent.includes('Sign in')",'disconnected Portfolio account state')
-            if browser.errors:raise RuntimeError('Uncaught browser error during authenticated workflow: '+str(browser.errors))
+            browser.wait("document.querySelector('#portfolioValue')?.textContent==='Unavailable' && document.querySelector('#portfolioAccountStatus')?.textContent.includes('Sign in')",'disconnected Portfolio account state')
+            if browser.errors:raise RuntimeError('Uncaught browser error during authenticated workflow.')
             completed='sign-in, holdings, account performance, research, '
             if width==1440:completed+='experiment, replay, '
             print('Authenticated browser checks passed at '+str(width)+'px: '+completed+'navigation, sign-out.')
