@@ -151,6 +151,32 @@ class AccountPerformanceTests(unittest.TestCase):
             {'date': '2025-01-03', 'value_nok': 310},
         ])
 
+    def test_saturday_deposit_uses_friday_close_for_oslo_holdings(self):
+        rows = [event(1, '2026-11-21', 'deposit', 100)]
+        snapshot, baseline = setup(rows, quote([
+            ('2026-11-20', 10), ('2026-11-23', 12),
+        ]))
+        baseline['cutoff_date'] = '2026-11-20'
+
+        value = ap.view(snapshot, baseline, rows, stamp('2026-11-24'))
+
+        self.assertEqual(value['status'], 'available')
+        self.assertEqual(value['net_contributions_nok'], 100)
+        self.assertEqual(value['investment_pnl_nok'], 20)
+        self.assertAlmostEqual(value['daily_linked_return_pct'], 20 / 300 * 100)
+
+    def test_saturday_deposit_cannot_substitute_for_a_missing_friday_close(self):
+        rows = [event(1, '2026-11-21', 'deposit', 100)]
+        snapshot, baseline = setup(rows, quote([
+            ('2026-11-19', 10), ('2026-11-23', 12),
+        ]))
+        baseline['cutoff_date'] = '2026-11-19'
+
+        value = ap.view(snapshot, baseline, rows, stamp('2026-11-24'))
+
+        self.assertIsNone(value['investment_pnl_nok'])
+        self.assertIn('A.OL: missing exact-date account close on 2026-11-21.', value['coverage'])
+
     def test_split_requires_ledger_ratio_and_historical_share_unit_prices(self):
         rows=[event(1,'2025-01-02','split',ratio=2)]
         q=quote([('2025-01-01',100),('2025-01-02',50)],events=[{'time':stamp('2025-01-02'),'kind':'split','ratio':2}])

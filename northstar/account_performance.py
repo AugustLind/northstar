@@ -93,8 +93,6 @@ def current_summary(snapshot,now,events=()):
                   current_date=today,today_date=today)
     if movement_valid and change_base>0:
         result.update(today_change_nok=change,today_change_pct=change/change_base*100)
-    else:
-        cover('Today’s movement needs a reconciled ledger, current same-session quotes and nearby prior closes; same-day events lack intraday timing.')
     if snapshot.get('ledger_reconciled') is not True:
         cover('Current valuation uses recorded holdings and cash; reconcile them in Portfolio → Activity & cash.')
     return result
@@ -414,9 +412,20 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
     out['reported_fees_nok']=sum(abs(e['net_cash']) if e['type']=='fee' else e['fee'] if finite(e.get('fee')) else 0 for e in selected) # informational; never deducted again
     groups={}
     for e in selected:groups.setdefault(e['date'],[]).append(e)
-    def price(s,date):
-        if date in prices.get(s,{}):return prices[s][date],False
-        earlier=[d for d in prices.get(s,{}) if d<date]
+    def price(s,date,currency):
+        closes=prices.get(s,{})
+        if date in closes:return closes[date],False
+        report_date=dt.date.fromisoformat(date)
+        if currency=='NOK' and s.endswith('.OL') and not oslo_session(report_date):
+            session=previous_oslo_session(report_date).isoformat()
+            provider_split=any(session<d<=date for d in splits.get(s,{}))
+            ledger_split=any(session<e['date']<=date and e['type']=='split' and
+                             pf.canonical(e['symbol'])==s for e in selected)
+            if provider_split or ledger_split:
+                block(s+': split between the last Oslo session and '+date+' prevents a comparable close.')
+                return None,False
+            if session in closes:return closes[session],False
+        earlier=[d for d in closes if d<date]
         if allow_prior_close and earlier:
             previous=max(earlier)
             if (dt.date.fromisoformat(date)-dt.date.fromisoformat(previous)).days<=4:return prices[s][previous],True
@@ -443,9 +452,9 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
         value=cash;carried=False;valid=True
         for s,p in holdings.items():
             if p['shares']<=1e-10:continue
-            close,was_carried=price(s,date);carried|=was_carried
+            close,was_carried=price(s,date,p['currency']);carried|=was_carried
             fx=1.
-            if p['currency']=='USD':fx,fx_carried=price('NOK=X',date);carried|=fx_carried
+            if p['currency']=='USD':fx,fx_carried=price('NOK=X',date,'NOK');carried|=fx_carried
             elif p['currency']!='NOK':block(s+': unsupported valuation currency.');valid=False
             if close is None or fx is None:valid=False
             else:value+=p['shares']*close*fx
