@@ -1,6 +1,7 @@
 """Private SMTP delivery of confirmed share-plan changes, with a persistent outbox."""
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -8,6 +9,7 @@ import smtplib
 import ssl
 import threading
 import time
+import traceback
 from datetime import datetime, time as wall_time, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formatdate
@@ -19,6 +21,8 @@ from northstar import trade_plan
 TIMEOUT = 20
 LEASE_SECONDS = 600
 OSLO = ZoneInfo('Europe/Oslo')
+WORKER_ERROR = 'Email worker failed; retrying in one minute.'
+LOGGER = logging.getLogger(__name__)
 
 
 def configuration(env=None):
@@ -454,6 +458,9 @@ class Worker:
             if initialize_weekly:
                 self.write('weekly_summary_start_slot', start_slot)
             if not events:
+                status = self.read('email_status', {})
+                if not test_pending and status.get('error') == WORKER_ERROR:
+                    self.write('email_status', {**status, 'error': None})
                 return
             # A pause can race with queueing; check again immediately before SMTP.
             if not self.read('email_enabled', True):
@@ -486,8 +493,13 @@ class Worker:
             self.wake.clear()
             try:
                 self.tick()
-            except Exception:
-                self.write('email_status', {**self.read('email_status', {}), 'error': 'Email worker failed; retrying in one minute.'})
+            except Exception as error:
+                # Log the failing location without exception text or local values.
+                frame = traceback.extract_tb(error.__traceback__)[-1]
+                LOGGER.error('Email worker failed with %s at %s:%d in %s',
+                             type(error).__name__, os.path.basename(frame.filename),
+                             frame.lineno, frame.name)
+                self.write('email_status', {**self.read('email_status', {}), 'error': WORKER_ERROR})
             self.wake.wait(60)
 
     def start(self):

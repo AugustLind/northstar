@@ -372,11 +372,31 @@ class DeliveryTests(unittest.TestCase):
         self.report['recommendation_changes'][0]['change'] = 'Unchanged'
         self.new_worker().tick(NOW+30)
         self.assertEqual(self.send.call_count, 1)
+        self.assertIn('authentication', self.worker.status()['error'])
         self.send.side_effect = None
         self.new_worker().tick(NOW+60)
         self.assertEqual(self.send.call_count, 2)
         self.assertEqual(self.rows()[0]['status'], 'sent')
         self.assertIsNone(self.worker.status()['error'])
+
+    def test_successful_retry_clears_worker_error_without_sending_an_email(self):
+        self.worker.tick(NOW)
+        last_sent = self.worker.status()['last_sent']
+        current_plan = self.worker.current_plan
+        self.worker.current_plan = Mock(side_effect=RuntimeError('Plan unavailable'))
+        with self.assertLogs('northstar.email_alerts', level='ERROR') as logs:
+            with patch.object(self.worker.wake, 'wait', side_effect=lambda _: self.worker.stop.set()):
+                self.worker.loop()
+        self.assertIn('RuntimeError', logs.output[0])
+        self.assertNotIn('Plan unavailable', logs.output[0])
+        self.assertIn('worker failed', self.worker.status()['error'])
+
+        self.worker.current_plan = current_plan
+        self.worker.tick(NOW + 60)
+
+        self.assertIsNone(self.worker.status()['error'])
+        self.assertEqual(self.worker.status()['last_sent'], last_sent)
+        self.send.assert_called_once()
 
     def test_stale_blocked_or_superseded_suggestions_are_not_retried(self):
         self.send.side_effect = TimeoutError()
