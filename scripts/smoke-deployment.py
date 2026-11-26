@@ -107,7 +107,7 @@ def check(origin,key,page_url=None,root=release_info.ROOT):
                 if tag=='link' and attrs.get('rel')=='stylesheet':self.styles.append(attrs['href'])
                 if 'data-tab' in attrs:self.tabs.append(attrs['data-tab'])
         parsed_html=Assets();parsed_html.feed(html);manifest=ui_assets.manifest(root)
-        if parsed_html.tabs!=['portfolio','candidates','daily','recommendations','validation']:raise CheckFailure('Public workspace contract failed.')
+        if parsed_html.tabs!=['daily','candidates','portfolio']:raise CheckFailure('Public workspace contract failed.')
         if [Path(urlsplit(p).path).name for p in parsed_html.scripts]!=manifest['scripts']:raise CheckFailure('Public script manifest is stale or incomplete.')
         if [Path(urlsplit(p).path).name for p in parsed_html.styles]!=manifest['styles']:raise CheckFailure('Public style manifest is stale or incomplete.')
         for relative in parsed_html.scripts+parsed_html.styles:
