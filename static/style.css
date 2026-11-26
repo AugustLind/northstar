@@ -1,7 +1,21 @@
 :root {
+  color-scheme: dark;
+  --canvas: #080a0f;
+  --surface: #10131b;
+  --raised: #171d29;
+  --border: #30394b;
+  --ink: #e5e8ef;
+  --muted: #abb5c6;
+  --accent: #a4bdff;
+  --accent-bg: #232f49;
+  --positive: #71d6b9;
+  --positive-bg: #173027;
+  --negative: #fa9fa7;
+  --caution: #f2ca8d;
+  --warning-bg: #33291e;
   font-family: Inter, system-ui, sans-serif;
-  color: #182b29;
-  background: #f5f6f1;
+  color: var(--ink);
+  background: var(--canvas);
 }
 * {
   box-sizing: border-box;
@@ -14,13 +28,13 @@ header {
   align-items: center;
   gap: 32px;
   padding: 24px 5%;
-  border-bottom: 1px solid #d8dfd7;
-  background: #fff;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 header span {
   font-size: 11px;
   letter-spacing: 2px;
-  color: #64736c;
+  color: var(--muted);
 }
 header button {
   margin-left: auto;
@@ -29,7 +43,7 @@ header button {
   font-weight: 800;
   letter-spacing: 3px;
   text-decoration: none;
-  color: #173f35;
+  color: var(--ink);
 }
 main {
   max-width: 1250px;
@@ -39,7 +53,7 @@ main {
 .eyebrow {
   font-size: 11px;
   letter-spacing: 3px;
-  color: #577a67;
+  color: var(--muted);
 }
 h1 {
   font-size: clamp(36px, 5vw, 60px);
@@ -51,7 +65,7 @@ h1 {
 .intro {
   max-width: 650px;
   line-height: 1.7;
-  color: #65736a;
+  color: var(--muted);
 }
 .workspace-context {
   display: flex;
@@ -69,7 +83,7 @@ h1 {
   font-size: 16px;
 }
 .account-context > span:last-child {
-  color: #65736a;
+  color: var(--muted);
   font-size: 13px;
 }
 .workspace-context .eyebrow {
@@ -95,8 +109,8 @@ h1 {
 }
 .metrics article {
   padding: 25px;
-  background: #fff;
-  border: 1px solid #dce2d8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
 }
 .metrics strong {
@@ -106,20 +120,20 @@ h1 {
 }
 .metrics small {
   display: block;
-  color: #6b796f;
+  color: var(--muted);
 }
 nav {
   display: flex;
   gap: 8px;
-  border-bottom: 1px solid #d3dbd2;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 12px;
   margin-bottom: 28px;
 }
 button {
   cursor: pointer;
-  border: 1px solid #ced8cd;
-  background: white;
-  color: #244f40;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
   border-radius: 6px;
   padding: 10px 16px;
   font: inherit;
@@ -127,8 +141,8 @@ button {
 }
 button:hover,
 button.active {
-  background: #244f40;
-  color: white;
+  background: #315293;
+  color: #f5f7fc;
 }
 button:disabled {
   opacity: 0.6;
@@ -148,12 +162,12 @@ h2 {
 .sectionhead p,
 .muted {
   font-size: 12px;
-  color: #68796f;
+  color: var(--muted);
 }
 .tablewrap {
   overflow: auto;
-  background: white;
-  border: 1px solid #dce2d8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 table {
@@ -164,28 +178,28 @@ table {
 }
 th {
   font-size: 11px;
-  color: #64756a;
-  background: #edf1e9;
+  color: var(--muted);
+  background: var(--raised);
   padding: 16px;
 }
 td {
   padding: 18px 16px;
-  border-top: 1px solid #e6ebe3;
+  border-top: 1px solid var(--border);
 }
 td small {
   display: block;
-  color: #6c7a70;
+  color: var(--muted);
   margin-top: 6px;
 }
 .positive {
-  color: #187448;
+  color: var(--positive);
 }
 .negative {
-  color: #a64738;
+  color: var(--negative);
 }
 .card {
-  border: 1px solid #d6dfd1;
-  background: white;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 10px;
   padding: 22px;
   margin: 14px 0;
@@ -198,16 +212,16 @@ td small {
 footer {
   margin-top: 60px;
   font-size: 11px;
-  color: #758176;
+  color: var(--muted);
 }
 dialog {
-  border: 1px solid #d1dcd0;
+  border: 1px solid var(--border);
   border-radius: 12px;
   width: min(650px, 95vw);
   padding: 28px;
 }
 dialog::backdrop {
-  background: #152b2877;
+  background: #0009;
 }
 .grid {
   display: grid;
@@ -217,7 +231,7 @@ dialog::backdrop {
 label {
   display: block;
   font-size: 12px;
-  color: #52665a;
+  color: var(--muted);
   margin-bottom: 15px;
 }
 input,
@@ -226,7 +240,7 @@ textarea {
   display: block;
   width: 100%;
   padding: 11px;
-  border: 1px solid #bdcbbb;
+  border: 1px solid var(--border);
   border-radius: 5px;
   font: inherit;
   font-size: 14px;
@@ -237,16 +251,16 @@ textarea {
 }
 #message:not(:empty) {
   padding: 16px;
-  border: 1px solid #c8d4bb;
-  background: #ebf0df;
+  border: 1px solid var(--border);
+  background: var(--raised);
   border-radius: 8px;
   white-space: pre-line;
 }
 #formError {
-  color: #a22c2c;
+  color: var(--negative);
 }
 a {
-  color: #24694d;
+  color: var(--positive);
 }
 button:focus-visible,
 a:focus-visible {
@@ -300,20 +314,20 @@ a:focus-visible {
 }
 .advicecard svg text {
   font-size: 10px;
-  fill: #65786b;
+  fill: var(--muted);
 }
 .signal {
   display: inline-block;
   border-radius: 5px;
-  background: #f3ead7;
-  color: #72511a;
+  background: var(--warning-bg);
+  color: var(--caution);
   font-size: 13px;
   padding: 7px 12px;
   font-weight: 600;
 }
 .signal.buy {
-  background: #e0f0dc;
-  color: #205b37;
+  background: var(--positive-bg);
+  color: var(--positive);
 }
 .chartcontrols {
   display: flex;
@@ -329,7 +343,7 @@ a:focus-visible {
   line-height: 1.8;
 }
 .summary {
-  border-left: 4px solid #287858;
+  border-left: 4px solid #77a0e3;
 }
 .check {
   display: flex;
@@ -347,20 +361,20 @@ details summary {
 }
 #providerErrors:not(:empty) {
   padding: 15px;
-  background: #f3ead7;
+  background: var(--warning-bg);
   border-radius: 8px;
   font-size: 12px;
   white-space: pre-line;
 }
 #researchStatus {
   font-size: 12px;
-  color: #65766c;
+  color: var(--muted);
 }
 #recommendations .sectionhead label {
   margin: 0;
 }
 small {
-  color: #63776a;
+  color: var(--muted);
 }
 @media (max-width: 850px) {
   .advicegrid {
@@ -391,7 +405,7 @@ small {
   margin-top: 0;
 }
 .buy-candidates [role='status'] {
-  color: #52645a;
+  color: var(--muted);
 }
 .researchtools label {
   min-width: 170px;
@@ -423,9 +437,9 @@ small {
 }
 .componentgrid article {
   padding: 14px;
-  border: 1px solid #dce4d6;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #f7f9f3;
+  background: var(--raised);
 }
 .componentgrid strong {
   display: block;
@@ -441,14 +455,14 @@ small {
 }
 .scoretrack {
   height: 5px;
-  background: #dce5d6;
+  background: var(--border);
   border-radius: 6px;
   overflow: hidden;
 }
 .scoretrack span {
   height: 100%;
   display: block;
-  background: #387f58;
+  background: #479b87;
 }
 .overlaytools {
   display: flex;
@@ -475,7 +489,7 @@ small {
   touch-action: none;
   cursor: crosshair;
   min-height: 250px;
-  border: 1px solid #dce5d7;
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -533,8 +547,8 @@ small {
 .fundamentalsbox {
   margin: 28px 0;
   padding: 24px;
-  background: #f0f4eb;
-  border: 1px solid #d4dfce;
+  background: var(--raised);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 .fundamentalsbox .sectionhead p,
@@ -558,8 +572,8 @@ small {
 }
 .financialgrid article {
   padding: 15px;
-  border: 1px solid #d6dfd0;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 7px;
   min-width: 0;
 }
@@ -574,7 +588,7 @@ small {
 }
 .financialgrid p {
   font-size: 11px;
-  color: #647461;
+  color: var(--muted);
   line-height: 1.6;
 }
 #financialStatus {
@@ -600,7 +614,7 @@ small {
 }
 .notice {
   padding: 18px 0;
-  border-bottom: 1px solid #dce4d7;
+  border-bottom: 1px solid var(--border);
   line-height: 1.65;
 }
 .notice:last-child {
@@ -612,7 +626,7 @@ small {
   gap: 9px;
   flex-wrap: wrap;
   font-size: 11px;
-  color: #66766b;
+  color: var(--muted);
 }
 .notice h3 {
   font-size: 16px;
@@ -623,27 +637,27 @@ small {
   margin: 8px 0;
 }
 .notice small {
-  color: #6d7b70;
+  color: var(--muted);
   font-size: 10px;
 }
 .officialbadge,
 .newbadge {
   padding: 3px 7px;
-  background: #e2ece0;
+  background: var(--raised);
   border-radius: 4px;
-  color: #355f42;
+  color: var(--positive);
 }
 .newbadge {
-  background: #e9dfbc;
-  color: #735f21;
+  background: var(--warning-bg);
+  color: var(--caution);
 }
 .reviewflag {
   font-size: 11px;
-  color: #825e23;
+  color: var(--caution);
   margin-left: 8px;
 }
 .correction {
-  background: #f3ead5;
+  background: var(--warning-bg);
   padding: 8px;
   border-radius: 5px;
 }
@@ -653,7 +667,7 @@ small {
 .stocknewsbox {
   margin: 24px 0;
   padding: 20px;
-  border: 1px solid #dce4d7;
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 .stocknewsbox > p {
@@ -687,7 +701,7 @@ small {
 .fitwarning {
   padding: 12px 16px;
   border-left: 4px solid #b08030;
-  background: #faf4e6;
+  background: var(--warning-bg);
 }
 .fitsector {
   margin: 16px 0;
@@ -730,7 +744,7 @@ h1 {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: #f5f6f1ed;
+  background: #0d1017f5;
   backdrop-filter: blur(12px);
   padding: 14px 0;
   display: grid;
@@ -743,11 +757,11 @@ h1 {
   white-space: nowrap;
 }
 .workspace-nav button.active {
-  box-shadow: 0 3px 10px #244f4018;
+  box-shadow: 0 3px 10px #92adff21;
 }
 .workspacefold {
-  border: 1px solid #d6dfd1;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 10px;
   margin: 20px 0;
   scroll-margin-top: 90px;
@@ -755,11 +769,11 @@ h1 {
 .workspacefold > summary {
   padding: 20px 22px;
   margin: 0;
-  color: #244f40;
+  color: var(--ink);
   list-style-position: inside;
 }
 .workspacefold[open] > summary {
-  border-bottom: 1px solid #dce4d7;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
 }
 .workspacefold > section {
@@ -779,9 +793,9 @@ h1 {
 }
 .breadthgrid article {
   padding: 17px;
-  background: #edf2e9;
+  background: var(--raised);
   border-radius: 8px;
-  border: 1px solid #dce5d7;
+  border: 1px solid var(--border);
 }
 .breadthgrid strong {
   display: block;
@@ -790,7 +804,7 @@ h1 {
 }
 .breadthgrid strong span {
   font-size: 13px;
-  color: #6b796f;
+  color: var(--muted);
   font-weight: 400;
 }
 .diagnosticgrid {
@@ -802,8 +816,8 @@ h1 {
 .diagnosticgrid article,
 .horizongrid article {
   padding: 15px;
-  background: #f6f8f2;
-  border: 1px solid #dce4d7;
+  background: var(--raised);
+  border: 1px solid var(--border);
   border-radius: 8px;
   min-width: 0;
 }
@@ -829,13 +843,13 @@ h1 {
   margin: 18px 0 26px;
 }
 .chartplot {
-  background: #fff;
+  background: var(--surface);
   min-height: 0;
 }
 .chartnavigator {
   margin: 12px 0 0;
-  background: #f6f8f2;
-  border: 1px solid #dce5d7;
+  background: var(--raised);
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 .chartnavigator svg {
@@ -849,7 +863,7 @@ h1 {
 }
 .navigatorlabel input {
   padding: 0;
-  accent-color: #287858;
+  accent-color: #77a0e3;
   height: 20px;
   border: 0;
   background: transparent;
@@ -867,7 +881,7 @@ h1 {
   margin-top: 16px;
 }
 .componentgrid article {
-  background: #fff;
+  background: var(--surface);
 }
 .chartcontrols {
   flex-wrap: wrap;
@@ -877,7 +891,7 @@ h1 {
   top: 0;
 }
 .ranktable tbody tr:hover {
-  background: #f3f7ed;
+  background: var(--raised);
 }
 .ranktable button {
   padding: 8px 12px;
@@ -1001,8 +1015,8 @@ summary:focus-visible {
 /* Decision support and operational context within the existing four workspaces. */
 .decisionbox {
   padding: 20px;
-  background: #edf3e9;
-  border: 1px solid #d7e1d1;
+  background: var(--raised);
+  border: 1px solid var(--border);
   border-radius: 9px;
   margin: 20px 0;
 }
@@ -1014,7 +1028,7 @@ summary:focus-visible {
 }
 .decisiongrid article {
   padding: 16px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
   min-width: 0;
 }
@@ -1043,8 +1057,8 @@ summary:focus-visible {
 }
 .annualgrid article {
   padding: 15px;
-  background: #fff;
-  border: 1px solid #dce5d7;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   min-width: 0;
 }
@@ -1072,10 +1086,10 @@ summary:focus-visible {
   margin: 18px 0;
 }
 .healthgrid article {
-  border: 1px solid #dce5d7;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 15px;
-  background: #f8faf5;
+  background: var(--raised);
   min-width: 0;
 }
 .healthgrid article > div {
@@ -1102,16 +1116,16 @@ summary:focus-visible {
   letter-spacing: 0.5px;
 }
 .healthbadge.healthy {
-  background: #dfeedd;
-  color: #245c35;
+  background: var(--positive-bg);
+  color: var(--positive);
 }
 .healthbadge.working {
-  background: #e2e9f8;
-  color: #365586;
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 .healthbadge.attention {
-  background: #f4e9d5;
-  color: #805d24;
+  background: var(--warning-bg);
+  color: var(--caution);
 }
 .correlationcell {
   display: block;

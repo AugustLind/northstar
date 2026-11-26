@@ -307,7 +307,7 @@ def portfolio_performance(snapshot, baseline, events, now):
                     linked *= (value - external_today) / previous_value
                 else:
                     linked = None
-            curve.append({'date': report_date.isoformat(),
+            curve.append({'date': report_date.isoformat(), 'value_nok': value,
                           'adjusted_value_nok': value - external if value is not None else None})
             previous_value = value
             previous_date = report_date

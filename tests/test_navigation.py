@@ -23,7 +23,7 @@ class NavigationTests(unittest.TestCase):
         layout=Layout();layout.feed((Path(__file__).resolve().parents[1]/'static/index.html').read_text())
         self.assertEqual(layout.errors,[]);self.assertEqual(layout.stack,[])
         self.assertTrue(all(n==1 for n in Counter(layout.ids).values()))
-        self.assertEqual(layout.buttons,['portfolio','candidates','daily','recommendations','validation'])
+        self.assertEqual(layout.buttons,['daily','candidates','portfolio'])
         self.assertIn('workspaceTitle',layout.nodes)
         self.assertIn('accountName',layout.nodes)
         self.assertIn('accountStatus',layout.nodes)
@@ -43,7 +43,7 @@ class NavigationTests(unittest.TestCase):
         self.assertIn('overviewAdvanced',layout.nodes['systemHealth']['ancestors'])
         self.assertIn('daily',layout.nodes['overviewMetrics']['ancestors'])
         tabs={id for id,node in layout.nodes.items() if 'tab' in node['attrs'].get('class','').split()}
-        self.assertEqual(tabs,set(layout.buttons))
+        self.assertEqual(tabs,set(layout.buttons)|{'recommendations','validation'})
         for id in ['systemHealth','portfolioRisk','stockDecision','financialTrendCharts','robustnessPanel','exportChartCSV','exportChartSVG','accountPerformance','researchArchive']:
             self.assertIn(id,layout.nodes)
         for child,parent in [('announcements','daily'),('briefing','daily'),('method','daily'),('fit','portfolio'),('activity','portfolio')]:

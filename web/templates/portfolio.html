@@ -6,14 +6,14 @@
     </div>
     <p id="todayStatus" role="status">Loading account performance…</p>
     <div id="todayMetrics" class="metrics"></div>
-    <div id="todayChart" class="chartplot" hidden></div>
+    <div id="todayChart" class="workspace-chart" hidden></div>
     <div id="todayHoldings" class="tablewrap"></div>
   </section>
   <section class="card" aria-labelledby="weekTitle">
     <h2 id="weekTitle">Last 7 days</h2>
     <p id="weekStatus" role="status">Loading account performance…</p>
     <div id="weekMetrics" class="metrics"></div>
-    <div id="weekChart" class="chartplot" hidden></div>
+    <div id="weekChart" class="workspace-chart" hidden></div>
     <div id="weekHoldings" class="tablewrap"></div>
   </section>
   <div class="sectionhead">
@@ -77,6 +77,7 @@
     *Price return in the stock’s currency. Excludes dividends, fees, tax and currency effects. Cost
     basis is entered manually.
   </p>
+  <section id="holdingMarket" class="workspace-chart" aria-label="Holding price and volume" hidden></section>
   <details class="workspacefold advanced-tools" id="portfolioAdvanced">
     <summary>Advanced tools</summary>
   <section class="card" id="portfolioAssessments">

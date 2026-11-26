@@ -132,7 +132,7 @@ DOM = r"""(() => {
         if (!status || status.startsWith('Loading')) return 'loading';
         const metrics = node(id + 'Metrics').querySelectorAll('strong');
         if (metrics.length !== count) return 'metrics missing';
-        if (visible(id + 'Chart') && node(id + 'Chart').querySelector('svg')) return 'chart ready';
+        if (visible(id + 'Chart') && node(id + 'Chart').querySelector('canvas')) return 'chart ready';
         return node(id + 'Chart').hidden && metrics[count - 2].textContent.startsWith('Unavailable')
             ? 'coverage unavailable' : 'chart missing';
     };
@@ -145,8 +145,8 @@ DOM = r"""(() => {
     const cards = Array.from(document.querySelectorAll('#buyCandidates article'));
     const ranked = cards.length > 0 && cards.length <= 5 &&
         candidates.startsWith(cards.length + ' eligible candidate') &&
-        cards.every(card => card.querySelector('h3')?.textContent.trim()
-            && card.querySelectorAll('p')[1]?.textContent.trim()
+        cards.every(card => card.querySelector('button strong')?.textContent.trim()
+            && card.querySelector('p')?.textContent.trim()
             && card.querySelector('[data-candidate-stock]'));
     const comparison = text('switchStatus');
     return {

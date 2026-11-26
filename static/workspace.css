@@ -1,0 +1,268 @@
+/* Daily investing workspace. Secondary tools share the dark palette in style.css. */
+body > header {
+  gap: clamp(12px, 3vw, 52px);
+  min-height: 56px;
+  padding: 0 clamp(12px, 2.5vw, 40px);
+  background: #0d1017;
+}
+header .brand {
+  letter-spacing: -.025em;
+  white-space: nowrap;
+}
+header .header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+  padding-block: 6px;
+}
+header .header-actions button {
+  margin: 0;
+}
+main {
+  max-width: 1480px;
+  padding: 14px clamp(12px, 2.5vw, 40px) 44px;
+}
+header .workspace-nav {
+  display: flex;
+  align-self: stretch;
+  gap: clamp(8px, 2vw, 26px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  position: static;
+}
+header .workspace-nav button {
+  min-height: 44px;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+}
+header .workspace-nav button.active {
+  border-bottom-color: var(--accent);
+  background: transparent;
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.workspace-context {
+  flex-direction: row-reverse;
+  margin: 4px 0 14px;
+}
+.section-context {
+  text-align: left;
+}
+.section-context h1 {
+  font-size: clamp(1.3rem, 2.5vw, 1.7rem);
+}
+.account-context {
+  text-align: right;
+}
+#portfolio > .card,
+#daily > .card,
+.candidate-workspace .card {
+  border-radius: 5px;
+}
+#portfolio > .card,
+#daily > .card {
+  padding: clamp(10px, 2vw, 18px);
+}
+#portfolio .metrics,
+#daily .metrics {
+  gap: 0;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+#portfolio .metrics article,
+#daily .metrics article {
+  padding: 10px 12px;
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+#portfolio .metrics strong,
+#daily .metrics strong {
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  margin: 4px 0;
+}
+#overviewMetrics .overview-account-status,
+#overviewMetrics .overview-account-actions {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+.workspace-chart {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #0a0c11;
+  overflow: hidden;
+  margin: 12px 0;
+}
+.workspace-chart:not(:has(.trading-plot)) {
+  padding: 14px;
+  color: var(--muted);
+}
+.workspace-chart:empty {
+  display: none;
+}
+.plot-caption {
+  min-height: 68px;
+  padding: 10px 14px 4px;
+  color: var(--muted);
+  font-size: .83rem;
+}
+.plot-caption > strong {
+  color: var(--ink);
+  margin-right: 8px;
+  font-size: 1rem;
+}
+.plot-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.plot-readout b {
+  color: var(--ink);
+}
+.plot-purchases {
+  color: var(--caution);
+  min-height: 1.25em;
+}
+.trading-plot {
+  min-width: 0;
+  height: clamp(350px, 55vh, 640px);
+  outline-offset: -4px;
+}
+#todayChart .trading-plot {
+  height: clamp(250px, 32vh, 380px);
+}
+.plot-footer,
+.plot-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.plot-footer {
+  border-top: 1px solid var(--border);
+  padding: 5px 10px;
+  font-size: .8rem;
+  color: var(--muted);
+}
+.plot-footer a {
+  color: inherit;
+}
+.plot-controls {
+  margin-left: auto;
+}
+.plot-controls button {
+  min-height: 34px;
+  min-width: 34px;
+  padding: 4px 6px;
+  background: transparent;
+}
+.candidate-workspace:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(245px, 300px);
+  align-items: start;
+  gap: 12px;
+}
+.candidate-main {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.candidate-list {
+  grid-column: 2;
+  grid-row: 1;
+}
+.candidate-list, .candidate-main .workspace-chart:first-child {
+  margin-top: 0;
+}
+#buyCandidates article {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+#buyCandidates button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px;
+  text-align: left;
+  background: transparent;
+}
+#buyCandidates button[aria-pressed="true"] {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+.candidate-rank {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+#buyCandidates article p {
+  margin: 5px 0 0;
+}
+#buyCandidates article small {
+  color: var(--muted);
+}
+#candidateCashForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+#candidateCashForm label,
+#candidateCashForm input {
+  margin: 0;
+}
+.holding-market-link {
+  min-width: 0;
+  padding: 4px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 740px) {
+  body > header {
+    flex-wrap: wrap;
+    gap: 0 8px;
+  }
+  header .workspace-nav {
+    order: 1;
+    width: 100%;
+    gap: 18px;
+  }
+  .candidate-workspace:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .candidate-list, .candidate-main {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .plot-controls button {
+    min-height: 42px;
+    min-width: 42px;
+  }
+}

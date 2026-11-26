@@ -38,7 +38,7 @@ function render() {
           const q = quotes[p.symbol],
             valid = q && q.currency === p.currency;
           const gain = valid && p.cost > 0 ? (q.price / p.cost - 1) * 100 : null;
-          return `<tr><td><b>${esc(p.symbol)}</b><small>${
+          return `<tr><td><button type="button" class="holding-market-link" data-holding-market="${esc(p.symbol)}">${esc(p.symbol)}</button><small>${
             p.shares
               ? p.long_term
                 ? 'Long-term holding · keep under review'
@@ -318,6 +318,16 @@ $('#positionForm').onsubmit = async (e) => {
   }
 };
 $('#holdings').onclick = async (e) => {
+  const symbol = e.target.dataset.holdingMarket;
+  if (symbol) {
+    const panel = $('#holdingMarket');
+    panel.hidden = false;
+    await showWorkspaceStock(panel, symbol);
+    if ($('#portfolio').hidden) return;
+    panel.scrollIntoView({block:'start'});
+    panel.querySelector('.trading-plot')?.focus({preventScroll:true});
+    return;
+  }
   const editSymbol = e.target.dataset.edit,
     del = e.target.dataset.delete;
   if (editSymbol) edit(state.positions.find((p) => p.symbol === editSymbol));

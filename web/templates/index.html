@@ -8,9 +8,14 @@
   </head>
   <body>
     <header>
-      <a href="./" class="brand">✳ NORTHSTAR</a><span>OSLO / LONG-TERM INVESTING</span
-      ><button id="connectionButton">Connection</button
-      ><button id="refresh">Refresh market data</button>
+      <a href="./" class="brand">✦ Northstar</a>
+      <nav class="workspace-nav" aria-label="Main workspace">
+        <button type="button" data-tab="daily">Overview</button>
+        <button type="button" data-tab="candidates">Candidates</button>
+        <button type="button" data-tab="portfolio" class="active" aria-current="page">Portfolio</button>
+      </nav>
+      <div class="header-actions"><button id="connectionButton">Connection</button>
+      <button id="refresh">Refresh market data</button></div>
     </header>
     <main>
       <section id="connectionPanel" class="card" hidden>
@@ -46,22 +51,15 @@
       <div id="message" role="status"></div>
       <section class="workspace-context" aria-label="Current account and workspace">
         <div class="account-context">
-          <p class="eyebrow">ACCOUNT</p>
+
           <strong id="accountName">Northstar account</strong>
           <span id="accountStatus" role="status">Not connected</span>
         </div>
         <div class="section-context">
-          <p class="eyebrow">CURRENT WORKSPACE</p>
+
           <h1 id="workspaceTitle">Portfolio</h1>
         </div>
       </section>
-      <nav class="workspace-nav" aria-label="Main workspace">
-        <button type="button" data-tab="portfolio" class="active" aria-current="page">Portfolio</button>
-        <button type="button" data-tab="candidates">Candidates</button>
-        <button type="button" data-tab="daily">Overview</button>
-        <button type="button" data-tab="recommendations">Research</button>
-        <button type="button" data-tab="validation">Strategy lab</button>
-      </nav>
       {{include:overview.html}}
       {{include:research.html}}
       {{include:portfolio.html}}

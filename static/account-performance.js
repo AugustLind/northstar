@@ -190,21 +190,15 @@ function renderPerformanceChart(prefix, period) {
   const chart = $('#' + prefix + 'Chart');
   const curve = period.curve || [];
   chart.hidden = curve.length < 2;
-  chart.innerHTML = chart.hidden
-    ? ''
-    : ChartKit.svg(
-        curve.map((point) => ({
-          time: Date.parse(point.date) / 1000,
-          close: point.adjusted_value_nok,
-        })),
-        {
-          symbol:
-            'Investment value excluding net external flow · ' +
-            period.previous_date +
-            ' to ' +
-            period.date,
-          valueLabel: 'Investment value · NOK',
-          compact: window.innerWidth <= 600,
-        }
-      );
+  if (chart.hidden) {
+    clearWorkspaceChart(chart, '');
+    return;
+  }
+  plotWorkspaceChart(chart, {
+    title:'Investment value',
+    detail:'NOK · Excludes net external flows',
+    currency:'NOK',
+    points:curve.map(point=>({time:chartTime(point.date),value:point.adjusted_value_nok})),
+    days:prefix === 'today' ? 2 : 8,
+  });
 }

@@ -31,13 +31,19 @@ not guaranteed; offline operation depends on previously cached data.
 ## First visit
 
 Portfolio opens by default with current account value and Today’s performance.
-Open **Candidates** to see ranked buying ideas or **Overview → Needs attention**
-to review items that need action. Open **Advanced tools** in a workspace for its
-specialist workflows. Explore Research immediately, or open
-Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is
+Open **Candidates** for up to five ranked buying ideas or **Overview → Needs attention**
+for items that need review. Research and Strategy lab are available under
+**Candidates → Research tools**. Open **Advanced tools** for other specialist
+workflows. Open Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is
 a watchlist entry. For actual account returns, verify cash and an opening snapshot
 in **Portfolio → Activity & cash**, then import later transactions and reconcile
 with your broker. Strategy lab keeps hypothetical experiments separate from your account.
+Overview opens its account value chart on the last seven Oslo reporting days.
+Drag to pan, scroll or pinch to zoom, and use **Fit history** for all loaded data.
+Select a holding or candidate to see its daily candles and volume. Gold circles
+mark dated broker buys where chart data is available. Candidates can preview
+available cash after fees without saving it to the ledger or applying a reserve floor.
+
 The shell keeps the Northstar account connection and current workspace visible; direct
 tool links and browser back/forward restore the matching section. Unsaved workspace form
 values are retained for this browser tab across reloads and cleared on sign-out; selected

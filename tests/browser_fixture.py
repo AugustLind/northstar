@@ -98,7 +98,10 @@ def seed_candidates():
     })
     with app.connect() as db:
         db.executemany('INSERT INTO quotes VALUES (?,?)', [
-            (symbol, json.dumps({'price': 10, 'asof': now, 'currency': 'NOK'}))
+            (symbol, json.dumps({'price': 10, 'asof': now, 'currency': 'NOK', 'history': [
+                {'time': now-(119-index)*86400, 'open': 9.6, 'high': 10.3,
+                 'low': 9.3, 'close': 10, 'volume': 1000+index} for index in range(120)
+            ]}))
             for symbol in symbols
         ])
     app.write_meta('report', report)

@@ -3,7 +3,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const nodes={};
 const strategyLabHtml=fs.readFileSync('static/index.html','utf8');
 for(const disclosure of ['experimental decision rules','fixed 20-position monthly baseline','including poor results','explicit investor promotion applies a position count to primary','cannot establish point-in-time or delisted-stock performance'])assert(strategyLabHtml.includes(disclosure));
-function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){}};}
+function element(){return {textContent:'',innerHTML:'',value:'',disabled:false,hidden:false,dataset:{},elements:{},classList:{toggle(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];},addEventListener(){},click(){if(this.onclick)this.onclick();},showModal(){},close(){},reset(){}};}
 const form=element();for(const name of ['universe','interval_minutes','model','min_turnover_nok','llm_enabled'])form.elements[name]=element();nodes['#researchSettings']=form;
 nodes['#adviceFilter']=element();nodes['#adviceFilter'].value='all';nodes['#rankBy']=element();nodes['#rankBy'].value='composite';
 const fitForm=element();for(const name of ['cash_nok','purchase_nok','buy_fee_nok','sell_fee_nok','max_stock_pct','max_sector_pct','reserve_pct','max_buy_fee_pct','review_sell_pct','risk_warning_pct','confirm_sessions','signal_wait_hours','trade_cooldown_days','min_change_pct'])fitForm.elements[name]=element();nodes['#fitPreferences']=fitForm;
@@ -34,7 +34,7 @@ const context={Intl,Date,Number,String,JSON,Object,Math,URL,Blob:class{},console
  document:{querySelector(s){return nodes[s]||(nodes[s]=element());},querySelectorAll(s){if(s==='[data-import-select]')return importSelections;if(s==='[data-tab]')return workspaceButtons;if(s==='.tab')return workspaceSections;return [];},createElement:element},
  fetch:async (path,options)=>{requests.push({path,options});if(path.endsWith('/api/email/settings')){emailFixture.enabled=JSON.parse(options.body).enabled;emailFixture.active=emailFixture.enabled;return {ok:true,json:async()=>emailFixture};}if(path.endsWith('/api/email/test'))return {ok:true,json:async()=>({queued:true,message:'Test queued. Check delivery status and your inbox.'})};return {ok:true,json:async()=>path.includes('/api/account-performance?')?accountPerformanceFixture:path.startsWith('https://api.example.com/api/archive')?{kinds:[],runs:[],method:'Known since capture'}:path.endsWith('/api/system-status')?systemFixture:path.includes('/api/portfolio-risk?')?riskFixture:path.includes('/api/stock-summary?')?summaryFixture:path.endsWith('/api/validation')?{historical:null,paper:{snapshots:[],method:'Forward samples'},progress:{}}:path.endsWith('/api/daily')?dailyFixture:path.endsWith('/api/ledger')?{initialized:false,reconciled:false,cash_nok:0,count:0,events:[],method:'Net cash already includes fees'}:path.endsWith('/api/alerts/read')?{saved:true}:path.endsWith('/api/trade-plan')?planFixture:path.endsWith('/api/import/preview')?importFixture:path.endsWith('/api/import/apply')?{updated:1}:path.endsWith('/api/portfolio-fit')?fitFixture:path.includes('/api/announcements?')?{status:'available',fetched:now,from:'2026-10-21',to:'2026-10-27',focus_symbols:['BOUV.OL'],counts:{last24h:1,priority_review:1,earnings:1},items:[{id:'1',symbol:'BOUV.OL',title:'Q3 results <untrusted>',published:now,first_seen:now,url:'https://newsweb.oslobors.no/message/1',classification:{kind:'earnings',label:'Earnings / business update',priority:3,why:'Read the source report.'},categories:[]}],last24h:[],events:[]}:path.includes('/api/fundamentals?')?{status:'available',period:'2025-12-31',assessment:{label:'Mixed annual conditions',passed:2,covered:3,period:'2025-12-31',checks:[{passes:false,label:'Annual income positive',period:'2025-12-31'}],method:'Annual checks only'},fetched:now,metrics:{revenue:{value:1200,currency:'NOK',unit:'amount',period:'2025-12-31'}},signals:['Annual revenue increased.'],history:{},source:'Fixture provider',source_url:'https://finance.yahoo.com/quote/BOUV.OL/financials/'}:path.includes('/api/history?')?{history,currency:'NOK',asof:now,history_basis:'Adjusted close'}:path.endsWith('/api/state')?{positions:[],quotes:{}}:{report,worker:{running:false,next_run:now+3600},settings:{universe:['BOUV.OL'],interval_minutes:360,model:'qwen2.5:3b',min_turnover_nok:250000,llm_enabled:false}}};}};
 vm.createContext(context);
-for(const file of JSON.parse(fs.readFileSync('static/assets.json','utf8')).scripts){if(file!=='config.js')vm.runInContext(fs.readFileSync('static/'+file,'utf8'),context);}
+for(const file of JSON.parse(fs.readFileSync('static/assets.json','utf8')).scripts){if(!['config.js','lightweight-charts.js'].includes(file))vm.runInContext(fs.readFileSync('static/'+file,'utf8'),context);}
 setImmediate(async()=>{
  try{
  await vm.runInContext('loadSystemStatus()',context);
@@ -80,7 +80,7 @@ setImmediate(async()=>{
   vm.runInContext("openWorkspace('"+target+"')",context);
   assert.strictEqual(workspaceSections.filter(n=>!n.hidden).length,1);
   assert.strictEqual(nodes['#'+page].hidden,false);
-  assert.strictEqual(nodes['[data-tab="'+page+'"]'].attributes['aria-current'],'page');
+  assert.strictEqual(nodes['[data-tab="'+(page==='validation'?'candidates':page)+'"]'].attributes['aria-current'],'page');
   assert.strictEqual(nodes['#workspaceTitle'].textContent,{daily:'Overview',recommendations:'Research',portfolio:'Portfolio',candidates:'Candidates',validation:'Strategy lab'}[page]);
   if(target!==page&&target!=='unrecognised:hash')assert(nodes['#'+target+'Group'].open);
  }
@@ -264,9 +264,9 @@ setImmediate(async()=>{
  const todayChart=nodes['#todayChart'].innerHTML;
  assert(todayStatus.textContent.includes(todayFixture.date));
  assert(todayMetrics.includes('Investment performance'));
- assert(todayChart.includes('<svg'));
+ assert(nodes['#todayChart'].textContent.includes('Chart unavailable'));
  const weekChart=nodes['#weekChart'].innerHTML;
- assert(weekChart.includes('<svg'));
+ assert(nodes['#weekChart'].textContent.includes('Chart unavailable'));
  context.fetch=async()=>{throw Error('fixture disconnected');};
  await vm.runInContext('loadOverviewAccount()',context);
  assert(todayStatus.textContent.includes(todayFixture.date),'Retained figures must keep their session date.');
