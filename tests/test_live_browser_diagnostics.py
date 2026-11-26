@@ -47,3 +47,18 @@ class LiveBrowserDiagnosticsTests(unittest.TestCase):
         self.assertEqual(len(evidence['entries']), 40)
         self.assertEqual({r['status'] for r in evidence['entries']}, {500})
         self.assertNotIn('private', json.dumps(evidence).lower())
+
+    def test_daily_failure_evidence_contains_only_type_and_source_location(self):
+        timestamp = int(time.time() * 1_000_000)
+        lines = [json.dumps({'__REALTIME_TIMESTAMP': timestamp, 'MESSAGE': line}) for line in (
+            'Northstar daily failure OperationalError app.py:109',
+            'Northstar daily failure KeyError app.py:111 private holding',
+        )]
+        with patch('smoke_live_browser.subprocess.run',
+                   return_value=subprocess.CompletedProcess([], 0, stdout='\n'.join(lines))):
+            evidence = journal(0, int(time.time()), [
+                {'method': 'GET', 'path': '/api/daily', 'status': 500,
+                 'at': datetime.fromtimestamp(timestamp / 1e6, timezone.utc).isoformat()},
+            ])
+        self.assertEqual(evidence['daily_failures'],
+                         [{'error': 'OperationalError', 'file': 'app.py', 'line': 109}])

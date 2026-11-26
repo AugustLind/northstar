@@ -271,8 +271,7 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
 
 
 def journal(since, until, requests):
-    # Emit matching HTTP access entries only. Strip client addresses, queries
-    # and message text on Oracle before anything crosses SSH.
+    # Strip client addresses, queries and exception text on Oracle.
     start = max(since, until - 300)
     observed = {}
     for request in requests:
@@ -287,19 +286,26 @@ def journal(since, until, requests):
         capture_output=True, text=True, timeout=10,
     )
     entries = deque(maxlen=40)
+    daily_failures = deque(maxlen=10)
     for line in result.stdout.splitlines():
         row = json.loads(line)
+        timestamp = int(row['__REALTIME_TIMESTAMP']) / 1e6
+        failure = re.fullmatch(r'Northstar daily failure ([A-Za-z][A-Za-z0-9_]{0,63}) ([A-Za-z0-9_]+\.py):([0-9]{1,6})',
+                               row.get('MESSAGE', ''))
+        if failure and any(abs(timestamp - seen) <= 3 for status in (500, None)
+                           for seen in observed.get(('GET', '/api/daily', status), [])):
+            daily_failures.append({'error': failure[1], 'file': failure[2], 'line': int(failure[3])})
         match = re.search(r'\] "(GET|HEAD|OPTIONS) (/api/[a-z/-]+)(?:\?[^ ]*)? HTTP/1\.[01]" ([1-5][0-9]{2}) ', row.get('MESSAGE', ''))
         if match and match[2] in API_PATHS:
             method, path, status = match[1], match[2], int(match[3])
-            timestamp = int(row['__REALTIME_TIMESTAMP']) / 1e6
             matches = observed.get((method, path, status), []) + observed.get((method, path, None), [])
             if observed and not any(abs(timestamp - seen) <= 3 for seen in matches):
                 continue
             entries.append({'at': datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec='seconds'),
                             'method': method, 'path': path, 'status': status})
     return {'since_epoch': start, 'until_epoch': until, 'matched_browser_requests': bool(observed),
-            'available': result.returncode == 0, 'entries': list(entries)}
+            'available': result.returncode == 0, 'entries': list(entries),
+            'daily_failures': list(daily_failures)}
 
 
 def probe_deadline(signum, frame):
