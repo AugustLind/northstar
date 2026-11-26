@@ -125,7 +125,7 @@ $('#connectionForm').onsubmit = async (e) => {
         throw Error('Use an HTTPS server origin, such as https://northstar.example.com.');
     } else if (location.hostname.endsWith('.github.io'))
       throw Error('An HTTPS Oracle address is required.');
-    await api('state', undefined, address, key);
+    const connectedState = await api('state', undefined, address, key);
     await revokeRememberedSession();
     let credential = key;
     if ($('#rememberBrowser').checked) {
@@ -152,7 +152,7 @@ $('#connectionForm').onsubmit = async (e) => {
     $('#rememberBrowser').checked = false;
     $('#connectionPanel').hidden = true;
     $('#message').textContent = 'Connected to Northstar.';
-    await load();
+    await load(connectedState);
     if (typeof loadResearch === 'function') await loadResearch();
     openWorkspace(workspaceFromLocation(), false);
   } catch (e) {

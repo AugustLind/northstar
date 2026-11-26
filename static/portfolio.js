@@ -234,8 +234,8 @@ async function reloadHoldings() {
   await loadDaily();
 }
 
-async function load() {
-  state = await api('state');
+async function load(connectedState) {
+  state = connectedState ?? await api('state');
   $('#accountStatus').textContent = 'Connected';
   render();
   renderGettingStarted();

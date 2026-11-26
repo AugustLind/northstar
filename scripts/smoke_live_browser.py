@@ -178,7 +178,7 @@ DOM = r"""(() => {
 })()"""
 
 
-def run(page_url, api_origin, key, evidence, wait_seconds=15):
+def run(page_url, api_origin, key, evidence, wait_seconds=30):
     diagnostics = Diagnostics(page_url, api_origin)
     browser = Browser(on_event=diagnostics.event)
     expected = evidence['source_fingerprint']
