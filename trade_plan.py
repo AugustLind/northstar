@@ -1,5 +1,4 @@
 """Explainable share-count scenarios, with a shared cash budget and no order execution."""
-import copy
 import math
 import time
 import portfolio_fit as pf
@@ -340,7 +339,12 @@ def build(snapshot,report,profile,now=None):
     sells=sell_scenario(snapshot,cards,ctx,profile,report_ok,now)
     blocked_sales={r['symbol'] for r in sells if r['sell_shares']}
     ranked=policy.recommendations(cards.values(),(report or {}).get('promoted_model'))
-    buys=[];blocked=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
+    buys=[];blocked=[]
+    # Only position quantities and quote references change during a scenario.
+    working={**snapshot,'positions':[dict(p) for p in snapshot['positions']],
+             'quotes':dict(snapshot['quotes'])}
+    working_profile=dict(profile)
+    current=ctx
     left=profile['purchase_nok'];spent=0.;fees=0.;warnings=list(ctx['warnings'])
     buy_fee=profile['buy_fee_nok']
     cash_limit = 'cash reserve' if profile['reserve_pct'] else 'available cash'
@@ -353,7 +357,6 @@ def build(snapshot,report,profile,now=None):
         warnings.append('Set your total buy-plan budget in Portfolio fit to generate purchase quantities.')
     for card in ranked:
         symbol=pf.canonical(card['symbol'])
-        current=pf.context(working,working_profile,now)
         q,reason,evidence_missing=buy_inputs(card,working,current,working_profile,now,report_ok=report_ok,
                                              blocked_sales=blocked_sales,budget=left)
         if reason is None:
@@ -371,9 +374,10 @@ def build(snapshot,report,profile,now=None):
                              'portfolio_reason':'Fits your '+profile['sectors'][symbol]+' sector and company limits; '+str(n)+' whole shares fit your remaining shared budget, '+cash_limit+' and purchase-fee limit.'})
                 left-=total;spent+=total;fees+=buy_fee;working_profile['cash_nok']-=total
                 add_purchase(working,symbol,q,n)
+                current=pf.context(working,working_profile,now)
         if reason:
             blocked.append({'symbol':symbol,'buy_shares':0,'reason':reason,'evidence_missing':evidence_missing})
-    result_ctx=pf.context(working,working_profile,now)
+    result_ctx=current
     sale_proceeds=sum(r['gross_proceeds_nok'] or 0 for r in sells)
     for row in sells:
         row['fee_nok']=profile['sell_fee_nok'] if row['sell_shares'] and profile['sell_fee_nok'] is not None else (0. if not row['sell_shares'] else None)
