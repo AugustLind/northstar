@@ -474,6 +474,10 @@ portfolio and is never substituted when account data is incomplete.
   reversing accepted post-cutoff events from reconciled current holdings. They cannot
   reliably recover historical average costs across closed/reopened positions; realised
   book P&L stays unavailable rather than inventing a basis.
+- Completed-session and full-history valuation can use a dated Oslo
+  closing-auction quote while the daily bar is pending. The published daily bar
+  takes precedence when available. Full history still ends at the last eligible
+  completed day.
 - Valuation uses a separate account-close field. Yahoo's split-adjusted-only close is
   restored to historical share units using sourced split ratios that have taken effect
   by the quote's own date. Dividend-adjusted research closes are never used to value

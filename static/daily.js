@@ -64,6 +64,7 @@ async function loadOverviewAccount(refreshErrors = []) {
 }
 function resetTradingWorkspace() {
   dailyRequest++;
+  dailyLoad = null;
   overviewAccountRequest++;
   overviewAccountLoaded = false;
   dailyView = null;

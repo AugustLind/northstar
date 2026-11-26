@@ -223,7 +223,7 @@ def buy_inputs(card,snapshot,ctx,profile,now,*,report_ok,blocked_sales,budget):
     return q,None,False
 
 
-def buy_quantity(symbol,quote,ctx,profile,budget,reserve_fees=0):
+def size_purchase(symbol,quote,ctx,profile,budget,reserve_fees=0):
     buy_fee=profile['buy_fee_nok']
     final_total=ctx['total_nok']-buy_fee-reserve_fees
     held=sum(h['value_nok'] for h in ctx['holdings'] if h['issuer']==company_data.issuer(symbol))
@@ -233,7 +233,13 @@ def buy_quantity(symbol,quote,ctx,profile,budget,reserve_fees=0):
                  ctx['cash_nok']-buy_fee-reserve_fees-profile['reserve_pct']/100*final_total)
     shares=max(0,math.floor(capacity/quote['price']))
     value=shares*quote['price']
-    return shares,value,buy_fee/value*100 if value else None
+    if not shares:
+        return None
+    fee_pct = buy_fee / value * 100
+    if fee_pct > profile['max_buy_fee_pct'] + 1e-8:
+        return None
+    return {'buy_shares': shares, 'price': quote['price'], 'quote_asof': quote['asof'],
+            'value_nok': value, 'fee_nok': buy_fee, 'total_nok': value + buy_fee, 'fee_pct': fee_pct}
 
 
 def add_purchase(snapshot,symbol,quote,shares):
@@ -282,8 +288,7 @@ def funded_switch(snapshot,report,plan):
             missing=reason
         if reason:
             continue
-        cash_shares,_,cash_fee_pct=buy_quantity(symbol,quote,ctx,profile,budget)
-        if cash_shares and cash_fee_pct<=profile['max_buy_fee_pct']+1e-8:
+        if size_purchase(symbol,quote,ctx,profile,budget):
             continue
         for sale in sales:
             sale_fee=sale['fee_nok']
@@ -300,14 +305,14 @@ def funded_switch(snapshot,report,plan):
             position['shares']=sale['remaining_shares']
             funded={**profile,'cash_nok':ctx['cash_nok']+proceeds}
             after_sale=pf.context(working,funded,now)
-            shares,value,fee_pct=buy_quantity(symbol,quote,after_sale,funded,budget)
-            if not shares or fee_pct>profile['max_buy_fee_pct']+1e-8:
+            order = size_purchase(symbol,quote,after_sale,funded,budget)
+            if order is None:
                 continue
             keep_reserve=(ctx['total_nok']-buy_fee)*profile['reserve_pct']/100
-            if ctx['cash_nok']-value-buy_fee>=keep_reserve-1e-8:
+            if ctx['cash_nok']-order['total_nok']>=keep_reserve-1e-8:
                 continue
-            add_purchase(working,symbol,quote,shares)
-            funded['cash_nok']-=value+buy_fee
+            add_purchase(working,symbol,quote,order['buy_shares'])
+            funded['cash_nok']-=order['total_nok']
             after=pf.context(working,funded,now)
             if (after['cash_pct']<profile['reserve_pct']-1e-8
                 or any(row['weight_pct']>profile['max_stock_pct']+1e-8 for row in after['issuer_exposure'])
@@ -321,7 +326,7 @@ def funded_switch(snapshot,report,plan):
                 return [{'name':name,'keep_pct':before.get(name,0.),'switch_pct':final.get(name,0.)}
                         for name in names]
             return {'status':'feasible','sell_symbol':sold,'sell_shares':sale['sell_shares'],
-                    'buy_symbol':symbol,'buy_shares':shares,'sell_fee_nok':sale_fee,'buy_fee_nok':buy_fee,
+                    'buy_symbol':symbol,'buy_shares':order['buy_shares'],'sell_fee_nok':sale_fee,'buy_fee_nok':order['fee_nok'],
                     'keep_cash_nok':ctx['cash_nok'],'switch_cash_nok':after['cash_nok'],
                     'keep_cash_pct':ctx['cash_pct'],'switch_cash_pct':after['cash_pct'],
                     'reserve_pct':profile['reserve_pct'],
@@ -362,14 +367,14 @@ def build(snapshot,report,profile,now=None):
         if reason is None:
             # Reserve all possible later buy fees so the entire plan respects final weights.
             reserve_fees=max(0,max_orders-len(buys)-1)*buy_fee
-            n, value, fee_pct=buy_quantity(symbol,q,current,working_profile,left,reserve_fees)
-            if not n or fee_pct>profile['max_buy_fee_pct']+1e-8:
+            order = size_purchase(symbol,q,current,working_profile,left,reserve_fees)
+            if order is None:
                 reason='No whole-share purchase fits your remaining budget, allocation limits, '+cash_limit+' and purchase-fee limit.'
             else:
-                total=value+buy_fee
-                buys.append({'symbol':symbol,'name':card.get('name',symbol),'buy_shares':n,'sell_shares':0,
-                             'price':q['price'],'quote_asof':q['asof'],'value_nok':value,'fee_nok':buy_fee,
-                             'total_nok':total,'fee_pct':fee_pct,'rank':card.get('rank'),
+                n = order['buy_shares']
+                total = order['total_nok']
+                buys.append({'symbol':symbol,'name':card.get('name',symbol),**order,'sell_shares':0,
+                             'rank':card.get('rank'),
                              'reason':'Meets the technical buy screen; sized in rank order within one shared budget and your limits.',
                              'portfolio_reason':'Fits your '+profile['sectors'][symbol]+' sector and company limits; '+str(n)+' whole shares fit your remaining shared budget, '+cash_limit+' and purchase-fee limit.'})
                 left-=total;spent+=total;fees+=buy_fee;working_profile['cash_nok']-=total
@@ -428,17 +433,18 @@ def candidate_watch(report, plan):
 
 def candidate_plan(snapshot, report, cash=None, review_plan=None):
     """Size an independent candidate preview while retaining account evidence and limits."""
-    profile = {**snapshot['portfolio_preferences'], 'reserve_pct': 0.}
+    profile = dict(snapshot['portfolio_preferences'])
     if cash is not None:
         profile.update(cash_nok=cash, purchase_nok=max(cash, profile['purchase_nok']))
-    preview = {**snapshot, 'portfolio_preferences': profile}
+    scenario = {**snapshot, 'portfolio_preferences': profile}
     now = review_plan['generated'] if review_plan else None
-    if review_plan and cash is None and not snapshot['portfolio_preferences']['reserve_pct']:
-        plan = review_plan
-    else:
-        plan = build(preview, report, profile, now)
+    switch_plan = review_plan if review_plan and cash is None else build(scenario, report, profile, now)
+    plan = switch_plan
+    if profile['reserve_pct']:
+        # Available-cash rankings are independent of the funded switch's saved reserve.
+        plan = build(scenario, report, {**profile, 'reserve_pct': 0.}, switch_plan['generated'])
     return {
-        'funded_switch': funded_switch(preview, report, plan),
+        'funded_switch': funded_switch(scenario, report, switch_plan),
         'buy_candidates': plan['buys'][:5],
         'buy_candidate_watch': candidate_watch(report, plan),
         'buy_candidates_stale': not policy.current_report(report, plan['generated']),

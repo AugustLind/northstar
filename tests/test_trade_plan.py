@@ -46,6 +46,40 @@ class TradePlanTests(unittest.TestCase):
         preview = tp.candidate_plan(account, report, cash=1000, review_plan=review)
         self.assertIsNone(preview['buy_candidate_watch'])
 
+    def test_funded_switch_sizes_against_post_sale_cash_and_sector_capacity(self):
+        account = snapshot(10)
+        account['positions'][0]['above'] = 100
+        cards = [card(), {**card('A.OL', 2, 'Consider taking profits'), 'review_price': 100}]
+        report = {'generated': NOW, 'policy_version': tp.policy.VERSION, 'cards': cards}
+        for fee_limit, expected in ((5, 'feasible'), (4.99, 'none')):
+            with self.subTest(fee_limit=fee_limit):
+                account['portfolio_preferences'] = profile(
+                    cash_nok=0, max_sector_pct=50, review_sell_pct=70, buy_fee_nok=5,
+                    sell_fee_nok=0, max_buy_fee_pct=fee_limit,
+                    sectors={'A.OL': 'Energy', 'B.OL': 'Energy'},
+                )
+                review = self.plan(account, cards, account['portfolio_preferences'])
+                preview = tp.candidate_plan(account, report, review_plan=review)
+                self.assertEqual(preview['buy_candidates'], [])
+                switch = preview['funded_switch']
+                self.assertEqual(switch['status'], expected)
+                if expected == 'feasible':
+                    self.assertEqual((switch['sell_shares'], switch['buy_shares']), (7, 1))
+                    self.assertEqual(switch['switch_cash_nok'], 595)
+
+    def test_switch_respects_saved_reserve_with_hypothetical_cash(self):
+        account = snapshot(10)
+        account['positions'][0]['above'] = 100
+        account['portfolio_preferences'] = profile(
+            reserve_pct=76, review_sell_pct=70, buy_fee_nok=5, sell_fee_nok=0,
+        )
+        cards = [card(), {**card('A.OL', 2, 'Consider taking profits'), 'review_price': 100}]
+        report = {'generated': NOW, 'policy_version': tp.policy.VERSION, 'cards': cards}
+        review = self.plan(account, cards, account['portfolio_preferences'])
+        preview = tp.candidate_plan(account, report, cash=50, review_plan=review)
+
+        self.assertEqual(preview['funded_switch']['status'], 'none')
+
     def test_explicit_whole_shares_one_fixed_fee_and_shared_budget(self):
         v=self.plan(cards=[card(),card('C.OL',2)])
         self.assertEqual(len(v['buys']),1)
