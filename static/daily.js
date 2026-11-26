@@ -1,6 +1,7 @@
 /* Notification permission is requested only by the user's explicit button click. */
 let dailyView = null,
   dailyRequest = 0,
+  dailyLoad = null,
   overviewAccountRequest = 0,
   overviewAccountLoaded = false;
 async function loadOverviewAccount(refreshErrors = []) {
@@ -440,29 +441,41 @@ function renderFundedSwitch(comparison) {
       .join('') +
     '</tbody></table>';
 }
-async function loadDaily() {
+function loadDaily() {
+  const origin = apiBase;
+  const credential = accessKey;
   const token = ++dailyRequest;
   if (!$('#daily').hidden || !$('#portfolio').hidden) loadOverviewAccount();
-  try {
-    const v = await api('daily');
-    if (token === dailyRequest) renderDaily(v);
-  } catch (e) {
-    if (token === dailyRequest) {
-      if (typeof updateHoldingAdvice === 'function') updateHoldingAdvice([]);
-      $('#dailyStatus').textContent = 'Reviews unavailable: ' + e.message;
-      $('#dailyTop').textContent =
-        'Review data is unavailable. Check the connection and try again.';
-      $('#portfolioReviewEntry').textContent =
-        'Needs attention is unavailable until the review request succeeds.';
-      renderFundedSwitch();
-      $('#buyCandidates').innerHTML = '';
-      showWorkspaceStock($('#candidateMarket'), '');
-      $('#buyCandidatesStatus').textContent = 'Buying candidates could not be loaded. ' + e.message;
-      $('#buyCandidatesRecovery').textContent = 'Retry';
-      $('#buyCandidatesRecovery').dataset.action = 'retry';
-      $('#buyCandidatesRecovery').hidden = false;
+  const request = (async () => {
+    try {
+      const value = await api('daily', undefined, origin, credential);
+      if (token === dailyRequest) renderDaily(value);
+    } catch (e) {
+      if (token === dailyRequest) {
+        if (typeof updateHoldingAdvice === 'function') updateHoldingAdvice([]);
+        $('#dailyStatus').textContent = 'Reviews unavailable: ' + e.message;
+        $('#dailyTop').textContent =
+          'Review data is unavailable. Check the connection and try again.';
+        $('#portfolioReviewEntry').textContent =
+          'Needs attention is unavailable until the review request succeeds.';
+        renderFundedSwitch();
+        $('#buyCandidates').innerHTML = '';
+        showWorkspaceStock($('#candidateMarket'), '');
+        $('#buyCandidatesStatus').textContent = 'Buying candidates could not be loaded. ' + e.message;
+        $('#buyCandidatesRecovery').textContent = 'Retry';
+        $('#buyCandidatesRecovery').dataset.action = 'retry';
+        $('#buyCandidatesRecovery').hidden = false;
+      }
     }
-  }
+  })();
+  const pendingLoad = request.finally(() => {
+    if (token === dailyRequest) dailyLoad = null;
+  });
+  dailyLoad = pendingLoad;
+  return pendingLoad;
+}
+function loadDailyInBackground() {
+  return dailyLoad || loadDaily();
 }
 $('#refreshDaily').onclick = loadDaily;
 async function refreshAccountMarketData(button, status, showFailure) {
@@ -616,5 +629,5 @@ $('#buyCandidatesRecovery').onclick = async (e) => {
   }
 };
 setInterval(() => {
-  if (apiBase && accessKey) loadDaily();
+  if (apiBase && accessKey) loadDailyInBackground();
 }, 60000);

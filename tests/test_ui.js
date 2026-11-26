@@ -172,8 +172,60 @@ setImmediate(async()=>{
  nodes['#daily'].hidden=true;
  nodes['#portfolio'].hidden=true;
  const beforeCandidates=requests.length;
- await vm.runInContext('loadDaily()',context);
- assert(requests.slice(beforeCandidates).some(r=>r.path.endsWith('/api/daily')));
+ const previousFetch=context.fetch;
+ let releaseDaily;
+ context.fetch=(path,options)=>{
+  requests.push({path,options});
+  if(path.endsWith('/api/daily'))
+   return new Promise(resolve=>{releaseDaily=()=>resolve({ok:true,json:async()=>dailyFixture});});
+  return previousFetch(path,options);
+ };
+ const firstDaily=vm.runInContext('loadDailyInBackground()',context);
+ const secondDaily=vm.runInContext('loadDailyInBackground()',context);
+ await Promise.resolve();
+ assert.strictEqual(requests.slice(beforeCandidates).filter(r=>r.path.endsWith('/api/daily')).length,1);
+ let releaseNavigation;
+ context.fetch=(path,options)=>{
+  requests.push({path,options});
+  if(path.endsWith('/api/daily'))
+   return new Promise(resolve=>{releaseNavigation=()=>resolve({ok:true,json:async()=>({...dailyFixture,generated:now+3})});});
+  return previousFetch(path,options);
+ };
+ const navigationDaily=vm.runInContext('loadDaily()',context);
+ await Promise.resolve();
+ assert.strictEqual(requests.slice(beforeCandidates).filter(r=>r.path.endsWith('/api/daily')).length,2);
+ releaseNavigation();
+ await navigationDaily;
+ releaseDaily();
+ await Promise.all([firstDaily,secondDaily]);
+ assert.strictEqual(vm.runInContext('dailyView.generated',context),now+3);
+ context.fetch=previousFetch;
+ const originalKey=vm.runInContext('accessKey',context);
+ let releaseAnonymous,releaseAuthenticated;
+ context.fetch=(path,options)=>{
+  requests.push({path,options});
+  if(path.endsWith('/api/daily'))
+   return new Promise(resolve=>{
+    const release=fixture=>resolve({ok:true,json:async()=>fixture});
+    if(options.headers.Authorization==='Bearer replacement-key') releaseAuthenticated=()=>release({...dailyFixture,generated:now+2});
+    else releaseAnonymous=()=>release({...dailyFixture,generated:now+1});
+   });
+  return previousFetch(path,options);
+ };
+ const beforeCredentialChange=requests.length;
+ const anonymousReview=vm.runInContext('loadDaily()',context);
+ await Promise.resolve();
+ vm.runInContext("accessKey='replacement-key'",context);
+ const authenticatedReview=vm.runInContext('loadDaily()',context);
+ await Promise.resolve();
+ assert.strictEqual(requests.slice(beforeCredentialChange).filter(r=>r.path.endsWith('/api/daily')).length,2);
+ releaseAuthenticated();
+ await authenticatedReview;
+ releaseAnonymous();
+ await anonymousReview;
+ assert.strictEqual(vm.runInContext('dailyView.generated',context),now+2);
+ vm.runInContext('accessKey='+JSON.stringify(originalKey),context);
+ context.fetch=previousFetch;
  assert(!requests.slice(beforeCandidates).some(r=>r.path.includes('/api/account-performance')));
  nodes['#portfolio'].hidden=false;
  assert(nodes['#dailyTop'].innerHTML.includes('Review &lt;untrusted&gt;'));
