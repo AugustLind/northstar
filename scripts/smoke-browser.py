@@ -260,10 +260,19 @@ def prove_portfolio_and_candidates():
                          'Overview shows the same flow-adjusted movement as Today')
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('2025-01-06 (Europe/Oslo)') &&
                 workspacePlots.get(document.querySelector('#todayChart')).chart.panes()[0].getSeries()[0]
-                    .data().map(bar=>new Date(bar.time*1000).toISOString().slice(0,10)).join() === '2025-01-03,2025-01-06' &&
+                    .data().map(bar=>new Date(bar.time*1000).toISOString().slice(0,10)).join() === '2025-01-02,2025-01-03,2025-01-06' &&
                 document.querySelector('#todayMetrics').textContent.includes('day end') &&
                 Array.from(document.querySelectorAll('#todayHoldings tbody tr')).find(row => row.textContent.includes('USDTEST')).textContent.includes('+10.0%')
                 """, 'dated close-to-quote basis, end-of-day assumption and USD FX move')
+
+            browser.wait("document.querySelector('#todayChart .plot-window').textContent.startsWith('2 Jan')",
+                         'Portfolio chart opens on the full available history')
+            browser.evaluate("document.querySelector('#todayChart [data-plot=in]').click()")
+            browser.wait("document.querySelector('#todayChart .plot-window').textContent.startsWith('3 Jan')",
+                         'Portfolio chart zooms in')
+            browser.evaluate("document.querySelector('#todayChart [data-plot=fit]').click()")
+            browser.wait("document.querySelector('#todayChart .plot-window').textContent.startsWith('2 Jan')",
+                         'Portfolio chart fits the full history again')
 
             now = session_timestamp('2025-01-06T16:30')
             seed_today(1000, [('buy', -1000, 1), ('withdrawal', -2000, 0), ('dividend', 50, 0), ('fee', -30, 0)])
@@ -286,7 +295,7 @@ def prove_portfolio_and_candidates():
             now = session_timestamp('2025-01-06T16:30')
             browser.evaluate('loadOverviewAccount()')
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('missing session quote on 2025-01-06') &&
-                !document.querySelector('#todayChart canvas')""", 'missing open-session quote coverage gap')
+                Boolean(document.querySelector('#todayChart canvas'))""", 'missing open-session quote coverage gap')
 
             seed_today(1300, [('deposit', 10000, 0)], quote_date='2025-01-03')
             with patch.object(app, 'fetch_quote', side_effect=provider_quotes.__getitem__):
@@ -452,9 +461,9 @@ def run():
             browser.evaluate("const budget=document.querySelector('#fitPreferences').elements.purchase_nok;budget.value='4567';budget.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#refreshFit').click()")
             browser.wait("document.querySelector('#fitStatus').textContent.includes('Current portfolio check:') && document.querySelector('#fitPreferences').elements.purchase_nok.value==='4567'",'unsaved allocation edit during refresh')
             browser.evaluate("document.querySelector('[data-tab=\"daily\"]').click()")
-            browser.wait("!document.querySelector('#gettingStarted').hidden && document.querySelectorAll('#setupChecklist li').length===3",'consumer getting-started checklist')
-            browser.evaluate("document.querySelector('#startLedger').click()")
-            browser.wait("!document.querySelector('#portfolio').hidden && document.querySelector('#activityGroup').open",'guided activity shortcut')
+            browser.wait("!document.querySelector('#gettingStarted') && !document.querySelector('#refreshOverviewAccount') && !document.querySelector('#daily').textContent.includes('How to use Northstar')", 'Overview omits the three removed sections')
+            browser.evaluate("openWorkspace('activity')")
+            browser.wait("!document.querySelector('#portfolio').hidden && document.querySelector('#activityGroup').open", 'activity remains available in Portfolio')
             browser.wait("document.querySelector('#dailyStatus').textContent.startsWith('Updated') && document.querySelector('#holdingAssessments').textContent.includes('Policy result:')",'holding assessments after workspace navigation')
             if not browser.evaluate("document.querySelector('#holdingAssessments').textContent.includes('SYNTH.OL') && document.querySelector('#holdingAssessments').textContent.includes('Policy result:') && document.querySelector('#holdingAssessments').textContent.includes('Technical evidence does not')"):
                 raise RuntimeError('Holding assessment not loaded: '+str(browser.evaluate("document.querySelector('#dailyStatus').textContent+' | '+document.querySelector('#holdingAssessments').textContent"))+' | daily requests: '+str([r for r in fixture.requests if '/api/daily' in r[1]]))

@@ -22,7 +22,7 @@ function resetWorkspaceCharts() {
   for (const container of workspacePlots.keys()) clearWorkspaceChart(container, '');
 }
 
-function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, points, days}) {
+function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, points, days, startWithHistory = false}) {
   const stock = Boolean(stockSymbol);
   const plotted = points.filter(point => Number.isFinite(point.time));
   const usable = plotted.filter(point => Number.isFinite(stock ? point.close : point.value));
@@ -33,7 +33,7 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
     return;
   }
 
-  const key = JSON.stringify([title, detail, currency, stockSymbol, days]);
+  const key = JSON.stringify([title, detail, currency, stockSymbol, days, startWithHistory]);
   const current = workspacePlots.get(container);
   if (current?.key === key) {
     current.update(plotted, usable);
@@ -127,6 +127,10 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
     scale.setVisibleLogicalRange({from:Math.min(first,end-1)-.5,to:end+padding});
     showPoint(indexes.get(observations.at(-1).time));
   }
+  function showInitialRange() {
+    latest();
+    if (startWithHistory && !waitingForSize) fit();
+  }
   function fit() {
     scale.setVisibleLogicalRange({from:-.5,to:data.length+2});
   }
@@ -167,7 +171,7 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
     if (range && offset != null) {
       scale.setVisibleLogicalRange({from:range.from+offset,to:range.to+offset});
       showPoint(indexes.get(previousInspection) ?? data.length-1);
-    } else latest();
+    } else showInitialRange();
   }
   function updatePurchases() {
     purchases = new Map();
@@ -188,7 +192,7 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
   chart.subscribeCrosshairMove(event=>{
     if (indexes.has(event.time)) showPoint(indexes.get(event.time));
   });
-  scale.subscribeSizeChange(()=>{ if (waitingForSize) latest(); });
+  scale.subscribeSizeChange(()=>{ if (waitingForSize) showInitialRange(); });
   scale.subscribeVisibleLogicalRangeChange(range=>{
     if (!range || !data.length) return;
     const at = index => data[Math.max(0,Math.min(data.length-1,index))];
@@ -216,17 +220,24 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
 function renderOverviewChart(value) {
   workspacePurchases = Array.isArray(value.chart_purchases) ? value.chart_purchases : [];
   const chart = $('#overviewChart');
+  renderAccountValueChart(chart, value);
+  workspacePlots.forEach((plot, container)=>{ if (container !== chart) plot.updatePurchases(); });
+}
+
+function renderAccountValueChart(chart, value, startWithHistory = false) {
   const dates = new Map();
   for (const point of value.chart_value_history || value.curve || []) {
-    dates.set(point.date,point.value_nok);
+    dates.set(point.date, point.value_nok);
   }
-  for (const point of value.last_7_days?.curve || []) dates.set(point.date,point.value_nok);
+  for (const point of value.last_7_days?.curve || []) dates.set(point.date, point.value_nok);
+  if (startWithHistory) {
+    for (const point of value.today?.curve || []) dates.set(point.date, point.value_nok);
+  }
   const points = [...dates].sort(([a],[b])=>a.localeCompare(b)).map(([date,amount])=>({time:chartTime(date),value:amount}));
   const gaps = points.some(point=>!Number.isFinite(point.value));
   plotWorkspaceChart(chart,{title:'Account value',
-    detail:'NOK · Daily valuations · Includes external cash flows' + (gaps ? ' · Some dates unpriced' : ''),
-    currency:'NOK',points,days:7});
-  workspacePlots.forEach((plot, container)=>{ if (container !== chart) plot.updatePurchases(); });
+    detail:'NOK · Includes external cash flows' + (gaps ? ' · Some dates unpriced' : ''),
+    currency:'NOK',points,days:7,startWithHistory});
 }
 
 function refreshWorkspaceStockCharts() {
