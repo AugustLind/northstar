@@ -119,7 +119,7 @@ def build(snapshot,report,plan,feed,ledger=None,now=None):
 
 def merge_alerts(old,reviews,now=None):
     now=time.time() if now is None else now
-    by_id={a['id']:a for a in (old or []) if now-a.get('first_seen',now)<30*86400}
+    by_id={a['id']:dict(a) for a in (old or []) if now-a.get('first_seen',now)<30*86400}
     for r in reviews:
         if r['id'] not in by_id:by_id[r['id']]={**r,'first_seen':now,'read':False}
         else:by_id[r['id']].update({**r,'read':by_id[r['id']].get('read',False)})
