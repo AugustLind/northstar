@@ -19,17 +19,29 @@
     <p id="overviewAccountStatus" class="overview-account-status" role="status">
       Loading account summary…
     </p>
-    <div class="researchtools overview-account-actions">
+  </section>
+  <div class="overview-workspace">
+    <section id="overviewChart" class="workspace-chart" aria-label="Account value history">Loading account history…</section>
+    <section class="card" aria-labelledby="needsAttentionTitle">
+      <h2 id="needsAttentionTitle">Needs attention</h2>
+      <p id="dailyStatus" role="status">Loading the daily overview…</p>
+      <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
+      <div id="dailyTop"></div>
+    </section>
+  </div>
+  <details class="card">
+    <summary>Account data and reconciliation</summary>
+    <div class="researchtools">
       <button id="refreshOverviewAccount" type="button">Refresh account value</button>
       <button id="openAccountPerformance" type="button">Detailed performance in Portfolio</button>
       <button id="openAccountSetup" type="button">Reconcile or set up activity &amp; cash</button>
     </div>
-    <p class="muted overview-account-status">
+    <p class="muted">
       Current value includes recorded NOK cash and held assets at provider quotes. Historical
       investment gain/loss is measured from the verified opening snapshot to the last completed
       priced date; deposits and withdrawals are excluded from investment return.
     </p>
-  </section>
+  </details>
   <div class="sectionhead">
     <div>
       <p class="eyebrow">DAILY PORTFOLIO REVIEW</p>
@@ -76,12 +88,6 @@
       missing data with guesses.
     </p>
   </details>
-  <section class="card" aria-labelledby="needsAttentionTitle">
-    <h2 id="needsAttentionTitle">Needs attention</h2>
-    <p id="dailyStatus" role="status">Loading the daily overview…</p>
-    <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
-    <div id="dailyTop"></div>
-  </section>
   <details class="workspacefold advanced-tools" id="overviewAdvanced">
     <summary>Advanced tools</summary>
   <section class="card" id="systemHealth">

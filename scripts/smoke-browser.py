@@ -120,9 +120,9 @@ def prove_funded_switch(browser, report):
                    (json.dumps({**original_quote, 'price': 100, 'asof': now}), 'SYNTH.OL'))
 
     settings = {**prefs, 'purchase_nok': 120, 'buy_fee_nok': 2, 'sell_fee_nok': 5,
-                'max_buy_fee_pct': 5, 'max_stock_pct': 50, 'reserve_pct': 76}
+                'max_buy_fee_pct': 5, 'max_stock_pct': 90, 'max_sector_pct': 100, 'reserve_pct': 76}
     app.write_meta('portfolio_preferences', settings)
-    browser.evaluate('loadDaily()')
+    browser.evaluate("document.querySelector('#candidateCash').value=17; document.querySelector('#candidateCashForm').requestSubmit()")
     browser.wait("""(() => {
         const comparison = document.querySelector('#switchComparison table');
         if (!comparison || !comparison.checkVisibility()) return false;
@@ -133,29 +133,29 @@ def prove_funded_switch(browser, report):
             ['IDEA1.OL shares bought', '0', '11'],
             ['Sale fee', money(0), money(5)],
             ['Purchase fee', money(0), money(2)],
-            ['Cash after trades', money(1070), money(1053)],
-            ['Cash reserve (minimum 76%)', '78.1%', '77.3%'],
-            ['SYNTH.OL company weight', '21.9%', '14.7%'],
-            ['IDEA1.OL company weight', '0.0%', '8.1%'],
-            ['Industrials sector weight', '21.9%', '14.7%'],
-            ['Energy sector weight', '0.0%', '8.1%'],
+            ['Cash after trades', money(17), money(0)],
+            ['SYNTH.OL company weight', '94.6%', '64.5%'],
+            ['IDEA1.OL company weight', '0.0%', '35.5%'],
+            ['Industrials sector weight', '94.6%', '64.5%'],
+            ['Energy sector weight', '0.0%', '35.5%'],
         ]);
-    })()""", 'funded switch shows exact quantities, fees, reserve and concentration')
+    })()""", 'funded switch spends all preview cash including fees and respects concentration')
 
+    if app.read_meta('portfolio_preferences')['cash_nok'] != prefs['cash_nok']:
+        raise RuntimeError('Preview modified recorded cash.')
     for changes, label, reason in (
-        # At this reserve, the entered sale fee can change the reviewed share count.
-        ({'sell_fee_nok': None, 'reserve_pct': 85.4}, 'Comparison unavailable', 'Enter a sell-fee assumption'),
+        ({'sell_fee_nok': None}, 'Comparison unavailable', 'Enter a sell-fee assumption'),
         ({'sell_fee_nok': 100}, 'No switch qualifies', ''),
         ({'sectors': {'SYNTH.OL': 'Industrials'}}, 'Comparison unavailable', 'Classify this stock'),
-        ({'reserve_pct': 75}, 'No switch qualifies', ''),
-        ({'max_stock_pct': 14.62}, 'No switch qualifies', ''),
+        ({'max_stock_pct': 10}, 'No switch qualifies', ''),
     ):
         app.write_meta('portfolio_preferences', {**settings, **changes})
         browser.evaluate('loadDaily()')
         browser.wait("document.querySelector('#switchStatus').textContent.includes("+json.dumps(label)+
                      ") && document.querySelector('#switchStatus').textContent.includes("+json.dumps(reason)+
-                     ") && !document.querySelector('#switchComparison table')", label+' '+reason)
+                     ") && !document.querySelector('#switchComparison table')", label+' '+reason+' '+str(changes))
 
+    browser.evaluate("document.querySelector('#candidateCashReset').click()")
     app.write_meta('portfolio_preferences', prefs)
     app.write_meta('signal_state', signals)
     app.write_meta('report', report)
@@ -182,12 +182,12 @@ def prove_portfolio_and_candidates():
                      "document.querySelector('#buyCandidates').checkVisibility() && "
                      "document.querySelectorAll('#buyCandidates article').length===5",
                      'Portfolio to Candidates via keyboard and real shared-budget response')
-        expected = [[f'IDEA{rank}.OL', f'RANK {rank}', sector] for rank, sector in enumerate(
+        expected = [[f'IDEA{rank}.OL', str(rank), sector] for rank, sector in enumerate(
             ('Energy', 'Materials', 'Health care', 'Financials', 'Utilities'), 1)]
         cards = browser.evaluate("""Array.from(document.querySelectorAll('#buyCandidates article'), card => [
             card.querySelector('button').dataset.candidateStock,
-            card.querySelector('p').textContent,
-            card.querySelector('p:nth-of-type(2)').textContent
+            card.querySelector('.candidate-rank').textContent,
+            card.querySelector('p').textContent
         ])""")
         if not all(actual[:2] == wanted[:2] and 'Fits your '+wanted[2]+' sector' in actual[2]
                    for actual, wanted in zip(cards, expected)):
@@ -209,8 +209,29 @@ def prove_portfolio_and_candidates():
         browser.wait("document.querySelectorAll('#buyCandidates button').length===5", 'candidates recover after fresh research')
         browser.evaluate("document.querySelector('#buyCandidates button').focus()")
         press_enter(browser)
+        browser.wait("document.querySelector('#workspaceTitle').textContent==='Candidates' && "
+                     "document.querySelector('#candidateMarket .plot-caption strong')?.textContent==='IDEA1.OL'",
+                     'rank-one candidate opens the candlestick chart by keyboard')
+        start_span = browser.evaluate("""(() => {
+            const plot = workspacePlots.get(document.querySelector('#candidateMarket')).chart.timeScale();
+            const range = plot.getVisibleLogicalRange();
+            return range.to-range.from;
+        })()""")
+        browser.evaluate("document.querySelector('#candidateMarket [data-plot=fit]').click()")
+        browser.wait("""(() => {
+            const plot = workspacePlots.get(document.querySelector('#candidateMarket')).chart.timeScale();
+            const range = plot.getVisibleLogicalRange();
+            return range.to-range.from >= 119;
+        })()""", 'fit spans all available market history')
+        browser.evaluate("document.querySelector('#candidateMarket [data-plot=latest]').click()")
+        browser.wait(f"""(() => {{
+            const plot = workspacePlots.get(document.querySelector('#candidateMarket')).chart.timeScale();
+            const range = plot.getVisibleLogicalRange();
+            return Math.abs(range.to-range.from-{start_span}) < 1;
+        }})()""", 'latest restores the initial chart window')
+        browser.evaluate("document.querySelector('#candidateResearch').click()")
         browser.wait("document.querySelector('#workspaceTitle').textContent==='Research' && explorerSymbol==='IDEA1.OL'",
-                     'rank-one candidate opens Research by keyboard')
+                     'Research tools open the selected company')
         app.write_meta('report', original_report)
 
         seed_today(1300, [('deposit', 10000, 0)])
@@ -226,7 +247,7 @@ def prove_portfolio_and_candidates():
                     const signed = value => (value > 0 ? '+' : '') + money(value);
                     return metrics[0] === money({account}) &&
                         metrics[1] === signed({performance}) + ' · ' + {json.dumps(percent)} &&
-                        metrics[2] === signed({cash}) && Boolean(document.querySelector('#todayChart svg'));
+                        metrics[2] === signed({cash}) && Boolean(document.querySelector('#todayChart canvas'));
                 }})()"""
                 try:
                     browser.wait(assertion, f'Today value {account}, return {performance} ({percent}), flow {cash}, and chart')
@@ -236,9 +257,8 @@ def prove_portfolio_and_candidates():
 
             wait_today(111000, 1000, '+1.0%', 10000)
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('2025-01-06 (Europe/Oslo)') &&
-                document.querySelector('#todayChart svg title').textContent.includes('2025-01-03 to 2025-01-06') &&
-                ['2025-01-03', '2025-01-06'].every(date =>
-                    Array.from(document.querySelectorAll('#todayChart svg text')).some(label => label.textContent === date)) &&
+                workspacePlots.get(document.querySelector('#todayChart')).chart.panes()[0].getSeries()[0]
+                    .data().map(bar=>new Date(bar.time*1000).toISOString().slice(0,10)).join() === '2025-01-03,2025-01-06' &&
                 document.querySelector('#todayMetrics').textContent.includes('day end') &&
                 Array.from(document.querySelectorAll('#todayHoldings tbody tr')).find(row => row.textContent.includes('USDTEST')).textContent.includes('+10.0%')
                 """, 'dated close-to-quote basis, end-of-day assumption and USD FX move')
@@ -262,7 +282,7 @@ def prove_portfolio_and_candidates():
             now = session_timestamp('2025-01-06T16:30')
             browser.evaluate('loadOverviewAccount()')
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('missing session quote on 2025-01-06') &&
-                !document.querySelector('#todayChart svg')""", 'missing open-session quote coverage gap')
+                !document.querySelector('#todayChart canvas')""", 'missing open-session quote coverage gap')
 
             seed_today(1300, [('deposit', 10000, 0)], quote_date='2025-01-03')
             with patch.object(app, 'fetch_quote', side_effect=provider_quotes.__getitem__):
@@ -278,30 +298,40 @@ def prove_portfolio_and_candidates():
             browser.wait("""(() => {
                 const status = document.querySelector('#weekStatus').textContent;
                 const metrics = Array.from(document.querySelectorAll('#weekMetrics strong'), n => n.textContent);
-                const chart = document.querySelector('#weekChart svg');
-                const path = chart?.querySelector('path');
-                const points = path?.getAttribute('d').match(/[ML][^ ]+/g) || [];
+                const series = workspacePlots.get(document.querySelector('#weekChart'))?.chart.panes()[0].getSeries()[0];
+                const points = series?.data() || [];
                 const holdings = document.querySelector('#weekHoldings').textContent;
                 return status.includes('2025-01-09 to 2025-01-15 (Europe/Oslo)') &&
                     status.includes('Prior closes carried on 2025-01-11, 2025-01-12') &&
                     metrics[0] === '+' + money(1020) + ' · +0.9%' &&
                     metrics[1] === '+' + money(8000) &&
-                    chart?.querySelector('title').textContent.includes('2025-01-08 to 2025-01-15') &&
-                    points.length === 8 && points.slice(2, 5).every(point => point.split(',')[1] === points[2].split(',')[1]) &&
+                    points[0]?.time === Date.parse('2025-01-08')/1000 &&
+                    points.at(-1)?.time === Date.parse('2025-01-15')/1000 &&
+                    points.length === 8 && points.slice(2, 5).every(point => point.value === points[2].value) &&
                     holdings.includes('+30.0%') && holdings.includes('+10.0%');
             })()""", 'Wednesday window, carried weekend closes, cash flows, and share-count-independent NOK holding moves')
+
+            browser.evaluate("document.querySelector('[data-tab=daily]').click()")
+            browser.wait("document.querySelector('#overviewChart .trading-plot canvas')?.checkVisibility()",
+                         'Overview charts the recorded account value')
+            browser.wait("workspacePlots.get(document.querySelector('#overviewChart'))?.chart.panes()[0].getSeries()[0]"
+                         ".data().at(-1).value === 109020", 'Overview includes recorded flows in account value')
+            browser.evaluate("document.querySelector('#overviewChart .trading-plot').focus()")
+            browser.call('Input.dispatchKeyEvent', {'type':'keyDown','key':'End'})
+            browser.wait("document.querySelector('#overviewChart .plot-purchases').textContent.includes('Bought 1 SYNTH.OL')",
+                         'ledger buy at the valuation point')
 
             seed_today(1300, weekly_events, quote_date='2025-01-15', session_date='2025-01-15',
                        close_dates=tuple(day for day in close_dates if day != '2025-01-13'))
             browser.evaluate('loadOverviewAccount()')
             browser.wait("""document.querySelector('#weekStatus').textContent.includes('missing close on 2025-01-13') &&
                 document.querySelector('#weekMetrics strong').textContent.includes('Unavailable') &&
-                !document.querySelector('#weekChart svg')""", 'missing Monday close is a coverage gap')
+                !document.querySelector('#weekChart canvas')""", 'missing Monday close is a coverage gap')
             seed_today(1300, weekly_events, quote_date='2025-01-14', session_date='2025-01-15',
                        close_dates=close_dates)
             browser.evaluate('loadOverviewAccount()')
             browser.wait("""document.querySelector('#weekStatus').textContent.includes('missing session quote on 2025-01-15') &&
-                !document.querySelector('#weekChart svg')""", 'missing Wednesday session quote is a coverage gap')
+                !document.querySelector('#weekChart canvas')""", 'missing Wednesday session quote is a coverage gap')
         if browser.errors:
             raise RuntimeError('Uncaught browser error during Portfolio and Candidates checks.')
     print('Synthetic Portfolio landing, Today and Last 7 days figures and coverage, '
@@ -393,7 +423,7 @@ def run():
             browser.wait("!document.querySelector('#portfolio').hidden && !document.querySelector('#portfolioAdvanced').open && document.querySelector('#workspaceTitle').textContent==='Portfolio'", 'Portfolio landing page')
             prove_holding_advice(browser)
             if width==1440:
-                browser.evaluate("document.querySelector('#holdings button').click();const field=document.querySelector('#positionForm').elements.review;field.value='Unsaved reload draft';field.dispatchEvent(new Event('input',{bubbles:true}))")
+                browser.evaluate("document.querySelector('#holdings [data-edit]').click();const field=document.querySelector('#positionForm').elements.review;field.value='Unsaved reload draft';field.dispatchEvent(new Event('input',{bubbles:true}))")
                 browser.reload()
                 browser.wait("document.querySelector('#editor').open && document.querySelector('#positionForm').elements.review.value==='Unsaved reload draft'",'holding edit draft restoration')
                 if not browser.evaluate("document.querySelector('#positionForm').elements.symbol.readOnly"):
@@ -410,8 +440,13 @@ def run():
             if not browser.evaluate("document.querySelector('#overviewAdvanced').open && document.activeElement.matches('#overviewAdvanced > summary') && getComputedStyle(document.activeElement).outlineStyle==='solid'"):
                 raise RuntimeError('Advanced tools disclosure did not open with visible keyboard focus.')
             press_enter(browser)
-            if width<600 and not browser.evaluate("getComputedStyle(document.querySelector('.workspace-nav')).gridTemplateColumns.split(' ').length===2"):
-                raise RuntimeError('Mobile workspace navigation did not use its compact layout.')
+            if width<600 and not browser.evaluate("""(() => {
+                const items = Array.from(document.querySelectorAll('.workspace-nav [data-tab]'),
+                    button => button.getBoundingClientRect());
+                return items.length === 3 && items.every(item => item.top === items[0].top &&
+                    item.left >= 0 && item.right <= innerWidth);
+            })()"""):
+                raise RuntimeError('Mobile workspace navigation does not fit on one row.')
             browser.evaluate("openWorkspace('accountPerformance')")
             browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#portfolioAdvanced').open && document.querySelector('#accountPerformanceStatus').textContent.includes('available')",'Overview to detailed account performance')
             if not browser.evaluate("document.querySelector('#accountPerformanceMetrics').textContent.includes(money(60))"):
@@ -457,13 +492,11 @@ def run():
             browser.evaluate("document.querySelector('#dailyTop [data-review-action=holding]').click()")
             browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#holdingAssessments').textContent.includes('SYNTH.OL')",'holding review navigation')
             browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
-            browser.evaluate("document.querySelector('[data-tab=\"recommendations\"]').focus()")
-            if not browser.evaluate("document.activeElement===document.querySelector('[data-tab=\"recommendations\"]')"):
+            browser.evaluate("document.querySelector('[data-tab=candidates]').click(); document.querySelector('#candidateResearch').closest('details').open=true; document.querySelector('#candidateResearch').focus()")
+            if not browser.evaluate("document.activeElement===document.querySelector('#candidateResearch')"):
                 raise RuntimeError('Workspace navigation button did not receive keyboard focus.')
             press_enter(browser)
-            browser.wait("document.querySelector('#workspaceTitle').textContent==='Research' && document.querySelector('[data-tab=\"recommendations\"]').getAttribute('aria-current')==='page'",'keyboard workspace navigation')
-            if not browser.evaluate("document.querySelector('[data-tab=\"recommendations\"]').matches(':focus-visible') && getComputedStyle(document.querySelector('[data-tab=\"recommendations\"]')).outlineStyle==='solid'"):
-                raise RuntimeError('Keyboard workspace focus is not visibly indicated.')
+            browser.wait("document.querySelector('#workspaceTitle').textContent==='Research' && document.querySelector('[data-tab=candidates]').getAttribute('aria-current')==='page'",'keyboard workspace navigation')
             browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
             browser.call('Runtime.evaluate',{'expression':'history.back()'})
             browser.wait("document.querySelector('#workspaceTitle').textContent==='Research'",'browser back navigation')
@@ -472,15 +505,15 @@ def run():
             browser.wait("document.querySelector('#accountPerformanceStatus').textContent.includes('available')",'account performance')
             if not browser.evaluate("document.querySelector('#fitPreferences').elements.purchase_nok.value==='4567'"):
                 raise RuntimeError('Unsaved allocation edit was lost during browser history navigation.')
-            browser.evaluate("document.querySelector('[data-tab=\"recommendations\"]').click()")
+            browser.evaluate("openWorkspace('recommendations')")
             browser.wait("Boolean(document.querySelector('#chartPlot svg'))",'research explorer')
             browser.evaluate("document.querySelector('#adviceFilter').value='all';document.querySelector('#adviceFilter').dispatchEvent(new Event('change',{bubbles:true}))")
-            browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click();document.querySelector('[data-tab=\"recommendations\"]').click()")
+            browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click();openWorkspace('recommendations')")
             if not browser.evaluate("document.querySelector('#adviceFilter').value==='all'"):
                 raise RuntimeError('Research selection was lost when changing workspaces.')
-            if not browser.evaluate("document.querySelectorAll('nav [data-tab]').length===5 && !/NaN|Infinity/.test(document.querySelector('#chartPlot').innerHTML)"):
+            if not browser.evaluate("document.querySelectorAll('nav [data-tab]').length===3 && !/NaN|Infinity/.test(document.querySelector('#chartPlot').innerHTML)"):
                 raise RuntimeError('Research navigation/chart contract failed.')
-            browser.evaluate("document.querySelector('[data-tab=\"validation\"]').click()")
+            browser.evaluate("openWorkspace('validation')")
             if width==1440:
                 started=time.time()
                 browser.evaluate("document.querySelector('#validationRobustness').checked=true;document.querySelector('#runValidation').click()")

@@ -1,3 +1,4 @@
+import math
 """Isolated authenticated server for browser checks. No real account or provider access."""
 import hashlib
 import json
@@ -96,9 +97,18 @@ def seed_candidates():
                  'since': now-3*86400, 'sessions': ['2026-01-02', '2026-01-05']}
         for symbol in symbols
     })
+    def close(index):
+        distance = index - 119
+        return 10 + .36*math.sin(distance/7) + .18*math.sin(distance/2.1) + .11*math.sin(distance*1.6)
+
     with app.connect() as db:
         db.executemany('INSERT INTO quotes VALUES (?,?)', [
-            (symbol, json.dumps({'price': 10, 'asof': now, 'currency': 'NOK'}))
+            (symbol, json.dumps({'price': 10, 'asof': now, 'currency': 'NOK', 'history': [
+                {'time': now-(119-index)*86400, 'open': close(index-1),
+                 'high': max(close(index-1), close(index))+.06,
+                 'low': min(close(index-1), close(index))-.04,
+                 'close': close(index), 'volume': 1000+(index*7919)%4300} for index in range(120)
+            ]}))
             for symbol in symbols
         ])
     app.write_meta('report', report)

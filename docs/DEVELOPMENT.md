@@ -23,8 +23,8 @@ Return to the [README](../README.md). Run commands from the repository root.
 | Deployment and diagnostic helpers | `scripts/` |
 | Python and JavaScript regression checks | `tests/` |
 
-The Python application uses only the standard library. The UI uses native
-JavaScript and SVG; there is no npm install or bundler step. Node is required
+The Python application uses only the standard library. The UI uses native JavaScript, SVG, and a pinned TradingView Lightweight Charts
+browser build for the trading workspace. There is no npm install or bundler step. Node is required
 for JavaScript checks, not to serve the application.
 
 ## Validation
@@ -87,7 +87,7 @@ public JS/CSS/SVG assets; do not add runtime records, templates or private expor
 | Safe presentation helpers | `static/ui-common.js` |
 | API connection, session key and sign-in | `static/app.js` |
 | Holdings editor and notebook export | `static/portfolio.js` |
-| Four-workspace routing and legacy hashes | `static/navigation.js` |
+| Primary navigation, secondary tools and legacy hashes | `static/navigation.js` |
 | Research ranks and controls | `static/advice.js` |
 | Chart state, windows, pointer/keyboard interaction | `static/explorer.js` |
 | Annual statements, trends and peers | `static/financial-view.js` |

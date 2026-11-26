@@ -139,7 +139,7 @@ for (const b of document.querySelectorAll('[data-plan-settings]'))
 
 for (const b of document.querySelectorAll('[data-view-plan]'))
   b.onclick = () => {
-    document.querySelector('[data-tab="recommendations"]').click();
+    openWorkspace('recommendations');
     loadQuantityPlan();
     const group = $('#quantityPlanMain').closest('details');
     if (group) group.open = true;

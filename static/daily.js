@@ -12,6 +12,7 @@ async function loadOverviewAccount(refreshErrors = []) {
     if (token !== overviewAccountRequest) return;
     renderToday(value, refreshErrors);
     renderLast7Days(value.last_7_days, refreshErrors);
+    renderOverviewChart(value);
     $('#overviewValue').textContent =
       value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
     $('#overviewValueMeta').textContent =
@@ -44,6 +45,7 @@ async function loadOverviewAccount(refreshErrors = []) {
     overviewAccountLoaded = true;
   } catch (error) {
     if (token === overviewAccountRequest) {
+      if (!overviewAccountLoaded) clearWorkspaceChart($('#overviewChart'), 'Account value history unavailable.');
       showPortfolioRefreshFailure(error, refreshErrors);
       $('#overviewValue').textContent = 'Unavailable';
       $('#overviewMove').textContent = 'Unavailable';
@@ -51,6 +53,17 @@ async function loadOverviewAccount(refreshErrors = []) {
       $('#overviewAccountStatus').textContent = [error.message, ...refreshErrors].join(' ');
     }
   }
+}
+function resetTradingWorkspace() {
+  dailyRequest++;
+  overviewAccountRequest++;
+  overviewAccountLoaded = false;
+  dailyView = null;
+  selectedCandidate = '';
+  useRecordedCandidateCash();
+  renderCandidatePlan({});
+  resetWorkspaceCharts();
+  $('#holdingMarket').hidden = true;
 }
 function safeDailyLink(url) {
   return typeof officialNoticeUrl === 'function' ? officialNoticeUrl(url) : '';
@@ -127,8 +140,8 @@ function renderDaily(v) {
   dailyView = v;
   if (typeof renderHoldingAssessments === 'function')
     renderHoldingAssessments(v.holding_assessments);
-  renderBuyCandidates(v);
-  renderFundedSwitch(v.funded_switch);
+  if (activeCandidateCash == null) renderCandidatePlan(v);
+  else if (!$('#candidates').hidden) previewCandidateCash();
   $('#dailyStatus').textContent =
     'Updated ' +
     new Date(v.generated * 1000).toLocaleString() +
@@ -208,7 +221,7 @@ function renderDaily(v) {
     ? 'research'
     : 'freshness';
   $('#portfolioReviewEntry').innerHTML =
-    '<h2>Needs attention</h2><p>' +
+    '<p>' +
     (blocker
       ? 'Resolve the current data or reconciliation blocker before relying on portfolio sizing or account results.'
       : v.reviews.length
@@ -286,11 +299,65 @@ function renderDaily(v) {
     } catch (e) {}
   }
 }
+let selectedCandidate = '';
+let activeCandidateCash = null;
+let cashPreviewRequest = 0;
+
+function renderCandidatePlan(value) {
+  renderBuyCandidates(value);
+  renderFundedSwitch(value.funded_switch);
+  $('#switchComparison').hidden = false;
+  $('#buyCandidates').removeAttribute('aria-busy');
+}
+
+async function previewCandidateCash() {
+  const token = ++cashPreviewRequest;
+  $('#switchComparison').hidden = true;
+  $('#switchStatus').textContent = 'Calculating comparison…';
+  $('#buyCandidates').setAttribute('aria-busy', 'true');
+  $('#buyCandidatesStatus').textContent = 'Updating ranked quantities…';
+  $('#candidateCashBasis').textContent = 'Calculating with ' + money(activeCandidateCash) + ' of available cash…';
+  try {
+    const plan = await api('candidate-plan', {cash_nok:activeCandidateCash});
+    if (token !== cashPreviewRequest) return;
+    renderCandidatePlan(plan);
+    $('#candidateCashBasis').textContent = 'Using ' + money(activeCandidateCash) + ' of available cash for this preview.';
+  } catch (error) {
+    if (token !== cashPreviewRequest) return;
+    renderCandidatePlan({});
+    $('#candidateCashBasis').textContent = 'Cash preview unavailable. ' + error.message;
+  }
+}
+
+function useRecordedCandidateCash() {
+  cashPreviewRequest++;
+  activeCandidateCash = null;
+  $('#candidateCashForm').reset();
+  $('#candidateCashReset').hidden = true;
+  $('#candidateCashBasis').textContent = 'Using recorded cash. Enter an amount to preview with different cash.';
+}
+$('#candidateCashReset').onclick = () => {
+  useRecordedCandidateCash();
+  if (dailyView) renderCandidatePlan(dailyView);
+  else loadDaily();
+};
+
+$('#candidateCashForm').onsubmit = event => {
+  event.preventDefault();
+  const cash = $('#candidateCash').valueAsNumber;
+  if (!Number.isFinite(cash) || cash < 0 || cash > 1e9) return;
+  activeCandidateCash = cash;
+  $('#candidateCashReset').hidden = false;
+  previewCandidateCash();
+};
+
 function renderBuyCandidates(v) {
   const status = $('#buyCandidatesStatus'),
     list = $('#buyCandidates'),
     recovery = $('#buyCandidatesRecovery');
   const candidates = Array.isArray(v.buy_candidates) ? v.buy_candidates.slice(0, 5) : [];
+  const market = $('#candidateMarket');
+  const previousFocus = document.activeElement?.dataset?.candidateStock;
   list.innerHTML = '';
   recovery.hidden = true;
   if (v.buy_candidates_stale) {
@@ -305,24 +372,16 @@ function renderBuyCandidates(v) {
       ' eligible candidate' +
       (candidates.length === 1 ? '' : 's') +
       ' from your current portfolio and trade plan.';
+    if (!candidates.some(c => c.symbol === selectedCandidate)) selectedCandidate = candidates[0].symbol;
     list.innerHTML = candidates
       .map(
         (c) =>
-          '<article class="card"><p class="eyebrow">RANK ' +
-          esc(c.rank) +
-          '</p><h3>' +
-          esc(c.name) +
-          ' · ' +
-          esc(c.symbol) +
-          '</h3><p>' +
-          esc(c.portfolio_reason) +
-          '</p><p>' +
-          esc(c.buy_shares) +
-          ' shares · ' +
-          money(c.total_nok) +
-          ' including estimated purchase fee</p><button type="button" data-candidate-stock="' +
-          esc(c.symbol) +
-          '">Review in Research</button></article>'
+
+          '<article><button type="button" data-candidate-stock="' + esc(c.symbol) +
+          '" aria-pressed="' + (c.symbol === selectedCandidate) + '"><span class="candidate-rank" aria-label="Rank ' +
+          esc(c.rank) + '">' + esc(c.rank) + '</span><strong>' + esc(c.name) +
+          '</strong><small>' + esc(c.symbol) + '</small></button><p>' + esc(c.portfolio_reason) +
+          '</p><small>' + esc(c.buy_shares) + ' shares · ' + money(c.total_nok) + ' including estimated fee</small></article>'
       )
       .join('');
   } else if (v.buy_candidate_research_incomplete) {
@@ -339,6 +398,11 @@ function renderBuyCandidates(v) {
     recovery.dataset.action = warnings.length ? 'portfolio' : 'research';
     recovery.hidden = false;
   }
+  if (v.buy_candidates_stale || !candidates.length) selectedCandidate = '';
+  if (previousFocus) {
+    [...list.querySelectorAll('button')].find(button => button.dataset.candidateStock === previousFocus)?.focus();
+  }
+  if (!$('#candidates').hidden) showWorkspaceStock(market, selectedCandidate);
 }
 function renderFundedSwitch(comparison) {
   const status = $('#switchStatus'),
@@ -364,11 +428,6 @@ function renderFundedSwitch(comparison) {
     ['Sale fee', money(0), money(comparison.sell_fee_nok)],
     ['Purchase fee', money(0), money(comparison.buy_fee_nok)],
     ['Cash after trades', money(comparison.keep_cash_nok), money(comparison.switch_cash_nok)],
-    [
-      'Cash reserve (minimum ' + comparison.reserve_pct + '%)',
-      pct(comparison.keep_cash_pct),
-      pct(comparison.switch_cash_pct),
-    ],
     ...weightRows(comparison.companies, 'company weight'),
     ...weightRows(comparison.sectors, 'sector weight'),
   ];
@@ -397,6 +456,7 @@ async function loadDaily() {
         'Needs attention is unavailable until the review request succeeds.';
       renderFundedSwitch();
       $('#buyCandidates').innerHTML = '';
+      showWorkspaceStock($('#candidateMarket'), '');
       $('#buyCandidatesStatus').textContent = 'Buying candidates could not be loaded. ' + e.message;
       $('#buyCandidatesRecovery').textContent = 'Retry';
       $('#buyCandidatesRecovery').dataset.action = 'retry';
@@ -411,7 +471,7 @@ async function refreshAccountMarketData(button, status, showFailure) {
   button.textContent = 'Refreshing market data…';
   try {
     const result = await api('refresh', {});
-    await loadOverviewAccount(result.errors || []);
+    await Promise.all([loadOverviewAccount(result.errors || []), refreshWorkspaceStockCharts()]);
   } catch (error) {
     if (showFailure) showFailure(error);
     else status.textContent = error.message;
@@ -509,18 +569,25 @@ $('#dailyTop').onclick = (e) => {
   }
   const symbol = e.target.dataset.dailyStock;
   if (!symbol) return;
-  document.querySelector('[data-tab="recommendations"]').click();
+  openWorkspace('recommendations');
   if (typeof selectStock === 'function') selectStock(symbol, true);
 };
 $('#portfolioReviewEntry').onclick = (e) => {
   const action = e.target.dataset.reviewAction;
   if (action) openReviewAction(action, e.target.dataset.reviewSymbol || '');
 };
-$('#buyCandidates').onclick = (e) => {
-  const symbol = e.target.dataset.candidateStock;
-  if (!symbol) return;
-  document.querySelector('[data-tab="recommendations"]').click();
-  if (typeof selectStock === 'function') selectStock(symbol, true);
+$('#buyCandidates').onclick = event => {
+  const button = event.target.closest('[data-candidate-stock]');
+  if (!button) return;
+  selectedCandidate = button.dataset.candidateStock;
+  for (const other of $('#buyCandidates').querySelectorAll('button')) {
+    other.setAttribute('aria-pressed', other === button);
+  }
+  showWorkspaceStock($('#candidateMarket'), selectedCandidate);
+};
+$('#candidateResearch').onclick = () => {
+  openWorkspace('recommendations');
+  if (selectedCandidate) selectStock(selectedCandidate, true);
 };
 $('#buyCandidatesRecovery').onclick = async (e) => {
   const button = e.currentTarget,
@@ -534,7 +601,7 @@ $('#buyCandidatesRecovery').onclick = async (e) => {
     return;
   }
   if (action === 'research') {
-    document.querySelector('[data-tab="recommendations"]').click();
+    openWorkspace('recommendations');
     return;
   }
   button.disabled = true;

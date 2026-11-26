@@ -343,6 +343,7 @@ def build(snapshot,report,profile,now=None):
     buys=[];blocked=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
     left=profile['purchase_nok'];spent=0.;fees=0.;warnings=list(ctx['warnings'])
     buy_fee=profile['buy_fee_nok']
+    cash_limit = 'cash reserve' if profile['reserve_pct'] else 'available cash'
     minimum_order=minimum_buy_order(profile)
     max_orders=len(ranked) if minimum_order==0 else min(len(ranked),int(min(left,ctx['cash_nok'])/minimum_order))
     if not report_ok:
@@ -360,14 +361,14 @@ def build(snapshot,report,profile,now=None):
             reserve_fees=max(0,max_orders-len(buys)-1)*buy_fee
             n, value, fee_pct=buy_quantity(symbol,q,current,working_profile,left,reserve_fees)
             if not n or fee_pct>profile['max_buy_fee_pct']+1e-8:
-                reason='No whole-share purchase fits your remaining budget, allocation limits, reserve and purchase-fee limit.'
+                reason='No whole-share purchase fits your remaining budget, allocation limits, '+cash_limit+' and purchase-fee limit.'
             else:
                 total=value+buy_fee
                 buys.append({'symbol':symbol,'name':card.get('name',symbol),'buy_shares':n,'sell_shares':0,
                              'price':q['price'],'quote_asof':q['asof'],'value_nok':value,'fee_nok':buy_fee,
                              'total_nok':total,'fee_pct':fee_pct,'rank':card.get('rank'),
                              'reason':'Meets the technical buy screen; sized in rank order within one shared budget and your limits.',
-                             'portfolio_reason':'Fits your '+profile['sectors'][symbol]+' sector and company limits; '+str(n)+' whole shares fit your remaining shared budget, cash reserve and purchase-fee limit.'})
+                             'portfolio_reason':'Fits your '+profile['sectors'][symbol]+' sector and company limits; '+str(n)+' whole shares fit your remaining shared budget, '+cash_limit+' and purchase-fee limit.'})
                 left-=total;spent+=total;fees+=buy_fee;working_profile['cash_nok']-=total
                 add_purchase(working,symbol,q,n)
         if reason:
@@ -395,3 +396,25 @@ def build(snapshot,report,profile,now=None):
                      + 'sale proceeds are shown gross and net where the fee assumption is available, before tax. The sale scenario is separate from the buy plan; '
                      'sale proceeds do not fund purchases. Recalculate after any real trade. Missing data means no quantity, not zero risk. '
                      'Signal-review percentage and fee limits are illustrative user-adjustable settings; no order is placed.'}
+
+
+def candidate_plan(snapshot, report, cash=None, review_plan=None):
+    """Size an independent candidate preview while retaining account evidence and limits."""
+    profile = {**snapshot['portfolio_preferences'], 'reserve_pct': 0.}
+    if cash is not None:
+        profile.update(cash_nok=cash, purchase_nok=max(cash, profile['purchase_nok']))
+    preview = {**snapshot, 'portfolio_preferences': profile}
+    now = review_plan['generated'] if review_plan else None
+    if review_plan and cash is None and not snapshot['portfolio_preferences']['reserve_pct']:
+        plan = review_plan
+    else:
+        plan = build(preview, report, profile, now)
+    return {
+        'funded_switch': funded_switch(preview, report, plan),
+        'buy_candidates': plan['buys'][:5],
+        'buy_candidates_stale': not policy.current_report(report, plan['generated']),
+        'buy_candidate_warnings': [
+            row['symbol']+': '+row['reason'] for row in plan['blocked_buys'] if row['evidence_missing']
+        ],
+        'buy_candidate_research_incomplete': bool((report or {}).get('coverage', {}).get('unavailable')),
+    }

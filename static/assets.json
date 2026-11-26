@@ -12,6 +12,8 @@
     "holdings-import.js",
     "trade-plan.js",
     "ledger.js",
+    "lightweight-charts.js",
+    "workspace-charts.js",
     "account-performance.js",
     "daily.js",
     "advice.js",
@@ -26,7 +28,8 @@
     "bootstrap.js"
   ],
   "styles": [
-    "style.css"
+    "style.css",
+    "workspace.css"
   ],
   "images": [
     "favicon.svg"

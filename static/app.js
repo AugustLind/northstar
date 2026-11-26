@@ -140,6 +140,7 @@ $('#connectionForm').onsubmit = async (e) => {
       rememberedSession = session;
       credential = token;
     }
+    if (apiBase !== address || accessKey !== credential) resetTradingWorkspace();
     apiBase = address;
     accessKey = credential;
     try {

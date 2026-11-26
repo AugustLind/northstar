@@ -35,7 +35,7 @@ function workspaceUiControls() {
     const workspaceControl = control.closest && control.closest('.tab');
     const editorControl = control.form && control.form.id === 'positionForm';
     return (
-      (workspaceControl || editorControl) &&
+      (workspaceControl || editorControl) && control.dataset?.ephemeral === undefined &&
       !['file', 'password', 'hidden', 'button', 'submit', 'reset'].includes(control.type)
     );
   });
@@ -117,7 +117,8 @@ function openWorkspace(target, updateHistory = true) {
   $('#workspaceTitle').textContent = workspaceTitles[page];
   for (const section of document.querySelectorAll('.tab')) section.hidden = section.id !== page;
   for (const button of document.querySelectorAll('[data-tab]')) {
-    const active = button.dataset.tab === page;
+    const primary = page === 'recommendations' || page === 'validation' ? 'candidates' : page;
+    const active = button.dataset.tab === primary;
     button.classList.toggle('active', active);
     if (active) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
@@ -170,6 +171,8 @@ function clearWorkspaceUiFormState(formId) {
 }
 for (const button of document.querySelectorAll('[data-tab]'))
   button.onclick = () => openWorkspace(button.dataset.tab);
+for (const button of document.querySelectorAll('[data-open]'))
+  button.onclick = () => openWorkspace(button.dataset.open);
 function restoreWorkspaceFromLocation() {
   const currentLocation = location.pathname + location.search + location.hash;
   if (currentLocation === lastWorkspaceLocation) return;

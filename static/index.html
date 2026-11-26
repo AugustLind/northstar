@@ -5,13 +5,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Northstar · Investment notebook</title>
-    <link rel="stylesheet" href="./style.css?v=2cc71dc4a23f" />
+    <link rel="stylesheet" href="./style.css?v=af789febe637" />
+    <link rel="stylesheet" href="./workspace.css?v=9e6d23840565" />
   </head>
   <body>
     <header>
-      <a href="./" class="brand">✳ NORTHSTAR</a><span>OSLO / LONG-TERM INVESTING</span
-      ><button id="connectionButton">Connection</button
-      ><button id="refresh">Refresh market data</button>
+      <a href="./" class="brand">✦ Northstar</a>
+      <nav class="workspace-nav" aria-label="Main workspace">
+        <button type="button" data-tab="daily">Overview</button>
+        <button type="button" data-tab="candidates">Candidates</button>
+        <button type="button" data-tab="portfolio" class="active" aria-current="page">Portfolio</button>
+      </nav>
+      <div class="header-actions"><button id="connectionButton">Connection</button>
+      <button id="refresh">Refresh market data</button></div>
     </header>
     <main>
       <section id="connectionPanel" class="card" hidden>
@@ -47,22 +53,15 @@
       <div id="message" role="status"></div>
       <section class="workspace-context" aria-label="Current account and workspace">
         <div class="account-context">
-          <p class="eyebrow">ACCOUNT</p>
+
           <strong id="accountName">Northstar account</strong>
           <span id="accountStatus" role="status">Not connected</span>
         </div>
         <div class="section-context">
-          <p class="eyebrow">CURRENT WORKSPACE</p>
+
           <h1 id="workspaceTitle">Portfolio</h1>
         </div>
       </section>
-      <nav class="workspace-nav" aria-label="Main workspace">
-        <button type="button" data-tab="portfolio" class="active" aria-current="page">Portfolio</button>
-        <button type="button" data-tab="candidates">Candidates</button>
-        <button type="button" data-tab="daily">Overview</button>
-        <button type="button" data-tab="recommendations">Research</button>
-        <button type="button" data-tab="validation">Strategy lab</button>
-      </nav>
       <section id="daily" class="tab" hidden>
         <section
           class="metrics overview-metrics"
@@ -84,17 +83,29 @@
           <p id="overviewAccountStatus" class="overview-account-status" role="status">
             Loading account summary…
           </p>
-          <div class="researchtools overview-account-actions">
+        </section>
+        <div class="overview-workspace">
+          <section id="overviewChart" class="workspace-chart" aria-label="Account value history">Loading account history…</section>
+          <section class="card" aria-labelledby="needsAttentionTitle">
+            <h2 id="needsAttentionTitle">Needs attention</h2>
+            <p id="dailyStatus" role="status">Loading the daily overview…</p>
+            <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
+            <div id="dailyTop"></div>
+          </section>
+        </div>
+        <details class="card">
+          <summary>Account data and reconciliation</summary>
+          <div class="researchtools">
             <button id="refreshOverviewAccount" type="button">Refresh account value</button>
             <button id="openAccountPerformance" type="button">Detailed performance in Portfolio</button>
             <button id="openAccountSetup" type="button">Reconcile or set up activity &amp; cash</button>
           </div>
-          <p class="muted overview-account-status">
+          <p class="muted">
             Current value includes recorded NOK cash and held assets at provider quotes. Historical
             investment gain/loss is measured from the verified opening snapshot to the last completed
             priced date; deposits and withdrawals are excluded from investment return.
           </p>
-        </section>
+        </details>
         <div class="sectionhead">
           <div>
             <p class="eyebrow">DAILY PORTFOLIO REVIEW</p>
@@ -141,12 +152,6 @@
             missing data with guesses.
           </p>
         </details>
-        <section class="card" aria-labelledby="needsAttentionTitle">
-          <h2 id="needsAttentionTitle">Needs attention</h2>
-          <p id="dailyStatus" role="status">Loading the daily overview…</p>
-          <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
-          <div id="dailyTop"></div>
-        </section>
         <details class="workspacefold advanced-tools" id="overviewAdvanced">
           <summary>Advanced tools</summary>
         <section class="card" id="systemHealth">
@@ -699,14 +704,14 @@
           </div>
           <p id="todayStatus" role="status">Loading account performance…</p>
           <div id="todayMetrics" class="metrics"></div>
-          <div id="todayChart" class="chartplot" hidden></div>
+          <div id="todayChart" class="workspace-chart" hidden></div>
           <div id="todayHoldings" class="tablewrap"></div>
         </section>
         <section class="card" aria-labelledby="weekTitle">
           <h2 id="weekTitle">Last 7 days</h2>
           <p id="weekStatus" role="status">Loading account performance…</p>
           <div id="weekMetrics" class="metrics"></div>
-          <div id="weekChart" class="chartplot" hidden></div>
+          <div id="weekChart" class="workspace-chart" hidden></div>
           <div id="weekHoldings" class="tablewrap"></div>
         </section>
         <div class="sectionhead">
@@ -770,6 +775,7 @@
           *Price return in the stock’s currency. Excludes dividends, fees, tax and currency effects. Cost
           basis is entered manually.
         </p>
+        <section id="holdingMarket" class="workspace-chart" aria-label="Holding price and volume" hidden></section>
         <details class="workspacefold advanced-tools" id="portfolioAdvanced">
           <summary>Advanced tools</summary>
         <section class="card" id="portfolioAssessments">
@@ -1161,23 +1167,35 @@
         </details>
         </details>
       </section>
-      <section id="candidates" class="tab" hidden>
-        <section class="buy-candidates" aria-labelledby="buyCandidatesTitle">
-          <div class="sectionhead">
-            <div>
-              <p class="eyebrow">PORTFOLIO FIT</p>
-              <h2 id="buyCandidatesTitle">Buying candidates</h2>
-            </div>
-          </div>
+      <section id="candidates" class="tab candidate-workspace" hidden>
+        <aside class="card candidate-list" aria-labelledby="buyCandidatesTitle">
+          <h2 id="buyCandidatesTitle">Top 5 candidates</h2>
           <p id="buyCandidatesStatus" role="status" aria-live="polite">Loading eligible candidates…</p>
-          <div id="buyCandidates" class="candidate-grid"></div>
+          <div id="buyCandidates"></div>
           <button id="buyCandidatesRecovery" type="button" hidden></button>
-        </section>
-        <section class="card" aria-labelledby="switchTitle">
-          <h2 id="switchTitle">Keep or switch</h2>
-          <p id="switchStatus" role="status" aria-live="polite">Loading comparison…</p>
-          <div id="switchComparison" class="tablewrap"></div>
-        </section>
+          <details>
+            <summary>Research tools</summary>
+            <button type="button" id="candidateResearch">Open Research</button>
+            <button type="button" data-open="validation">Open Strategy lab</button>
+          </details>
+        </aside>
+        <div class="candidate-main">
+          <section id="candidateMarket" class="workspace-chart" aria-label="Candidate price and volume"></section>
+          <section class="card" aria-labelledby="switchTitle">
+            <h2 id="switchTitle">Keep vs. switch</h2>
+            <form id="candidateCashForm">
+              <label>Available cash (NOK)
+                <input id="candidateCash" type="number" min="0" max="1000000000" step="0.01"
+                  inputmode="decimal" data-ephemeral required />
+              </label>
+              <button>Recalculate</button>
+              <button type="button" id="candidateCashReset" hidden>Use recorded cash</button>
+            </form>
+            <p id="candidateCashBasis" class="muted">Using recorded cash. Enter an amount to preview with different cash.</p>
+            <p id="switchStatus" role="status" aria-live="polite">Loading comparison…</p>
+            <div id="switchComparison" class="tablewrap"></div>
+          </section>
+        </div>
       </section>
       <section id="validation" class="tab" hidden>
         <h2>Strategy lab</h2>
@@ -1359,18 +1377,20 @@
     </dialog>
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
-      <script src="./app.js?v=165269c34e19"></script>
-      <script src="./portfolio.js?v=2e6c182ce6ee"></script>
-      <script src="./navigation.js?v=2e40f3ebd77e"></script>
+      <script src="./app.js?v=c2814043a351"></script>
+      <script src="./portfolio.js?v=c6404de33645"></script>
+      <script src="./navigation.js?v=ca21460fdd54"></script>
       <script src="./charts.js?v=1a61a2335970"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
       <script src="./validation.js?v=098d62b0f747"></script>
       <script src="./portfolio-fit.js?v=23335f259d4c"></script>
       <script src="./holdings-import.js?v=66d1af659957"></script>
-      <script src="./trade-plan.js?v=91f1b8ef73f7"></script>
+      <script src="./trade-plan.js?v=c368342a23f8"></script>
       <script src="./ledger.js?v=2145d92f2206"></script>
-      <script src="./account-performance.js?v=07b1af37e5a2"></script>
-      <script src="./daily.js?v=46afecd05f6d"></script>
+      <script src="./lightweight-charts.js?v=a583392cf759"></script>
+      <script src="./workspace-charts.js?v=c91e7d3d774a"></script>
+      <script src="./account-performance.js?v=ad436ae0e34a"></script>
+      <script src="./daily.js?v=11e3528b8de8"></script>
       <script src="./advice.js?v=99a68ba3093b"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>
