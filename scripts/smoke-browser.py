@@ -256,6 +256,8 @@ def prove_portfolio_and_candidates():
                     raise RuntimeError(f'{error}. Displayed {actual}') from error
 
             wait_today(111000, 1000, '+1.0%', 10000)
+            browser.wait("document.querySelector('#overviewMove').textContent === money(1000) + ' · 1.00%' && document.querySelector('#overviewMoveMeta').textContent.includes('External cash flows excluded')",
+                         'Overview shows the same flow-adjusted movement as Today')
             browser.wait("""document.querySelector('#todayStatus').textContent.includes('2025-01-06 (Europe/Oslo)') &&
                 workspacePlots.get(document.querySelector('#todayChart')).chart.panes()[0].getSeries()[0]
                     .data().map(bar=>new Date(bar.time*1000).toISOString().slice(0,10)).join() === '2025-01-03,2025-01-06' &&
@@ -278,6 +280,8 @@ def prove_portfolio_and_candidates():
                 browser.wait("document.querySelector('#todayStatus').textContent.includes('Last completed session 2025-01-03')",
                              'dated completed session on closure, at Oslo date boundary and before the first quote')
                 wait_today(100000, 0, '0.0%', 0)
+                browser.wait("document.querySelector('#overviewMove').textContent === money(0) + ' · 0.00%' && document.querySelector('#overviewMoveMeta').textContent.includes('Last completed session 2025-01-03')",
+                             'Overview identifies the completed session across closures and before opening')
 
             now = session_timestamp('2025-01-06T16:30')
             browser.evaluate('loadOverviewAccount()')
@@ -399,8 +403,6 @@ def run():
                 raise RuntimeError('Current value does not match synthetic holdings plus recorded cash.')
             if not browser.evaluate("document.querySelector('#overviewValueMeta').textContent.includes('NOK cash') && document.querySelector('#overviewValueMeta').textContent.includes('reporting date') && document.querySelector('#overviewPnlMeta').textContent.includes(' to ')"):
                 raise RuntimeError('Overview account dates, cash scope or price basis are missing.')
-            if browser.evaluate("document.querySelector('#overviewMove').textContent!=='Unavailable'"):
-                raise RuntimeError('A prior completed session was presented as today movement.')
             with app.connect() as db:
                 row=db.execute('SELECT payload FROM quotes WHERE symbol=?',('SYNTH.OL',)).fetchone()
                 original_quote=json.loads(row['payload'])
@@ -409,16 +411,9 @@ def run():
             browser.evaluate('loadOverviewAccount()')
             browser.wait("document.querySelector('#overviewValue').textContent==='Unavailable' && document.querySelector('#overviewAccountStatus').textContent.includes('refresh for a current quote')",'incomplete current quote coverage')
             with app.connect() as db:
-                same_session = {**original_quote, 'asof': time.time(), 'price': 142.45}
-                db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(same_session),'SYNTH.OL'))
-            try:
-                browser.evaluate('loadOverviewAccount()')
-                browser.wait("document.querySelector('#overviewMove').textContent === money(30) + ' · 2.04%' && document.querySelector('#overviewMoveMeta').textContent.includes('cash flows excluded')", 'Today’s movement from the prior close and recorded cash')
-            finally:
-                with app.connect() as db:
-                    db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(original_quote),'SYNTH.OL'))
+                db.execute('UPDATE quotes SET payload=? WHERE symbol=?',(json.dumps(original_quote),'SYNTH.OL'))
             browser.evaluate('loadOverviewAccount()')
-            browser.wait("document.querySelector('#overviewValue').textContent === "+expected_value+" && document.querySelector('#overviewMove').textContent==='Unavailable'", 'account valuation recovery and prior-session movement withheld')
+            browser.wait("document.querySelector('#overviewValue').textContent === "+expected_value, 'account valuation recovery')
             browser.evaluate("document.querySelector('[data-tab=\"portfolio\"]').click()")
             browser.wait("!document.querySelector('#portfolio').hidden && !document.querySelector('#portfolioAdvanced').open && document.querySelector('#workspaceTitle').textContent==='Portfolio'", 'Portfolio landing page')
             prove_holding_advice(browser)

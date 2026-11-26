@@ -23,23 +23,24 @@ async function loadOverviewAccount(refreshErrors = []) {
       (value.current_asof
         ? ' · provider prices as of ' + new Date(value.current_asof * 1000).toLocaleString()
         : '');
-    $('#overviewMove').textContent =
-      value.today_change_nok == null
-        ? 'Unavailable'
-        : money(value.today_change_nok) + ' · ' + value.today_change_pct.toFixed(2) + '%';
-    $('#overviewMoveMeta').textContent =
-      value.today_change_nok == null
-        ? 'Today’s movement needs current same-session quotes and prior closes.'
-        : 'Held-asset price change · % of prior account value · ' +
-          value.today_date +
-          ' · cash flows excluded';
+    const session = value.today || {};
+    $('#overviewMove').textContent = session.change_nok == null
+      ? 'Unavailable'
+      : money(session.change_nok) +
+        (session.change_pct == null ? '' : ' · ' + session.change_pct.toFixed(2) + '%');
+    $('#overviewMoveMeta').textContent = [
+      session.date && (session.live ? 'Session ' : 'Last completed session ') + session.date,
+      session.change_nok == null ? 'Requires reconciled holdings, cash and session prices' : 'External cash flows excluded',
+    ].filter(Boolean).join(' · ');
     const verified =
       ['available', 'estimated'].includes(value.status) && value.investment_pnl_nok != null;
     $('#overviewPnl').textContent = verified ? money(value.investment_pnl_nok) : 'Unavailable';
     $('#overviewPnlMeta').textContent = verified
       ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
       : 'Requires reconciled ledger, comparable valuations and verified opening history.';
-    const notices = (value.current_coverage || []).concat(value.coverage || [], refreshErrors);
+    const notices = [...new Set(
+      (value.current_coverage || []).concat(session.coverage || [], value.coverage || [], refreshErrors)
+    )];
     $('#overviewAccountStatus').textContent = notices.length
       ? notices.join(' ')
       : 'Current valuation uses provider quotes and recorded holdings/cash. Historical results end at the last completed priced date.';

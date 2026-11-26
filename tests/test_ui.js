@@ -321,6 +321,8 @@ setImmediate(async()=>{
  const todayMetrics=nodes['#todayMetrics'].innerHTML;
  const todayChart=nodes['#todayChart'].innerHTML;
  assert(todayStatus.textContent.includes(todayFixture.date));
+ assert(nodes['#overviewMove'].textContent.endsWith(' · 1.00%'));
+ assert(nodes['#overviewMoveMeta'].textContent.includes('Last completed session ' + todayFixture.date));
  assert(todayMetrics.includes('Investment performance'));
  assert(nodes['#todayChart'].textContent.includes('Chart unavailable'));
  const weekChart=nodes['#weekChart'].innerHTML;
