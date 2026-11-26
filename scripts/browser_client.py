@@ -13,8 +13,11 @@ from urllib.parse import urlsplit
 from urllib.request import urlopen
 
 class Browser:
-    def __init__(self, profile_path=None):
+    def __init__(self, profile_path=None, on_event=None):
         self.profile_path=profile_path
+        self.on_event=on_event
+        self.startup_output=b''
+        self.startup_exit_code=None
 
     def __enter__(self):
         self.profile=None if self.profile_path else tempfile.TemporaryDirectory(prefix='northstar-browser-');self.log=tempfile.TemporaryFile();self.errors=[];self.seq=0
@@ -22,24 +25,29 @@ class Browser:
         info=profile_path/'DevToolsActivePort'
         info.unlink(missing_ok=True)
         chrome=shutil.which('google-chrome') or shutil.which('chromium') or ('/opt/google/chrome/chrome' if Path('/opt/google/chrome/chrome').is_file() else None)
-        if not chrome:raise RuntimeError('Chrome is required for the browser smoke check.')
-        self.process=subprocess.Popen([chrome,'--headless','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--remote-debugging-port=0','--user-data-dir='+str(profile_path),'about:blank'],stdout=self.log,stderr=self.log,start_new_session=True)
         try:
+            if not chrome:raise RuntimeError('Chrome is required for the browser smoke check.')
+            self.process=subprocess.Popen([chrome,'--headless','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--remote-debugging-port=0','--user-data-dir='+str(profile_path),'about:blank'],stdout=self.log,stderr=self.log,start_new_session=True)
             for _ in range(100):
                 if info.exists():break
+                if self.process.poll() is not None:raise RuntimeError('Chrome exited before DevTools started.')
                 time.sleep(.1)
             else:raise RuntimeError('Chrome DevTools did not start.')
             port=int(info.read_text().splitlines()[0])
             with urlopen('http://127.0.0.1:'+str(port)+'/json',timeout=10) as response:targets=json.load(response)
             target=next(t for t in targets if t['type']=='page');u=urlsplit(target['webSocketDebuggerUrl'])
-            self.sock=socket.create_connection((u.hostname,u.port));self.sock.settimeout(30)
+            self.sock=socket.create_connection((u.hostname,u.port),timeout=10)
             key=base64.b64encode(os.urandom(16)).decode()
             self.sock.sendall(('GET '+u.path+' HTTP/1.1\r\nHost: '+u.netloc+'\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: '+key+'\r\nSec-WebSocket-Version: 13\r\n\r\n').encode())
             response=b''
-            while b'\r\n\r\n' not in response:response+=self.sock.recv(1)
+            while b'\r\n\r\n' not in response:response+=self.exact(1)
             if not response.startswith(b'HTTP/1.1 101 '):raise RuntimeError('Chrome protocol connection failed.')
             self.call('Page.enable');self.call('Runtime.enable');return self
-        except Exception:self.__exit__(None,None,None);raise
+        except Exception:
+            if hasattr(self,'process'):
+                self.startup_exit_code=self.process.poll()
+            self.__exit__(None,None,None)
+            raise
     def __exit__(self,*args):
         if hasattr(self,'process') and self.process.poll() is None:
             try:
@@ -56,6 +64,8 @@ class Browser:
                 self.process.terminate()
                 self.process.wait(timeout=10)
         if hasattr(self,'sock'):self.sock.close()
+        self.log.seek(0)
+        self.startup_output=self.log.read(8192)
         self.log.close()
         if self.profile:self.profile.cleanup()
     def exact(self,n):
@@ -65,11 +75,15 @@ class Browser:
             if not data:raise RuntimeError('Chrome closed the connection.')
             out+=data
         return out
-    def call(self,method,params=None):
+    def send(self,method,params=None):
         if os.environ.get('NORTHSTAR_SMOKE_DEBUG'):print('Browser command: '+method,flush=True)
         self.seq+=1;data=json.dumps({'id':self.seq,'method':method,'params':params or {}}).encode();n=len(data);mask=os.urandom(4)
         header=bytes([0x81,0x80|n]) if n<126 else bytes([0x81,0xfe])+struct.pack('!H',n) if n<65536 else bytes([0x81,0xff])+struct.pack('!Q',n)
         self.sock.sendall(header+mask+bytes(v^mask[i%4] for i,v in enumerate(data)))
+        return self.seq
+
+    def call(self,method,params=None):
+        command_id=self.send(method,params)
         while True:
             first,second=self.exact(2);size=second&127
             if size==126:size=struct.unpack('!H',self.exact(2))[0]
@@ -80,16 +94,18 @@ class Browser:
             if first&15!=1:continue
             message=json.loads(raw)
             if message.get('method')=='Runtime.exceptionThrown':self.errors.append('Uncaught browser exception')
-            if message.get('id')==self.seq:
+            if 'method' in message and getattr(self,'on_event',None):
+                self.on_event(self,message['method'],message.get('params',{}))
+            if message.get('id')==command_id:
                 if 'error' in message:raise RuntimeError('Chrome command failed: '+method)
                 return message.get('result',{})
     def evaluate(self,expression):
         result=self.call('Runtime.evaluate',{'expression':expression,'returnByValue':True,'awaitPromise':True})
         if 'exceptionDetails' in result:raise RuntimeError('Browser evaluation failed: '+json.dumps(result['exceptionDetails'],sort_keys=True))
         return result['result'].get('value')
-    def fill_key(self,key):
+    def fill_key(self,key,origin=''):
         target=self.call('Runtime.evaluate',{'expression':'window'})['result']['objectId']
-        result=self.call('Runtime.callFunctionOn',{'objectId':target,'functionDeclaration':"function(key){document.querySelector('#backendAddress').value='';document.querySelector('#accessKey').value=key;document.querySelector('#connectionForm').requestSubmit();}",'arguments':[{'value':key}]})
+        result=self.call('Runtime.callFunctionOn',{'objectId':target,'functionDeclaration':"function(key,origin){document.querySelector('#backendAddress').value=origin;document.querySelector('#accessKey').value=key;document.querySelector('#connectionForm').requestSubmit();}",'arguments':[{'value':key},{'value':origin}]})
         if 'exceptionDetails' in result:raise RuntimeError('Browser sign-in failed.')
     def reload(self):
         previous = self.evaluate('performance.timeOrigin')
