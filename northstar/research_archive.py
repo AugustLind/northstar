@@ -96,7 +96,7 @@ def latest(db,kind,subject,before):
 def analysis_fingerprint(root):
     digest=hashlib.sha256()
     for name in ('research.py','return_estimates.py','indicators.py','decision_policy.py','trade_plan.py','portfolio_fit.py','advice_state.py','fundamentals.py','company_data.py','announcements.py'):
-        digest.update(name.encode());digest.update((root/name).read_bytes())
+        digest.update(name.encode());digest.update((root/'northstar'/name).read_bytes())
     return digest.hexdigest()
 
 
@@ -129,7 +129,7 @@ def replay(db,identifier,root):
     financial_rows={s:read(db,i,before) for s,i in manifest['financial_ids'].items()}
     universe=read(db,manifest['universe_id'],before)['value'];saved=read(db,manifest['report_id'],before)['value']
     snapshot={**manifest['context'],'quotes':{s:r['value'] for s,r in quote_rows.items()},'fundamentals':{s:r['value'] for s,r in financial_rows.items()}}
-    import research
+    from northstar import research
     rebuilt=research.build_report(snapshot,universe['universe'],universe['min_turnover_nok'],as_of=manifest['report_generated'])
     old={c['symbol']:c for c in saved['cards']};new={c['symbol']:c for c in rebuilt['cards']}
     def estimate(card):

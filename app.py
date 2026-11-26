@@ -13,28 +13,28 @@ import base64
 import binascii
 import secrets
 import sys
-import research
-import research_worker
-import decision_policy
-import fundamentals
-import announcements
-import validation
-import portfolio_fit
-import holdings_import
-import trade_plan
-import transactions
-import company_data
-import advice_state
-import daily_board
-import email_alerts
-import portfolio_risk
-import financial_analysis
-import stock_summary
-import system_status
-import research_archive
-import account_performance
-import ui_assets
-import release_info
+from northstar import research
+from northstar import research_worker
+from northstar import decision_policy
+from northstar import fundamentals
+from northstar import announcements
+from northstar import validation
+from northstar import portfolio_fit
+from northstar import holdings_import
+from northstar import trade_plan
+from northstar import transactions
+from northstar import company_data
+from northstar import advice_state
+from northstar import daily_board
+from northstar import email_alerts
+from northstar import portfolio_risk
+from northstar import financial_analysis
+from northstar import stock_summary
+from northstar import system_status
+from northstar import research_archive
+from northstar import account_performance
+from northstar import ui_assets
+from northstar import release_info
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen

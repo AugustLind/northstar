@@ -14,8 +14,8 @@ from urllib.parse import urlsplit
 from browser_client import Browser
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import release_info
-import ui_assets
+from northstar import release_info
+from northstar import ui_assets
 
 
 API_PATHS = frozenset('/api/' + name for name in (

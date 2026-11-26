@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import app
-import research
+from northstar import research
 
 
 def quote(up=True):

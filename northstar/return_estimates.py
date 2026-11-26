@@ -3,7 +3,7 @@ import bisect
 import datetime as dt
 import math
 
-import decision_policy as policy
+from northstar import decision_policy as policy
 
 HORIZON_SESSIONS = 63
 MIN_SIGNAL_SAMPLES = 20
@@ -181,7 +181,7 @@ def _estimate(symbol, signal_samples, baseline_samples, current_day):
 
 def attach(cards, quotes, top_symbols, now, floor, screen):
     """Attach ranges only to current top-ranked stocks and eligible holdings."""
-    from fundamentals import canonical
+    from northstar.fundamentals import canonical
 
     selected = {canonical(symbol) for symbol in top_symbols}
     selected.update(canonical(card['symbol']) for card in cards if card.get('held'))

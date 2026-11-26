@@ -49,5 +49,5 @@ systemctl --user disable --now northstar
 
 The computer must remain awake and connected to fetch data. This installer does
 not install or start Ollama. User service setup differs from the system service
-created by the [Oracle installer](../DEPLOY.md); avoid running both against the
+created by the [Oracle installer](deployment/DEPLOY.md); avoid running both against the
 same checkout/database.

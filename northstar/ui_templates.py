@@ -2,8 +2,8 @@
 import re
 import hashlib
 from pathlib import Path
-import ui_assets
-ROOT=Path(__file__).resolve().parent
+from northstar import ui_assets
+ROOT=Path(__file__).resolve().parents[1]
 
 def render(root=ROOT):
     base=root/'web/templates';assets=ui_assets.manifest(root)

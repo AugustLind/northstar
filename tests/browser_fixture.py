@@ -9,8 +9,8 @@ import tempfile
 import threading
 import time
 import app
-import research
-import transactions
+from northstar import research
+from northstar import transactions
 
 class Fixture:
     def __enter__(self):
@@ -73,7 +73,7 @@ class Fixture:
 
 def seed_candidates():
     """Six confirmed buys compete in the real shared-budget trade plan."""
-    import decision_policy
+    from northstar import decision_policy
 
     now = time.time()
     symbols = [f'IDEA{rank}.OL' for rank in range(1, 7)]

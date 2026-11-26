@@ -1,5 +1,5 @@
 import unittest
-import transactions as tx
+from northstar import transactions as tx
 import test_transactions as ledger_tests
 
 class SplitLedgerTests(unittest.TestCase):

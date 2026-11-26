@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
-import company_data
+from northstar import company_data
 import app
 try:
     record=company_data.fetch('KOG.OL')

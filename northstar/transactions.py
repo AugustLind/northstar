@@ -6,7 +6,7 @@ import io
 import json
 import math
 import re
-import holdings_import as hi
+from northstar import holdings_import as hi
 
 FIELDS=['date','type','name','symbol','quantity','net_cash','currency','trade_id','fee','split_ratio']
 HEADERS={'date':['bokforingsdag','bokføringsdag','handelsdag','dato','date'],'type':['transaksjonstype','type','transaction type'],

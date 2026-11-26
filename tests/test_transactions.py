@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import app
-import transactions as tx
+from northstar import transactions as tx
 
 
 def raw(rows):

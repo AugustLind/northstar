@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
-import release_info
+from northstar import release_info
 
 path=Path(__file__).resolve().parents[1]/'scripts/smoke-deployment.py'
 spec=importlib.util.spec_from_file_location('deployment_smoke',path);smoke=importlib.util.module_from_spec(spec);spec.loader.exec_module(smoke)

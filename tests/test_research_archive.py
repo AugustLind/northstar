@@ -5,8 +5,8 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 import app
-import research
-import research_archive as ar
+from northstar import research
+from northstar import research_archive as ar
 from test_research import quote
 
 class ArchiveTests(unittest.TestCase):

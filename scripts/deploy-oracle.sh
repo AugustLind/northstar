@@ -23,7 +23,7 @@ with tarfile.open(sys.argv[1]) as archive:
 PY
 cd "$task_stage"
 python3 -m unittest discover -s tests -q
-python3 -m py_compile app.py research.py
+python3 -m compileall -q app.py northstar
 mkdir -p "$task_root"
 if [[ -f "$task_root/app.py" ]]; then
   tar --exclude=data --exclude=.git --exclude=__pycache__ --exclude=pages-dist --exclude=.env -czf "$task_backup" -C "$task_root" .

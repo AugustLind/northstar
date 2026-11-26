@@ -7,7 +7,7 @@ import datetime as dt
 import math
 import time
 from zoneinfo import ZoneInfo
-import portfolio_fit as pf
+from northstar import portfolio_fit as pf
 
 VERSION='ledger-performance-v1'
 METHOD=('Account valuations use historical-share-unit closes, recorded quantities and dated NOK cash. '

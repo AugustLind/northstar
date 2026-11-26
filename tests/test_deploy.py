@@ -21,7 +21,7 @@ class DeployTests(unittest.TestCase):
                 archive=home/'deploy.tar.gz'
                 with tarfile.open(archive,'w:gz') as tar:
                     fixture_test = 'import unittest\n\nclass SmokeTest(unittest.TestCase):\n    def test_smoke(self):\n        self.assertTrue(True)\n'
-                    for name,text in [('app.py','new_version=True\n'),('research.py',''),('tests/test_ok.py',fixture_test),('scripts/smoke-deployment.py','raise SystemExit('+('0' if authenticated else '1')+')\n')]:
+                    for name,text in [('app.py','new_version=True\n'),('northstar/research.py',''),('tests/test_ok.py',fixture_test),('scripts/smoke-deployment.py','raise SystemExit('+('0' if authenticated else '1')+')\n')]:
                         data=text.encode();info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
                 result=subprocess.run(['bash',str(script),str(archive)],capture_output=True,text=True,
                     env={**os.environ,'HOME':str(home),'PATH':str(fakebin)+':'+os.environ['PATH']})

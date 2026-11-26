@@ -7,7 +7,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import email_alerts
+from northstar import email_alerts
 
 
 def environment_text(values):

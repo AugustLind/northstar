@@ -2,9 +2,9 @@
 import threading
 import time
 
-import advice_state
-import research
-import trade_plan
+from northstar import advice_state
+from northstar import research
+from northstar import trade_plan
 
 
 class ResearchWorker:

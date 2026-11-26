@@ -2,8 +2,8 @@
 import datetime as dt
 import statistics
 import time
-import fundamentals as f
-import company_data as cd
+from northstar import fundamentals as f
+from northstar import company_data as cd
 
 
 def timeline(record):
