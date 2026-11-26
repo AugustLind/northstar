@@ -12,8 +12,8 @@ from urllib.error import HTTPError,URLError
 from urllib.parse import urlsplit,urljoin
 from urllib.request import Request,urlopen,build_opener,HTTPSHandler,HTTPRedirectHandler,ProxyHandler
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import release_info
-import ui_assets
+from northstar import release_info
+from northstar import ui_assets
 
 
 class CheckFailure(ValueError):

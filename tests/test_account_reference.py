@@ -1,8 +1,8 @@
 """Hand-calculated examples: inputs and expected values do not use production helpers."""
 import datetime as dt
 import unittest
-import account_performance
-import validation
+from northstar import account_performance
+from northstar import validation
 
 def timestamp(date):
     return dt.datetime.fromisoformat(date).replace(tzinfo=dt.timezone.utc).timestamp()

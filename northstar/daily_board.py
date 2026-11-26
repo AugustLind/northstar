@@ -2,12 +2,12 @@
 import datetime as dt
 import hashlib
 import time
-import portfolio_fit as pf
-import decision_policy
-import trade_plan
-import announcements
-import fundamentals
-import company_data
+from northstar import portfolio_fit as pf
+from northstar import decision_policy
+from northstar import trade_plan
+from northstar import announcements
+from northstar import fundamentals
+from northstar import company_data
 
 
 def technical_sale(row):

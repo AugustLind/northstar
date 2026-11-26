@@ -1,10 +1,10 @@
 """Explainable share-count scenarios, with a shared cash budget and no order execution."""
 import math
 import time
-import portfolio_fit as pf
-import company_data
-import decision_policy as policy
-from broker_costs import BUY_FEE_NOK
+from northstar import portfolio_fit as pf
+from northstar import company_data
+from northstar import decision_policy as policy
+from northstar.broker_costs import BUY_FEE_NOK
 
 VERSION='share-count-scenarios-v1'
 SELL_SIGNALS=policy.SELL_SIGNALS
@@ -24,7 +24,7 @@ buy_signal = policy.buy_signal
 
 
 def sell_scenario(snapshot,cards,ctx,profile,report_ok,now):
-    import advice_state
+    from northstar import advice_state
     rows=[]
     issuer_over_limit={r['issuer'] for r in ctx['issuer_exposure']
                        if r['weight_pct'] is not None and r['weight_pct']>profile['max_stock_pct']+1e-8}
@@ -193,7 +193,7 @@ def minimum_buy_order(profile):
 
 
 def buy_inputs(card,snapshot,ctx,profile,now,*,report_ok,blocked_sales,budget):
-    import advice_state
+    from northstar import advice_state
 
     symbol=pf.canonical(card['symbol'])
     if not report_ok or not signal_current(card,now):

@@ -8,7 +8,7 @@ import shutil
 import sys
 from urllib.parse import urlsplit
 root=Path(__file__).resolve().parents[1];sys.path.insert(0,str(root))
-import ui_assets
+from northstar import ui_assets
 api=os.environ.get('NORTHSTAR_API_URL','').rstrip('/')
 u=urlsplit(api)
 if not api or u.scheme!='https' or not u.netloc or u.path or u.query or u.fragment or u.username or u.password:

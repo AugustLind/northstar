@@ -3,8 +3,8 @@ import math
 import time
 import unittest
 from unittest.mock import patch
-import portfolio_fit as pf
-import research
+from northstar import portfolio_fit as pf
+from northstar import research
 
 NOW=1800000000
 
@@ -154,7 +154,7 @@ class PortfolioFitTests(unittest.TestCase):
 
     def test_rank_never_changes_and_stale_report_cannot_clear(self):
         card={'symbol':'B.OL','price':100,'asof':NOW,'action':'Consider buying','rank_eligible':True,'rank':1,'composite':90}
-        import decision_policy
+        from northstar import decision_policy
         report={'generated':NOW,'policy_version':decision_policy.VERSION,'cards':[card]};saved=copy.deepcopy(report)
         v=pf.view(snapshot(),report,profile(),NOW)
         self.assertTrue(v['candidates'][0]['buy_candidate'])

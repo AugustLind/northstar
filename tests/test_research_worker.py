@@ -2,8 +2,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-import research
-from research_worker import ResearchWorker
+from northstar import research
+from northstar.research_worker import ResearchWorker
 
 
 def quote():

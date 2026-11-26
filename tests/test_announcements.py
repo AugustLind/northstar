@@ -6,8 +6,8 @@ import time
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
-import announcements as a
-import research
+from northstar import announcements as a
+from northstar import research
 from test_research import quote
 
 NOW=dt.datetime(2026,10,27,12,tzinfo=dt.timezone.utc).timestamp()

@@ -1,7 +1,7 @@
 import copy
 import datetime as dt
 import unittest
-import account_performance as ap
+from northstar import account_performance as ap
 
 NOW=dt.datetime(2025,1,6,tzinfo=dt.timezone.utc).timestamp()
 def stamp(date):return dt.datetime.fromisoformat(date).replace(tzinfo=dt.timezone.utc).timestamp()

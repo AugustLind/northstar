@@ -2,9 +2,9 @@
 import bisect
 import math
 import time
-import research
-import decision_policy as policy
-from broker_costs import BUY_FEE_NOK, FEE_MODEL
+from northstar import research
+from northstar import decision_policy as policy
+from northstar.broker_costs import BUY_FEE_NOK, FEE_MODEL
 
 VERSION = 'technical-policy-robustness-v5'
 LIMITS = ('Exploratory, not an unbiased market backtest: today’s configured universe excludes '

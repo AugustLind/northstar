@@ -2,12 +2,12 @@ import copy
 import unittest
 from unittest.mock import patch
 
-import advice_state
-import decision_policy as policy
-import portfolio_fit
-import research
-import trade_plan
-import validation
+from northstar import advice_state
+from northstar import decision_policy as policy
+from northstar import portfolio_fit
+from northstar import research
+from northstar import trade_plan
+from northstar import validation
 from test_research import quote
 from test_trade_plan import NOW, card, profile, snapshot
 from test_validation import quotes
@@ -125,7 +125,7 @@ class SharedPolicyTests(unittest.TestCase):
                       else 'Consider reducing / selling' if position else 'Wait / watch')
             return {'symbol': symbol, 'composite': 90, 'action': action,
                     'rank_eligible': n == 1}
-        with patch('research.screen', side_effect=screen):
+        with patch('northstar.research.screen', side_effect=screen):
             result = validation.evaluate(quotes(400), ['A.OL'])
         self.assertGreater(len(calls), 4)
         self.assertEqual(calls[:5], [False, True, True, True, False])
@@ -137,7 +137,7 @@ class SharedPolicyTests(unittest.TestCase):
         def screen(symbol, q, **kwargs):
             return {'symbol': symbol, 'composite': 100, 'rank_eligible': True,
                     'action': 'Wait / watch'}
-        with patch('research.screen', side_effect=screen):
+        with patch('northstar.research.screen', side_effect=screen):
             result = validation.evaluate(quotes(), ['A.OL'])
         self.assertEqual(result['buy_orders'], 0)
         self.assertEqual(result['return_pct'], 0)

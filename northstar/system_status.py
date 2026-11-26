@@ -1,6 +1,6 @@
 """Authenticated operational summaries. No configuration values or raw payloads."""
 import time
-import portfolio_fit as pf
+from northstar import portfolio_fit as pf
 
 
 def build(snapshot,report,worker,progress,financial_progress,announcements,announcement_progress,
@@ -18,7 +18,7 @@ def build(snapshot,report,worker,progress,financial_progress,announcements,annou
         elif pf.fresh(q,now):fresh+=1
         else:stale+=1
     records=snapshot.get('fundamentals',{})
-    import fundamentals
+    from northstar import fundamentals
     financial_counts={'available':0,'partial':0,'stale':0,'unavailable':0}
     for symbol in symbols:
         status=fundamentals.analyse(records.get(symbol),quotes.get(symbol),now)['status']

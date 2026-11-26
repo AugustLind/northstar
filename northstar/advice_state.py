@@ -1,8 +1,8 @@
 """Dated signal persistence and recommendation change tracking; polling is not evidence."""
 import datetime as dt
 import time
-import trade_plan
-import decision_policy as policy
+from northstar import trade_plan
+from northstar import decision_policy as policy
 
 
 def observe(report,previous,now=None):

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import app
-import holdings_import as hi
+from northstar import holdings_import as hi
 
 HEADER='Navn\tValuta\tAntall\tGAV\tI dag %\tSiste kurs\tBelåningsverdi\tVerdi\tVerdi NOK\tAvkast. %\tAvkast.\u00a0NOK\n'
 

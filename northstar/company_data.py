@@ -7,7 +7,7 @@ import time
 from urllib.request import Request,urlopen
 from urllib.parse import urlencode
 from urllib.error import HTTPError
-import fundamentals
+from northstar import fundamentals
 
 SECTOR_MAP={'Technology':'Information technology','Basic Materials':'Materials','Consumer Cyclical':'Consumer discretionary',
             'Consumer Defensive':'Consumer staples','Healthcare':'Health care','Financial Services':'Financials',

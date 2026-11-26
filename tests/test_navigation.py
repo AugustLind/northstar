@@ -54,8 +54,8 @@ class NavigationTests(unittest.TestCase):
 
 
     def test_generated_html_and_manifest_match_sources(self):
-        import ui_templates
-        import ui_assets
+        from northstar import ui_templates
+        from northstar import ui_assets
         root=Path(__file__).resolve().parents[1]
         self.assertEqual((root/'static/index.html').read_text(),ui_templates.render(root))
         names=ui_assets.public_files(root)
@@ -67,7 +67,7 @@ class NavigationTests(unittest.TestCase):
 
     def test_public_asset_manifest_rejects_symlinked_private_files(self):
         import json,tempfile
-        import ui_assets
+        from northstar import ui_assets
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);(root/'static').mkdir();(root/'static/index.html').write_text('')
             (root/'private.key').write_text('not-a-real-secret')

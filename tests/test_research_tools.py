@@ -8,15 +8,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import app
-import company_data
-import email_alerts
-import financial_analysis
-import fundamentals
-import portfolio_fit as pf
-import portfolio_risk as risk
-import research
-import stock_summary
-import validation
+from northstar import company_data
+from northstar import email_alerts
+from northstar import financial_analysis
+from northstar import fundamentals
+from northstar import portfolio_fit as pf
+from northstar import portfolio_risk as risk
+from northstar import research
+from northstar import stock_summary
+from northstar import validation
 from test_fundamentals import payload, NOW
 from test_validation import quotes as experiment_quotes
 
@@ -134,7 +134,7 @@ class ExperimentDiagnosticsTests(unittest.TestCase):
         def screen(s,q,**kw):
             return {'symbol':s,'composite':50,'rank_eligible':len(q['history'])<250,
                     'action':'Consider buying' if len(q['history'])<250 else 'Consider reducing / selling'}
-        with patch('research.screen',side_effect=screen):v=validation.evaluate(q,['A.OL'],selling_fee_nok=50)
+        with patch('northstar.research.screen',side_effect=screen):v=validation.evaluate(q,['A.OL'],selling_fee_nok=50)
         self.assertEqual(v['buy_orders'],1);self.assertEqual(v['sell_orders'],1)
         self.assertEqual(v['selling_fees_nok'],50);self.assertAlmostEqual(v['return_pct'],-.129)
         self.assertGreater(v['one_way_turnover_pct'],0)
@@ -153,7 +153,7 @@ class ExperimentDiagnosticsTests(unittest.TestCase):
             self.assertLessEqual(q['history'][-1]['time'],kw['as_of'])
             key=(s,q['history'][-1]['time'],bool(kw['position']));self.assertNotIn(key,seen);seen.append(key)
             return {'symbol':s,'rank_eligible':True,'composite':50,'action':'Consider buying'}
-        with patch('research.screen',side_effect=screen):v=validation.evaluate_suite(experiment_quotes(650),['A.OL'])
+        with patch('northstar.research.screen',side_effect=screen):v=validation.evaluate_suite(experiment_quotes(650),['A.OL'])
         r=v['robustness'];self.assertEqual(len(r['variants']),4);self.assertEqual(len(r['cost_sensitivity']),2)
         self.assertLess(r['training']['to'],r['holdout']['from'])
         self.assertEqual(r['holdout_curve'][0]['close'],1)
@@ -229,7 +229,7 @@ class ResearchEndpointTests(unittest.TestCase):
             def __init__(self,**kwargs):self.target=kwargs['target']
             def start(self):self.target()
         headers={'Authorization':'Bearer test-key','Content-Type':'application/json'}
-        with patch('app.threading.Thread',ImmediateThread),patch('validation.evaluate_suite',return_value={'generated':123}) as runner:
+        with patch('app.threading.Thread',ImmediateThread),patch('northstar.validation.evaluate_suite',return_value={'generated':123}) as runner:
             response=self.request('POST','/api/validation',headers,{'selling_fee_nok':25})
         self.assertTrue(response['body']['queued'])
         self.assertEqual(runner.call_args.kwargs['selling_fee_nok'],25)
@@ -246,7 +246,7 @@ class AdditionalResearchEdgeTests(unittest.TestCase):
         self.assertAlmostEqual(sum(r['volatility_contribution_pct'] for r in v['risk_contributions']),v['volatility_pct'])
 
     def test_historical_issuer_events_remain_markable_but_not_upcoming(self):
-        import announcements
+        from northstar import announcements
         import datetime as dt
         past=dt.datetime.fromtimestamp(NOW-86400,dt.timezone.utc).date().isoformat()
         future=dt.datetime.fromtimestamp(NOW+86400,dt.timezone.utc).date().isoformat()

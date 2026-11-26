@@ -1,7 +1,7 @@
 import sqlite3
 import unittest
 from unittest.mock import patch
-import validation
+from northstar import validation
 
 
 def quotes(n=320):
@@ -17,7 +17,7 @@ class ValidationTests(unittest.TestCase):
               'history':[dict(point) for point in data['A.OL']['history']]}
         fund['history'][-1]['close']=200
         data['OBXD.OL']=fund
-        with patch('research.screen',return_value={
+        with patch('northstar.research.screen',return_value={
                 'symbol':'A.OL','composite':80,'rank_eligible':True,'action':'Consider buying'}):
             result=validation.evaluate(data,['A.OL'],initial_capital=100000)
         comparison=result['oslo_fund']
@@ -40,7 +40,7 @@ class ValidationTests(unittest.TestCase):
         for point in data['A.OL']['history']:
             point['close']=100
         data['OSEBX.OL']={'currency':'NOK','history':data['A.OL']['history']}
-        with patch('research.screen',return_value={
+        with patch('northstar.research.screen',return_value={
                 'symbol':'A.OL','composite':80,'rank_eligible':True,'action':'Consider buying'}):
             result=validation.evaluate(data,['A.OL'],initial_capital=100000)
         self.assertEqual(result['buy_orders'],1)
@@ -57,7 +57,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(q['turnover20'],sum(p['close']*p['volume'] for p in q['history'][-20:])/20)
             seen.append(len(q['history']))
             return {'symbol':s,'composite':80,'rank_eligible':True,'action':'Consider buying'}
-        with patch('research.screen',side_effect=screen):
+        with patch('northstar.research.screen',side_effect=screen):
             v=validation.evaluate(quotes(),['A.OL'])
         self.assertTrue(seen)
         self.assertGreater(v['return_pct'],0)
@@ -96,7 +96,7 @@ class ValidationTests(unittest.TestCase):
         q=quotes()
         for bar in q['A.OL']['history']:
             bar['close']=100
-        with patch('research.screen',return_value={'symbol':'A.OL','composite':50,'rank_eligible':True,'action':'Consider buying'}):
+        with patch('northstar.research.screen',return_value={'symbol':'A.OL','composite':50,'rank_eligible':True,'action':'Consider buying'}):
             v=validation.evaluate(q,['A.OL'])
         self.assertAlmostEqual(v['return_pct'],-.079)
         self.assertAlmostEqual(v['benchmark_pct'],-.079)
@@ -122,7 +122,7 @@ class ValidationTests(unittest.TestCase):
         self.assertAlmostEqual(old['symbols'][0]['return_pct'],(100.2/100.1*.998/1.002-1)*100)
 
     def test_no_eligible_stocks_stay_cash(self):
-        with patch('research.screen',return_value={'symbol':'A.OL','rank_eligible':False,'action':'Wait / watch'}):
+        with patch('northstar.research.screen',return_value={'symbol':'A.OL','rank_eligible':False,'action':'Wait / watch'}):
             v=validation.evaluate(quotes(),['A.OL'])
         self.assertEqual(v['return_pct'],0)
         self.assertEqual(v['trades'],0)

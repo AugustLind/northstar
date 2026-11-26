@@ -1,8 +1,8 @@
 import copy
 import random
 import unittest
-import portfolio_fit as pf
-import trade_plan as tp
+from northstar import portfolio_fit as pf
+from northstar import trade_plan as tp
 
 NOW=1800000000
 

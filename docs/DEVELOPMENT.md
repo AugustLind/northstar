@@ -7,18 +7,18 @@ Return to the [README](../README.md). Run commands from the repository root.
 | Area | Files |
 |---|---|
 | HTTP API, workers, SQLite orchestration | `app.py` |
-| Screening, report construction, return scenarios and indicators | `research.py`, `return_estimates.py`, `decision_policy.py`, `indicators.py`, `universe.py` |
-| Research worker lifecycle and report orchestration | `research_worker.py` |
-| Financial, announcement, and company data | `fundamentals.py`, `announcements.py`, `company_data.py` |
-| Portfolio covariance, scenarios and decision summaries | `portfolio_risk.py`, `stock_summary.py` |
-| Multi-year financial/peer context | `financial_analysis.py` |
-| Private operational health | `system_status.py` |
-| Historical experiments and forward cohorts | `validation.py` |
-| Portfolio sizing, plans, imports, and ledger | `portfolio_fit.py`, `trade_plan.py`, `holdings_import.py`, `transactions.py` |
-| Dashboard summaries and shared state | `daily_board.py`, `advice_state.py`, `broker_costs.py` |
-| Persistent email delivery | `email_alerts.py` |
-| Ledger performance and dated input archive | `account_performance.py`, `research_archive.py` |
-| Public assets and HTML composition | `ui_assets.py`, `ui_templates.py`, `static/assets.json`, `web/templates/` |
+| Screening, report construction, return scenarios and indicators | `northstar/research.py`, `northstar/return_estimates.py`, `northstar/decision_policy.py`, `northstar/indicators.py`, `northstar/universe.py` |
+| Research worker lifecycle and report orchestration | `northstar/research_worker.py` |
+| Financial, announcement, and company data | `northstar/fundamentals.py`, `northstar/announcements.py`, `northstar/company_data.py` |
+| Portfolio covariance, scenarios and decision summaries | `northstar/portfolio_risk.py`, `northstar/stock_summary.py` |
+| Multi-year financial/peer context | `northstar/financial_analysis.py` |
+| Private operational health | `northstar/system_status.py` |
+| Historical experiments and forward cohorts | `northstar/validation.py` |
+| Portfolio sizing, plans, imports, and ledger | `northstar/portfolio_fit.py`, `northstar/trade_plan.py`, `northstar/holdings_import.py`, `northstar/transactions.py` |
+| Dashboard summaries and shared state | `northstar/daily_board.py`, `northstar/advice_state.py`, `northstar/broker_costs.py` |
+| Persistent email delivery | `northstar/email_alerts.py` |
+| Ledger performance and dated input archive | `northstar/account_performance.py`, `northstar/research_archive.py` |
+| Public assets and HTML composition | `northstar/ui_assets.py`, `northstar/ui_templates.py`, `static/assets.json`, `web/templates/` |
 | Browser views and startup | `static/`, with `bootstrap.js` last |
 | Deployment and diagnostic helpers | `scripts/` |
 | Python and JavaScript regression checks | `tests/` |
@@ -62,7 +62,7 @@ its required credentials and variables are configured. A normal push to `main`
 can therefore affect the deployed application.
 
 Source deployment and rollback preserve server-side `data/`. Review the
-[deployment guide](../GITHUB-DEPLOY.md) before changing this pipeline. Installing
+[deployment guide](deployment/GITHUB-DEPLOY.md) before changing this pipeline. Installing
 services, changing firewall/DNS settings, and initial HTTPS setup are explicit
 host operations, not steps needed for local development.
 
@@ -147,7 +147,7 @@ a separate verification job reads the private API through its TLS virtual host a
 compares every published JS/style with the deployed manifest and verifies the public browser’s preflight/bearer CORS contract.
 `scripts/smoke_live_browser.py` then drives a read-only Chrome profile against the public
 Pages and API origins. The synthetic browser suite exercises its diagnostics for both
-startup and app failures. See [GitHub deployment](../GITHUB-DEPLOY.md) for the
+startup and app failures. See [GitHub deployment](deployment/GITHUB-DEPLOY.md) for the
 failure artifact and credential handling.
 
 ## Archive and account data boundaries

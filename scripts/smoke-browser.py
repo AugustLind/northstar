@@ -10,10 +10,10 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
 from browser_fixture import Fixture, seed_candidates, seed_today, session_timestamp
 from browser_client import Browser
 from smoke_live_browser import run as run_live_probe
-import release_info
+from northstar import release_info
 import app
-import advice_state
-import research
+from northstar import advice_state
+from northstar import research
 
 
 def press_enter(browser):

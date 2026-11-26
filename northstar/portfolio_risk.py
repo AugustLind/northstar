@@ -1,7 +1,7 @@
 """Current-weight historical risk and explicit hypothetical shocks; no forecasts."""
 import math
 import time
-import portfolio_fit as pf
+from northstar import portfolio_fit as pf
 
 
 def daily_prices(quote):

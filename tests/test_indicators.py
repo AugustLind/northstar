@@ -4,9 +4,9 @@ import time
 import unittest
 from unittest.mock import patch
 import app
-import indicators
-import research
-import universe
+from northstar import indicators
+from northstar import research
+from northstar import universe
 from test_research import quote
 
 

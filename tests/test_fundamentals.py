@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
 import app
-import fundamentals as f
-import research
+from northstar import fundamentals as f
+from northstar import research
 from test_research import quote
 
 NOW=dt.datetime(2026,10,27,tzinfo=dt.timezone.utc).timestamp()

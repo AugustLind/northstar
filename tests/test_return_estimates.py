@@ -2,7 +2,7 @@ import datetime as dt
 import unittest
 from unittest.mock import patch
 
-import return_estimates as estimates
+from northstar import return_estimates as estimates
 
 
 def market_quotes():

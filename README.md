@@ -1,17 +1,24 @@
 # Northstar
 
-A personal stock-research dashboard focused on Oslo-listed companies, with
-portfolio tracking, interactive charts, company-data summaries, and optional
-local AI briefings. It runs with Python's standard library and a browser.
+Northstar is a personal dashboard for researching Oslo-listed stocks, tracking a
+portfolio and its cash flows, and reviewing ranked buying candidates. It also
+supports historical strategy experiments and optional local AI briefings.
 
-Northstar does not connect to a broker or place orders. Rankings are experimental
-research signals, not validated forecasts or a substitute for your own review.
+## Inside Northstar
 
-## Quick start
+**Overview** shows how account value changes over time alongside recorded portfolio activity.
 
-Requirements: **Python 3.10+**, a browser, and internet access for market data.
-No pip installation, Node build step, paid AI API, or broker credentials are
-required for the local app.
+![Northstar Overview showing the account value chart](docs/screenshots/overview.png)
+
+**Candidates** shows ranked buying ideas with interactive price and volume charts.
+
+![Northstar Candidates showing a candlestick chart and ranked buying ideas](docs/screenshots/candidates.png)
+
+Both screenshots use synthetic data.
+
+## Run locally
+
+Use Python 3.10+ and a browser. Internet access is needed for fresh market data.
 
 ```bash
 git clone https://github.com/AugustLind/northstar.git
@@ -19,156 +26,12 @@ cd northstar
 python3 app.py
 ```
 
-Open **http://127.0.0.1:8000/recommendations**. Keep the Python process running;
-closing the browser does not stop its background workers. Stop the app with
-Ctrl+C. Only one instance should use this checkout's database/port at a time.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The first research refresh runs in
+the background. Portfolio records and cached data live in `data/portfolio.db`.
 
-The first research cycle runs in the background. Missing data or provider errors
-are shown rather than replaced with sample prices. The default research refresh
-interval is six hours and can be changed in the app. Provider availability is
-not guaranteed; offline operation depends on previously cached data.
+## Documentation
 
-## First visit
-
-Portfolio opens by default with current account value and Today’s performance.
-Open **Candidates** for up to five ranked buying ideas or **Overview → Needs attention**
-for items that need review. Research and Strategy lab are available under
-**Candidates → Research tools**. Open **Advanced tools** for other specialist
-workflows. Open Portfolio to add holdings or preview a Nordnet CSV import. A zero-share company is
-a watchlist entry. For actual account returns, verify cash and an opening snapshot
-in **Portfolio → Activity & cash**, then import later transactions and reconcile
-with your broker. Strategy lab keeps hypothetical experiments separate from your account.
-Overview opens its account value chart on the last seven Oslo reporting days.
-Drag to pan, scroll or pinch to zoom, and use **Fit history** for all loaded data.
-Select a holding or candidate to see its daily candles and volume. Gold circles
-mark dated broker buys where chart data is available. Candidates can preview
-available cash after fees without saving it to the ledger or applying a reserve floor.
-
-The shell keeps the Northstar account connection and current workspace visible; direct
-tool links and browser back/forward restore the matching section. Unsaved workspace form
-values are retained for this browser tab across reloads and cleared on sign-out; selected
-files must be chosen again after a reload.
-
-## What it does
-
-- Screens an editable universe of Oslo stocks using technical signals and
-  liquidity checks, with a top-20 view passing the shared entry policy.
-- Groups daily reviews, research, portfolio tools and strategy experiments into dedicated workspaces.
-- Draws interactive price, log-scale, volume, momentum, drawdown and volatility charts,
-  with period statistics and shared-date company comparisons.
-- Measures return horizons, ATR/ADX, trend consistency, volume and historical tail risk
-  alongside the existing technical entry rules.
-- Shows available annual financial data, company metadata, and issuer notices
-  with coverage and freshness information.
-- Tracks manually entered holdings, cash, review notes, and transaction records,
-  with previewed CSV imports and hypothetical allocation/share-count plans.
-- Measures ledger-derived account P&L and cash-flow-adjusted return estimates, with
-  explicit coverage, fee, dividend, split and FX treatment.
-- Preserves append-only dated research inputs and supports read-only recorded-input replay.
-- Adds portfolio risk attribution, correlations and hypothetical equity/FX shocks,
-  multi-year financial charts, same-sector comparisons and a current stock decision summary.
-- Shows private service/data health and email acceptance history, with chart preferences
-  and CSV/SVG exports.
-- Shows experimental three-month historical return ranges for current top-ranked and
-  held Oslo stocks, with the sample and walk-forward evidence in Explore. These ranges
-  do not change rankings or trade plans.
-- Supports chronological holdout, parameter/cost sensitivity, configurable experiment
-  sale fees, and forward paper cohorts with explicit
-  missing-data and methodology limitations.
-- Optionally generates briefings through a locally running Ollama model.
-- Emails confirmed share-plan changes through privately configured SMTP, with
-  retries, duplicate suppression, and dashboard pause/test controls.
-
-Read the [technical reference](docs/REFERENCE.md) for scoring rules, data
-sources, import behavior, fee assumptions, historical methodology, and feature
-limitations. Those details have been preserved outside this introduction.
-
-## Your data
-
-Portfolio records, cached market data, settings, and reports are stored in
-**`data/portfolio.db`**, which Git ignores. A fresh checkout creates its own
-local database. Stop the app before copying the database to a private backup;
-keep backups and portfolio exports outside tracked source.
-
-The local application binds to `127.0.0.1:8000`. Remote hosting and authentication
-require separate setup. The GitHub Pages dashboard is a static UI connected to
-an authenticated API; Pages alone cannot run Python, research workers, or Ollama.
-Select **Remember this browser** on a trusted browser to stay signed in after restarting it.
-The browser stores a revocable session token. The access key stays out of persistent storage.
-Remembered sessions have no scheduled expiry. Clearing browser storage or choosing **Sign out**
-requires signing in again.
-
-Do not put access keys or portfolio data in `static/config.js`.
-
-## Optional setup
-
-| Goal | Instructions |
-|---|---|
-| Explain signals and review data limitations | [Technical reference](docs/REFERENCE.md) |
-| Read the mathematical models | [Short guide](docs/MATHEMATICS.md) · [LaTeX paper (PDF)](docs/strategy-mathematics.pdf) · [LaTeX source](docs/strategy-mathematics.tex) |
-| Configure server-side email alerts | [Email setup](#email-alerts) |
-| Enable local AI or a Linux user service | [Local services](docs/LOCAL-SERVICES.md) |
-| Run on an Oracle Ubuntu server, with private SSH access | [Oracle deployment](DEPLOY.md) |
-| Deploy the API and GitHub Pages UI automatically | [GitHub deployment](GITHUB-DEPLOY.md) |
-| Back up or recover private data and a failed release | [Recovery guide](docs/RECOVERY.md) |
-| Understand modules, checks, and contribution workflow | [Development guide](docs/DEVELOPMENT.md) |
-
-Ollama is optional and installed separately. If it is unavailable, deterministic
-research still works. Remote market-data providers remain external services even
-when model inference is local. No server address or credential is required just
-to try the local application.
-
-## Email alerts
-
-After deploying the updated code, run this from the checkout in your Oracle SSH
-terminal:
-
-```bash
-python3 scripts/setup-email.py
-```
-
-The helper prompts privately for SMTP settings, installs the server configuration
-and restarts Northstar. Open **Daily overview → Email alerts → Send test email**
-after setup. Keep passwords out of source files, GitHub and chat. Email works
-without an open browser. Emails include confirmed share-plan changes, recent issuer
-and annual financial reviews, and significant historical or designated long-term
-holding risks. Risk emails include the configured warning level, relevant source
-freshness and supporting analysis. Unchanged conditions are deduplicated; test emails
-work independently of research and plan generation.
-See the [email reference](docs/REFERENCE.md#email-alerts) for delivery behavior,
-manual settings, and limitations.
-
-## Checks
-
-The app has no third-party Python runtime dependencies. Node.js is needed only
-for JavaScript checks, and Bash for deployment-script checks:
-
-```bash
-python3 -m unittest discover -s tests -v
-node tests/test_charts.js
-node tests/test_ui.js
-python3 scripts/build-ui.py --check
-for file in static/*.js; do node --check "$file"; done
-for file in scripts/*.sh; do bash -n "$file"; done
-```
-
-Run `python3 scripts/smoke-browser.py` for an authenticated desktop/mobile workflow
-using an isolated synthetic account (requires Chrome). It does not run an experiment
-on your live account.
-
-Tests use synthetic data, temporary databases, and mocked providers. Passing
-checks do not establish live provider availability, deployment success, or
-investment performance.
-
-For contribution and review expectations, see [Contributing](CONTRIBUTING.md).
-
-## Status and limitations
-
-This is a personal research application. Historical analysis has limitations
-including today's stock universe, missing delisted securities, revised data,
-and incomplete coverage. Computed scores are not probabilities of profit.
-Review provider dates, assumptions, costs, and missing-data states before using
-any result. AI output is separate from computed signals and can be wrong.
-
-No project license is currently specified in this repository. Third-party data,
-models, and services have their own terms.
+[Technical reference](docs/REFERENCE.md) · [Strategy mathematics](docs/MATHEMATICS.md) ·
+[Local services](docs/LOCAL-SERVICES.md) · [Deployment](docs/deployment/GITHUB-DEPLOY.md) ·
+[Recovery](docs/RECOVERY.md) · [Development and checks](docs/DEVELOPMENT.md) ·
+[Contributing](CONTRIBUTING.md)

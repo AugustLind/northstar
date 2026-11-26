@@ -13,8 +13,8 @@ from email.message import EmailMessage
 from email.utils import formatdate
 from zoneinfo import ZoneInfo
 
-import decision_policy as policy
-import trade_plan
+from northstar import decision_policy as policy
+from northstar import trade_plan
 
 TIMEOUT = 20
 LEASE_SECONDS = 600

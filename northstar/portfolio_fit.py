@@ -2,9 +2,9 @@
 import math
 import re
 import time
-import company_data
-import decision_policy as policy
-from broker_costs import BUY_FEE_NOK
+from northstar import company_data
+from northstar import decision_policy as policy
+from northstar.broker_costs import BUY_FEE_NOK
 
 SECTORS = ['Energy', 'Materials', 'Industrials', 'Consumer discretionary', 'Consumer staples',
            'Health care', 'Financials', 'Information technology', 'Communication services',

@@ -1,7 +1,7 @@
 # Recovering Northstar
 
 Use this guide on the server that owns the private database. For normal releases,
-use [GitHub deployment](../GITHUB-DEPLOY.md). Never copy private data into Git or Pages.
+use [GitHub deployment](deployment/GITHUB-DEPLOY.md). Never copy private data into Git or Pages.
 
 ## Preserve data before changing anything
 

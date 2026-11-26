@@ -210,12 +210,12 @@ class HostingTests(unittest.TestCase):
             def __init__(self,**kwargs):self.target=kwargs['target']
             def start(self):self.target()
         headers={'Authorization':'Bearer test-key','Content-Type':'application/json'}
-        with patch('app.threading.Thread',ImmediateThread),patch('validation.evaluate',return_value={'generated':123,'curve':[]}):
+        with patch('app.threading.Thread',ImmediateThread),patch('northstar.validation.evaluate',return_value={'generated':123,'curve':[]}):
             response=self.request('POST','/api/validation',headers,{'initial_capital':100000,'robustness':False})
         self.assertTrue(response['body']['queued'])
         self.assertEqual(app.read_meta('validation_report')['generated'],123)
         self.assertFalse(app.read_meta('validation_progress')['running'])
-        with patch('app.threading.Thread',ImmediateThread),patch('validation.evaluate',side_effect=ValueError('Not enough history')):
+        with patch('app.threading.Thread',ImmediateThread),patch('northstar.validation.evaluate',side_effect=ValueError('Not enough history')):
             self.request('POST','/api/validation',headers,{'initial_capital':100000,'robustness':False})
         self.assertEqual(app.read_meta('validation_report')['generated'],123)
         self.assertEqual(app.read_meta('validation_progress')['error'],'Not enough history')
@@ -230,8 +230,10 @@ class HostingTests(unittest.TestCase):
             staged=Path(tmp)
             (staged/'scripts').mkdir();(staged/'static').mkdir();(staged/'data').mkdir()
             shutil.copy2(root/'scripts/build-pages.py',staged/'scripts/build-pages.py')
-            shutil.copy2(root/'ui_assets.py',staged/'ui_assets.py')
-            import ui_assets
+            (staged/'northstar').mkdir()
+            for name in ('__init__.py', 'ui_assets.py'):
+                shutil.copy2(root/'northstar'/name, staged/'northstar'/name)
+            from northstar import ui_assets
             for name in ui_assets.public_files(root):
                 shutil.copy2(root/'static'/name,staged/'static'/name)
             (staged/'data/private.db').write_text('private portfolio')

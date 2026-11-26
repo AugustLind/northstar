@@ -1,11 +1,11 @@
 import copy
 import unittest
 from unittest.mock import patch
-import company_data as cd
-import advice_state as ads
-import daily_board as daily
-import portfolio_fit as pf
-import trade_plan as tp
+from northstar import company_data as cd
+from northstar import advice_state as ads
+from northstar import daily_board as daily
+from northstar import portfolio_fit as pf
+from northstar import trade_plan as tp
 from test_trade_plan import NOW,profile,snapshot,card
 
 class CompanyTests(unittest.TestCase):
@@ -45,10 +45,10 @@ class CompanyTests(unittest.TestCase):
     def test_peer_comparison_requires_three_same_year_companies(self):
         f={'status':'available','metrics':{'annual_pe_proxy':{'value':10,'period':'2025-12-31'}}}
         records={s:{} for s in ('B.OL','C.OL','D.OL')};sectors={s:'Energy' for s in ('A.OL','B.OL','C.OL','D.OL')}
-        with patch('fundamentals.analyse',return_value=f):
+        with patch('northstar.fundamentals.analyse',return_value=f):
             result=cd.peer_valuation('A.OL',f,records,{},sectors,NOW)
         self.assertEqual(result['median_annual_pe_proxy'],10)
-        with patch('fundamentals.analyse',return_value={**f,'metrics':{'annual_pe_proxy':{'value':10,'period':'2024-12-31'}}}):
+        with patch('northstar.fundamentals.analyse',return_value={**f,'metrics':{'annual_pe_proxy':{'value':10,'period':'2024-12-31'}}}):
             self.assertIsNone(cd.peer_valuation('A.OL',f,records,{},sectors,NOW)['median_annual_pe_proxy'])
 
 class AdviceTests(unittest.TestCase):

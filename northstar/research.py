@@ -7,15 +7,15 @@ import json
 import math
 import threading
 import re
-import indicators
-import decision_policy as policy
-import fundamentals
-import portfolio_fit
-import trade_plan
-import company_data
-import announcements
-import universe as oslo_universe
-import return_estimates
+from northstar import indicators
+from northstar import decision_policy as policy
+from northstar import fundamentals
+from northstar import portfolio_fit
+from northstar import trade_plan
+from northstar import company_data
+from northstar import announcements
+from northstar import universe as oslo_universe
+from northstar import return_estimates
 import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError

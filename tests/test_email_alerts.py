@@ -10,8 +10,8 @@ from zoneinfo import ZoneInfo
 from unittest.mock import Mock, patch
 
 import app
-import decision_policy
-import email_alerts as mail
+from northstar import decision_policy
+from northstar import email_alerts as mail
 from test_trade_plan import NOW, card
 
 
@@ -139,8 +139,8 @@ class ConfigurationTests(unittest.TestCase):
         for mode in ('starttls', 'ssl'):
             config = mail.configuration(environment(NORTHSTAR_SMTP_SECURITY=mode))
             client = Mock();client.send_message.return_value = {}
-            with patch('email_alerts.smtplib.SMTP', return_value=client) as smtp, \
-                 patch('email_alerts.smtplib.SMTP_SSL', return_value=client) as smtp_ssl:
+            with patch('northstar.email_alerts.smtplib.SMTP', return_value=client) as smtp, \
+                 patch('northstar.email_alerts.smtplib.SMTP_SSL', return_value=client) as smtp_ssl:
                 mail.deliver(config, Mock())
             methods = [call[0] for call in client.mock_calls]
             self.assertLess(methods.index('login'), methods.index('send_message'))
@@ -156,7 +156,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_failed_quit_after_acceptance_does_not_cause_retry(self):
         client = Mock();client.send_message.return_value = {};client.quit.side_effect = OSError('quit failed')
-        with patch('email_alerts.smtplib.SMTP', return_value=client):
+        with patch('northstar.email_alerts.smtplib.SMTP', return_value=client):
             mail.deliver(mail.configuration(environment()), Mock())
         client.close.assert_called_once()
 
@@ -172,7 +172,7 @@ class DeliveryTests(unittest.TestCase):
         self.plan = {'buys': [{'symbol': 'B.OL', 'buy_shares': 9, 'price': 100, 'quote_asof': NOW,
                               'reason': 'Meets entry policy and portfolio limits.'}], 'holdings': []}
         self.worker = self.new_worker()
-        self.delivery = patch('email_alerts.deliver');self.send = self.delivery.start()
+        self.delivery = patch('northstar.email_alerts.deliver');self.send = self.delivery.start()
 
     def tearDown(self):
         self.delivery.stop();self.db.stop();self.temp.cleanup()
