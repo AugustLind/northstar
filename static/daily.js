@@ -4,6 +4,14 @@ let dailyView = null,
   dailyLoad = null,
   overviewAccountRequest = 0,
   overviewAccountLoaded = false;
+function renderOverviewChange(selector, amount, percentage = null) {
+  const metric = $(selector);
+  metric.textContent = amount == null
+    ? 'Unavailable'
+    : money(amount) + (percentage == null ? '' : ' · ' + percentage.toFixed(2) + '%');
+  metric.classList.toggle('positive', amount > 0);
+  metric.classList.toggle('negative', amount < 0);
+}
 async function loadOverviewAccount(refreshErrors = []) {
   const token = ++overviewAccountRequest;
   if (!overviewAccountLoaded)
@@ -25,17 +33,14 @@ async function loadOverviewAccount(refreshErrors = []) {
         ? ' · provider prices as of ' + new Date(value.current_asof * 1000).toLocaleString()
         : '');
     const session = value.today || {};
-    $('#overviewMove').textContent = session.change_nok == null
-      ? 'Unavailable'
-      : money(session.change_nok) +
-        (session.change_pct == null ? '' : ' · ' + session.change_pct.toFixed(2) + '%');
+    renderOverviewChange('#overviewMove', session.change_nok, session.change_pct);
     $('#overviewMoveMeta').textContent = [
       session.date && (session.live ? 'Session ' : 'Last completed session ') + session.date,
       session.change_nok == null ? 'Requires reconciled holdings, cash and session prices' : 'External cash flows excluded',
     ].filter(Boolean).join(' · ');
     const verified =
       ['available', 'estimated'].includes(value.status) && value.investment_pnl_nok != null;
-    $('#overviewPnl').textContent = verified ? money(value.investment_pnl_nok) : 'Unavailable';
+    renderOverviewChange('#overviewPnl', verified ? value.investment_pnl_nok : null);
     $('#overviewPnlMeta').textContent = verified
       ? value.from + ' to ' + value.to + ' · ledger-derived investment P&L'
       : 'Requires reconciled ledger, comparable valuations and verified opening history.';
@@ -51,8 +56,8 @@ async function loadOverviewAccount(refreshErrors = []) {
       if (!overviewAccountLoaded) clearWorkspaceChart($('#overviewChart'), 'Account value history unavailable.');
       showPortfolioRefreshFailure(error, refreshErrors);
       $('#overviewValue').textContent = 'Unavailable';
-      $('#overviewMove').textContent = 'Unavailable';
-      $('#overviewPnl').textContent = 'Unavailable';
+      renderOverviewChange('#overviewMove', null);
+      renderOverviewChange('#overviewPnl', null);
       $('#overviewAccountStatus').textContent = [error.message, ...refreshErrors].join(' ');
     }
   }
