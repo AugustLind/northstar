@@ -4,10 +4,13 @@ import json
 import sys
 from tempfile import TemporaryDirectory
 import time
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
 from browser_fixture import Fixture, seed_candidates, seed_today, session_timestamp
 from browser_client import Browser
+from smoke_live_browser import run as run_live_probe
+import release_info
 import app
 import advice_state
 import research
@@ -305,7 +308,43 @@ def prove_portfolio_and_candidates():
           'and Candidates navigation, ranking, and funded switch states passed.')
 
 
+def prove_live_probe_evidence():
+    def probe(fixture, succeeded, stage):
+        evidence = {'source_fingerprint': release_info.fingerprint(), 'timings': []}
+        if run_live_probe(fixture.origin + '/', fixture.origin, fixture.key, evidence, wait_seconds=5) != succeeded:
+            raise RuntimeError('Unexpected result for the production probe: ' + json.dumps(evidence))
+        if evidence['stage'] != stage:
+            raise RuntimeError('Unexpected failure stage for the production probe: ' + json.dumps(evidence))
+        encoded = json.dumps(evidence)
+        if any(private in encoded for private in (fixture.key, 'SYNTH.OL', 'private-diagnostic-marker')):
+            raise RuntimeError('Production probe evidence contained private fixture data.')
+        return evidence
+
+    with Fixture() as fixture, TemporaryDirectory() as directory:
+        success = probe(fixture, True, 'complete')
+        if not any(r['path'] == '/api/state' and r['status'] == 401 for r in success['requests']):
+            raise RuntimeError('Production probe omitted anonymous denial evidence.')
+
+        # Simulate a server response that cannot render holding advice.
+        with patch.object(app, 'daily_view', return_value={'error': 'private-diagnostic-marker'}):
+            failure = probe(fixture, False, 'holding advice')
+        if failure['readiness']['advice'] != 'reviews pending or failed':
+            raise RuntimeError('Production probe omitted the app failure state.')
+
+        chrome = Path(directory) / 'chrome'
+        chrome.write_text('#!/bin/sh\nprintf "No usable sandbox private-diagnostic-marker\\n" >&2\nexit 42\n')
+        chrome.chmod(0o700)
+        with patch('browser_client.shutil.which', return_value=str(chrome)):
+            failure = probe(fixture, False, 'browser startup')
+        if failure['browser_startup'] != ['No usable sandbox'] or failure['chrome_exit_code'] != 42:
+            raise RuntimeError('Production probe omitted Chrome startup evidence.')
+        if any(method == 'POST' for method, _, _ in fixture.requests):
+            raise RuntimeError('The production probe sent a write to the synthetic service.')
+    print('Production probe passed on synthetic data and distinguished Chrome startup from app failure.')
+
+
 def run():
+    prove_live_probe_evidence()
     with Fixture() as fixture:
         check_remembered_browser(fixture)
     prove_portfolio_and_candidates()

@@ -85,8 +85,8 @@ Open **Daily overview → Email alerts**, enable delivery if paused, and select 
 
 ## Authenticated release verification
 
-No additional access-key secret is required in GitHub. The private server key stays
-in `~/.config/northstar/access-key` on Oracle. The rollback gate runs
+No additional access-key secret is required in GitHub. Oracle stores the private
+server key in `~/.config/northstar/access-key`. The rollback gate runs
 `python3 scripts/smoke-deployment.py --attempts 3` locally after health succeeds.
 A missing/invalid key or failed private contract/source check fails closed and
 restores the previous source. The checker prints operation labels, never the key
@@ -99,8 +99,21 @@ the instance's own public IP. The configured origin is obtained from the trusted
 local process before any remote-origin check can use the key. Credentialed redirects
 and proxy environment variables are disabled for these private checks.
 
-The Chrome sign-in/portfolio/research/experiment/sign-out flow runs in CI against a
-temporary synthetic account using the real code. This exercises write-heavy flows
-without replacing your production experiment or mutating your actual portfolio.
-The default public `/api/health` stays a boolean and is not sufficient evidence of
-an authenticated deployment by itself.
+After those checks pass, Chrome opens public Pages from the Actions runner and
+uses the public API. The existing access key passes directly from Oracle over
+verified SSH to the probe's standard input. Chrome uses a disposable profile and
+allows reads and preflights to the verified Pages and API origins. It verifies
+anonymous denial, release identity, Portfolio performance and holding advice,
+and navigation to Candidates and back.
+
+On verification failure, download the `production-verification-<run>-<attempt>`
+artifact from the workflow run. It includes the failed browser assertion, stage
+timings, sanitized startup and console diagnostics, request paths and statuses,
+and the visible readiness and freshness states. If Oracle is reachable and the
+journal is readable, it also includes timestamped service access entries from
+the run window. The artifact expires after seven days.
+
+CI runs the synthetic Chrome workflow for exact financial values, deterministic
+branches and write-heavy features. It also checks that a simulated Chrome startup
+failure and a broken app response produce distinguishable evidence. The public
+`/api/health` endpoint exposes only a boolean.

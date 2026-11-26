@@ -144,8 +144,11 @@ printed, not portfolios, keys, addresses or response bodies.
 
 The source-deploy rollback gate includes authenticated local checks. After Pages,
 a separate verification job reads the private API through its TLS virtual host and
-compares every published JS/style with the deployed manifest and verifies the public browser’s preflight/bearer CORS contract. Actual experiments
-run only in the isolated browser fixture, not in the production smoke step.
+compares every published JS/style with the deployed manifest and verifies the public browser’s preflight/bearer CORS contract.
+`scripts/smoke_live_browser.py` then drives a read-only Chrome profile against the public
+Pages and API origins. The synthetic browser suite exercises its diagnostics for both
+startup and app failures. See [GitHub deployment](../GITHUB-DEPLOY.md) for the
+failure artifact and credential handling.
 
 ## Archive and account data boundaries
 
