@@ -55,6 +55,30 @@ class AccountPerformanceTests(unittest.TestCase):
         self.assertEqual(today['change_nok'], 10)
         self.assertEqual(today['coverage'], [])
 
+    def test_oslo_closing_auction_quote_fills_pending_daily_bar(self):
+        prices = quote([(date, 10) for date in ('2026-11-19', '2026-11-20', '2026-11-23', '2026-11-24')]
+                       + [('2026-11-25', 11)])
+        prices.update(price=12, asof=stamp('2026-11-25T15:25:14'),
+                      fetched=stamp('2026-11-25T15:26'),
+                      regular_session_end=stamp('2026-11-25T15:30'))
+        snapshot, baseline = setup([], prices)
+        now = stamp('2026-11-26T03:00')
+
+        value = ap.view(snapshot, baseline, [], now)
+        self.assertEqual(value['today']['coverage'], [])
+        self.assertEqual(value['today']['change_nok'], 20)
+        self.assertEqual(value['last_7_days']['coverage'], [])
+        self.assertEqual(value['last_7_days']['change_nok'], 20)
+
+        prices['asof'] = stamp('2026-11-25T15:19')
+        today = ap.view(snapshot, baseline, [], now)['today']
+        self.assertIsNone(today['change_nok'])
+        self.assertIn('A.OL: missing close on 2026-11-25.', today['coverage'])
+
+        prices.update(asof=stamp('2026-11-25T15:25:14'), fetched=stamp('2026-11-25T15:31'))
+        today = ap.view(snapshot, baseline, [], now)['today']
+        self.assertEqual(today['change_nok'], 10)
+
     def test_previous_oslo_session_skips_easter_closures(self):
         self.assertEqual(ap.previous_oslo_session(dt.date(2026, 4, 7)), dt.date(2026, 4, 1))
 

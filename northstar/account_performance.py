@@ -216,6 +216,13 @@ def portfolio_performance(snapshot, baseline, events, now):
                         stamp, value = bar.get('time'), bar.get('account_close')
                         if finite(stamp) and stamp <= observed and quote_day(stamp) == source_date and finite(value) and value > 0:
                             return value
+                if currency == 'NOK' and symbol.endswith('.OL'):
+                    # Oslo's closing auction sets the price before trading-at-last ends at 16:30.
+                    auction = dt.datetime.combine(source_date, dt.time(16, 25), OSLO).timestamp()
+                    stamp, value = quote.get('asof'), quote.get('price')
+                    if (finite(observed) and finite(stamp) and auction <= stamp <= observed <= now
+                        and quote_day(stamp) == source_date and finite(value) and value > 0):
+                        return value
         if coverage is not None:
             coverage.append(f'{symbol}: missing {"session quote" if latest else "close"} on {source_date}.')
         return None
