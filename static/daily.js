@@ -401,6 +401,11 @@ function renderBuyCandidates(v) {
     recovery.dataset.action = warnings.length ? 'portfolio' : 'research';
     recovery.hidden = false;
   }
+  if (!v.buy_candidates_stale && !candidates.length && v.buy_candidate_watch) {
+    const { symbol, reason } = v.buy_candidate_watch;
+    status.textContent += ' Highest-scoring evaluated option: ' + symbol +
+      '. Does not qualify: ' + reason;
+  }
   if (v.buy_candidates_stale || !candidates.length) selectedCandidate = '';
   if (previousFocus) {
     [...list.querySelectorAll('button')].find(button => button.dataset.candidateStock === previousFocus)?.focus();

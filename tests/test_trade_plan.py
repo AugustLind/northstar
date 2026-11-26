@@ -26,6 +26,26 @@ class TradePlanTests(unittest.TestCase):
     def plan(self,s=None,cards=None,p=None):
         return tp.build(s or snapshot(),{'generated':NOW,'policy_version':tp.policy.VERSION,'cards':cards if cards is not None else [card()]},p or profile(),NOW)
 
+    def test_candidate_preview_explains_best_evaluated_option_when_no_buy_qualifies(self):
+        account = {**snapshot(), 'portfolio_preferences': profile(max_buy_fee_pct=5)}
+        report = {'generated': NOW, 'policy_version': tp.policy.VERSION,
+                  'cards': [card(), {**card('C.OL', 2), 'rank_eligible': False}],
+                  'coverage': {'unavailable': 1}}
+        review = self.plan(account, report['cards'], account['portfolio_preferences'])
+        preview = tp.candidate_plan(account, report, cash=1000, review_plan=review)
+        self.assertEqual(preview['buy_candidates'], [])
+        self.assertEqual(preview['buy_candidate_watch']['symbol'], 'B.OL')
+        self.assertIn('purchase-fee limit', preview['buy_candidate_watch']['reason'])
+
+        report['cards'] = [{**card(), 'rank_eligible': False, 'action': 'Wait / watch',
+                            'reasons': ['The trend screen is not met.']}]
+        preview = tp.candidate_plan(account, report, cash=1000, review_plan=review)
+        self.assertEqual(preview['buy_candidate_watch']['reason'], 'The trend screen is not met.')
+
+        report['generated'] -= 2 * 86400
+        preview = tp.candidate_plan(account, report, cash=1000, review_plan=review)
+        self.assertIsNone(preview['buy_candidate_watch'])
+
     def test_explicit_whole_shares_one_fixed_fee_and_shared_budget(self):
         v=self.plan(cards=[card(),card('C.OL',2)])
         self.assertEqual(len(v['buys']),1)
