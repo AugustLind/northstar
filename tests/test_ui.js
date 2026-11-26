@@ -172,8 +172,21 @@ setImmediate(async()=>{
  nodes['#daily'].hidden=true;
  nodes['#portfolio'].hidden=true;
  const beforeCandidates=requests.length;
- await vm.runInContext('loadDaily()',context);
- assert(requests.slice(beforeCandidates).some(r=>r.path.endsWith('/api/daily')));
+ const previousFetch=context.fetch;
+ let releaseDaily;
+ context.fetch=(path,options)=>{
+  requests.push({path,options});
+  if(path.endsWith('/api/daily'))
+   return new Promise(resolve=>{releaseDaily=()=>resolve({ok:true,json:async()=>dailyFixture});});
+  return previousFetch(path,options);
+ };
+ const firstDaily=vm.runInContext('loadDaily()',context);
+ const secondDaily=vm.runInContext('loadDaily()',context);
+ await Promise.resolve();
+ assert.strictEqual(requests.slice(beforeCandidates).filter(r=>r.path.endsWith('/api/daily')).length,1);
+ releaseDaily();
+ await Promise.all([firstDaily,secondDaily]);
+ context.fetch=previousFetch;
  assert(!requests.slice(beforeCandidates).some(r=>r.path.includes('/api/account-performance')));
  nodes['#portfolio'].hidden=false;
  assert(nodes['#dailyTop'].innerHTML.includes('Review &lt;untrusted&gt;'));

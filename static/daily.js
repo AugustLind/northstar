@@ -1,6 +1,6 @@
 /* Notification permission is requested only by the user's explicit button click. */
 let dailyView = null,
-  dailyRequest = 0,
+  dailyLoad = null,
   overviewAccountRequest = 0,
   overviewAccountLoaded = false;
 async function loadOverviewAccount(refreshErrors = []) {
@@ -440,14 +440,13 @@ function renderFundedSwitch(comparison) {
       .join('') +
     '</tbody></table>';
 }
-async function loadDaily() {
-  const token = ++dailyRequest;
+function loadDaily() {
+  if (dailyLoad) return dailyLoad;
   if (!$('#daily').hidden || !$('#portfolio').hidden) loadOverviewAccount();
-  try {
-    const v = await api('daily');
-    if (token === dailyRequest) renderDaily(v);
-  } catch (e) {
-    if (token === dailyRequest) {
+  const request = (async () => {
+    try {
+      renderDaily(await api('daily'));
+    } catch (e) {
       if (typeof updateHoldingAdvice === 'function') updateHoldingAdvice([]);
       $('#dailyStatus').textContent = 'Reviews unavailable: ' + e.message;
       $('#dailyTop').textContent =
@@ -462,7 +461,12 @@ async function loadDaily() {
       $('#buyCandidatesRecovery').dataset.action = 'retry';
       $('#buyCandidatesRecovery').hidden = false;
     }
-  }
+  })();
+  const pendingLoad = request.finally(() => {
+    dailyLoad = null;
+  });
+  dailyLoad = pendingLoad;
+  return pendingLoad;
 }
 $('#refreshDaily').onclick = loadDaily;
 async function refreshAccountMarketData(button, status, showFailure) {
