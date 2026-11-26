@@ -120,7 +120,7 @@ def prove_funded_switch(browser, report):
                    (json.dumps({**original_quote, 'price': 100, 'asof': now}), 'SYNTH.OL'))
 
     settings = {**prefs, 'purchase_nok': 120, 'buy_fee_nok': 2, 'sell_fee_nok': 5,
-                'max_buy_fee_pct': 5, 'max_stock_pct': 90, 'max_sector_pct': 100, 'reserve_pct': 76}
+                'max_buy_fee_pct': 5, 'max_stock_pct': 90, 'max_sector_pct': 100, 'reserve_pct': 0}
     app.write_meta('portfolio_preferences', settings)
     browser.evaluate("document.querySelector('#candidateCash').value=17; document.querySelector('#candidateCashForm').requestSubmit()")
     browser.wait("""(() => {
@@ -144,6 +144,7 @@ def prove_funded_switch(browser, report):
     if app.read_meta('portfolio_preferences')['cash_nok'] != prefs['cash_nok']:
         raise RuntimeError('Preview modified recorded cash.')
     for changes, label, reason in (
+        ({'reserve_pct': 98}, 'No switch qualifies', ''),
         ({'sell_fee_nok': None}, 'Comparison unavailable', 'Enter a sell-fee assumption'),
         ({'sell_fee_nok': 100}, 'No switch qualifies', ''),
         ({'sectors': {'SYNTH.OL': 'Industrials'}}, 'Comparison unavailable', 'Classify this stock'),

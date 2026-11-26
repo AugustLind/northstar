@@ -79,6 +79,40 @@ class AccountPerformanceTests(unittest.TestCase):
         today = ap.view(snapshot, baseline, [], now)['today']
         self.assertEqual(today['change_nok'], 10)
 
+    def test_full_history_uses_auction_then_prefers_published_close(self):
+        prices = quote([('2025-01-01', 10), ('2025-01-02', 11)])
+        prices.update(price=12, asof=stamp('2025-01-03T15:25:14'),
+                      fetched=stamp('2025-01-03T15:26'))
+        snapshot, baseline = setup([], prices)
+
+        same_day = ap.view(snapshot, baseline, [], stamp('2025-01-03T16:00'))
+        self.assertEqual(same_day['to'], '2025-01-02')
+        now = stamp('2025-01-06T06:00')
+        pending = ap.view(snapshot, baseline, [], now)
+        self.assertEqual(pending['to'], '2025-01-03')
+        self.assertEqual(pending['ending_value_nok'], 220)
+        self.assertEqual(pending['today']['ending_nok'], 220)
+
+        prices['history'].extend(quote([('2025-01-03', 13)])['history'])
+        prices.update(asof=stamp('2025-01-03T15:20'), fetched=stamp('2025-01-03T15:21'))
+        before_auction = ap.view(snapshot, baseline, [], now)
+        self.assertEqual(before_auction['to'], '2025-01-02')
+        self.assertIsNone(before_auction['today']['ending_nok'])
+
+        prices.update(asof=stamp('2025-01-03T15:25:14'), fetched=stamp('2025-01-03T15:26'))
+        provisional = ap.view(snapshot, baseline, [], now)
+        self.assertEqual(provisional['ending_value_nok'], 220)
+        self.assertEqual(provisional['today']['ending_nok'], 220)
+
+        prices['fetched'] = stamp('2025-01-03T16:00')
+        published = ap.view(snapshot, baseline, [], now)
+        self.assertEqual(published['ending_value_nok'], 230)
+        self.assertEqual(published['today']['ending_nok'], 230)
+
+        same_session = ap.view(snapshot, baseline, [], stamp('2025-01-03T16:05'))
+        self.assertEqual(same_session['today']['ending_nok'], 230)
+        self.assertEqual(same_session['to'], '2025-01-02')
+
     def test_previous_oslo_session_skips_easter_closures(self):
         self.assertEqual(ap.previous_oslo_session(dt.date(2026, 4, 7)), dt.date(2026, 4, 1))
 

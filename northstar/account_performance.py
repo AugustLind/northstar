@@ -157,6 +157,47 @@ def previous_oslo_session(date):
     return date
 
 
+def oslo_auction_close(symbol, quote, now):
+    """Return the reporting date and price set by a completed Oslo auction."""
+    if not symbol.endswith('.OL') or quote.get('currency') != 'NOK':
+        return None
+    stamp, price = quote.get('asof'), quote.get('price')
+    observed = quote.get('fetched', stamp)
+    if not (finite(stamp) and finite(observed) and stamp <= observed <= now
+            and finite(price) and price > 0):
+        return None
+    local = dt.datetime.fromtimestamp(stamp, OSLO)
+    # The auction sets the close before trading-at-last ends at 16:30.
+    if local.time() >= dt.time(16, 25) and oslo_session(local.date()):
+        return local.date(), price
+    return None
+
+
+def completed_session_close(symbol, quote, source_date, now):
+    """Prefer a published daily bar over eligible closing-auction evidence."""
+    if symbol == 'NOK=X':
+        close = dt.datetime.combine(source_date + dt.timedelta(days=1), dt.time.min, OSLO).timestamp()
+    else:
+        close = quote.get('regular_session_end')
+        if not finite(close) or dt.datetime.fromtimestamp(close, OSLO).date() != source_date:
+            zone, closing = (NEW_YORK, dt.time(16)) if quote.get('currency') == 'USD' else (OSLO, dt.time(16, 30))
+            close = dt.datetime.combine(source_date, closing, zone).timestamp()
+    observed = quote.get('fetched', quote.get('asof'))
+    if finite(observed) and close <= observed <= now:
+        for bar in reversed(quote.get('history', [])):
+            stamp, value = bar.get('time'), bar.get('account_close')
+            if (finite(stamp) and stamp <= observed
+                and dt.datetime.fromtimestamp(stamp, OSLO).date() == source_date
+                and finite(value) and value > 0):
+                return value
+    auction = oslo_auction_close(symbol, quote, now)
+    if auction:
+        auction_date, closing_price = auction
+        if auction_date == source_date:
+            return closing_price
+    return None
+
+
 def portfolio_performance(snapshot, baseline, events, now):
     """Measure Today and the calendar week on the same ledger and price basis."""
     local_now = dt.datetime.fromtimestamp(now, OSLO)
@@ -199,30 +240,13 @@ def portfolio_performance(snapshot, baseline, events, now):
         quote = quotes.get(symbol, {})
         source_date = report_date if oslo_session(report_date) else previous_oslo_session(report_date)
         if quote.get('currency') == currency:
-            if latest:
-                if session_quote(quote, symbol):
-                    return quote['price']
-            elif quote.get('account_history_version') == 1:
-                if symbol == 'NOK=X':
-                    close = dt.datetime.combine(source_date + dt.timedelta(days=1), dt.time.min, OSLO).timestamp()
-                else:
-                    close = quote.get('regular_session_end')
-                    if not finite(close) or quote_day(close) != source_date:
-                        zone, closing = (NEW_YORK, dt.time(16)) if currency == 'USD' else (OSLO, dt.time(16, 30))
-                        close = dt.datetime.combine(source_date, closing, zone).timestamp()
-                observed = quote.get('fetched', quote.get('asof'))
-                if finite(observed) and close <= observed <= now:
-                    for bar in reversed(quote.get('history', [])):
-                        stamp, value = bar.get('time'), bar.get('account_close')
-                        if finite(stamp) and stamp <= observed and quote_day(stamp) == source_date and finite(value) and value > 0:
-                            return value
-                if currency == 'NOK' and symbol.endswith('.OL'):
-                    # Oslo's closing auction sets the price before trading-at-last ends at 16:30.
-                    auction = dt.datetime.combine(source_date, dt.time(16, 25), OSLO).timestamp()
-                    stamp, value = quote.get('asof'), quote.get('price')
-                    if (finite(observed) and finite(stamp) and auction <= stamp <= observed <= now
-                        and quote_day(stamp) == source_date and finite(value) and value > 0):
-                        return value
+            use_close = not latest or (currency == 'NOK' and symbol.endswith('.OL'))
+            if use_close and quote.get('account_history_version') == 1:
+                value = completed_session_close(symbol, quote, source_date, now)
+                if value is not None:
+                    return value
+            if latest and session_quote(quote, symbol):
+                return quote['price']
         if coverage is not None:
             coverage.append(f'{symbol}: missing {"session quote" if latest else "close"} on {source_date}.')
         return None
@@ -401,6 +425,26 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
         if q.get('account_history_version')!=1:
             prices[s]={};block(s+': refresh market data to store the separate account-valuation price basis.');continue
         prices[s]={day(p['time']):p['account_close'] for p in q.get('history',[]) if finite(p.get('account_close')) and p['account_close']>0 and day(p['time'])<=yesterday}
+        observed = q.get('fetched', q.get('asof'))
+        if expected_currency == 'NOK' and s.endswith('.OL') and finite(observed):
+            # The fetch day's bar may still be provisional. The latest quote
+            # can also fill a pending close from an earlier Oslo session.
+            if observed > now:
+                prices[s].clear()
+            else:
+                session_dates = {dt.datetime.fromtimestamp(observed, OSLO).date()}
+                auction = oslo_auction_close(s, q, now)
+                if auction:
+                    auction_date, _ = auction
+                    session_dates.add(auction_date)
+                for source_date in session_dates:
+                    source_day = source_date.isoformat()
+                    if source_day <= yesterday:
+                        close = completed_session_close(s, q, source_date, now)
+                        if close is None:
+                            prices[s].pop(source_day, None)
+                        else:
+                            prices[s][source_day] = close
         splits[s]={day(e['time']):e['ratio'] for e in q.get('events',[]) if e.get('kind')=='split' and finite(e.get('ratio')) and e['ratio']>0}
     end=yesterday
     for s in active+(['NOK=X'] if any(historical[s]['currency']=='USD' for s in active) else []):
