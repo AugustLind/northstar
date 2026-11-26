@@ -111,7 +111,8 @@ artifact from the workflow run. It includes the failed browser assertion, stage
 timings, sanitized startup and console diagnostics, request paths and statuses,
 and the visible readiness and freshness states. If Oracle is reachable and the
 journal is readable, it also includes timestamped service access entries from
-the run window. The artifact expires after seven days.
+the run window, matched to the browser's observed paths, statuses, and times when
+available. The artifact expires after seven days.
 
 CI runs the synthetic Chrome workflow for exact financial values, deterministic
 branches and write-heavy features. It also checks that a simulated Chrome startup

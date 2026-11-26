@@ -1,4 +1,5 @@
 """The production artifact contains bounded, allowlisted diagnostics."""
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import subprocess
@@ -32,11 +33,16 @@ class LiveBrowserDiagnosticsTests(unittest.TestCase):
         lines = [json.dumps({'__REALTIME_TIMESTAMP': timestamp, 'MESSAGE': line}) for line in (
             'private-ip - - [25/Nov/2026 10:00:00] "GET /api/account-performance?symbol=PRIVATE HTTP/1.1" 500 -',
             'private-ip - - [25/Nov/2026 10:00:00] "GET /api/private-route HTTP/1.1" 200 -',
+            'other-client - - [25/Nov/2026 10:00:00] "GET /api/account-performance HTTP/1.1" 200 -',
             'Exception reported private holding',
         )] * 50
         with patch('smoke_live_browser.subprocess.run',
                    return_value=subprocess.CompletedProcess([], 0, stdout='\n'.join(lines))):
-            evidence = journal(0)
+            evidence = journal(0, int(time.time()), [
+                {'method': 'GET', 'path': '/api/account-performance', 'status': 500,
+                 'at': datetime.fromtimestamp(timestamp / 1e6, timezone.utc).isoformat()},
+            ])
+        self.assertTrue(evidence['matched_browser_requests'])
         self.assertTrue(evidence['available'])
         self.assertEqual(len(evidence['entries']), 40)
         self.assertEqual({r['status'] for r in evidence['entries']}, {500})

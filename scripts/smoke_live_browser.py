@@ -84,7 +84,8 @@ class Diagnostics:
                        and origin(request['url']) in (self.page_origin, self.api_origin))
             if not allowed:
                 self.blocked = True
-                self.requests.append({'path': self.route(request['url']), 'status': 'blocked', 'at': utc_now()})
+                self.requests.append({'path': self.route(request['url']), 'method': 'other',
+                                      'status': 'blocked', 'at': utc_now()})
             browser.send('Fetch.continueRequest' if allowed else 'Fetch.failRequest',
                          {'requestId': params['requestId'], **({} if allowed else {'errorReason': 'BlockedByClient'})})
         elif method == 'Network.requestWillBeSent':
@@ -156,6 +157,12 @@ DOM = r"""(() => {
         today_basis: text('todayStatus').startsWith('Session ') ? 'open session'
             : text('todayStatus').startsWith('Last completed session ') ? 'last completed session' : 'unknown',
         week: period('week', 2),
+        week_basis: text('weekStatus').includes('Latest valuation date ') ? 'prior valuation'
+            : text('weekStatus').includes('(Europe/Oslo)') ? 'through window end' : 'unknown',
+        reviews_freshness: ['current', 'stale', 'unavailable'].filter(status =>
+            typeof dailyView !== 'undefined' && Array.isArray(dailyView?.holding_assessments)
+            && dailyView.holding_assessments.some(item => item.status === status)),
+        performance_refreshed: window.smokePerformanceRefreshed === true,
         advice: !text('dailyStatus').startsWith('Updated ') ? 'reviews pending or failed'
             : !adviceReady ? 'advice missing' : advice.length ? 'rendered' : 'no holdings',
         reviews_refreshed: typeof dailyView !== 'undefined' && dailyView !== window.smokePreviousReviews,
@@ -187,6 +194,7 @@ def run(page_url, api_origin, key, evidence, wait_seconds=15):
         deadline = time.monotonic() + wait_seconds
         while time.monotonic() < deadline:
             evidence['readiness'] = browser.evaluate(DOM)
+            evidence.setdefault('observations', {})[evidence['stage']] = evidence['readiness']
             if ready(evidence['readiness']):
                 return
             time.sleep(.2)
@@ -234,9 +242,16 @@ def run(page_url, api_origin, key, evidence, wait_seconds=15):
                        and view['switch'] in ('comparison ready', 'no qualifier', 'unavailable'))
 
             stage('return to Portfolio', 'Portfolio is visible with both performance sections')
-            browser.evaluate("document.querySelector('[data-tab=portfolio]').click()")
-            wait_state(lambda view: view['workspace'] == 'portfolio' and
-                       all(view[period] in terminal_periods for period in ('today', 'week')))
+            browser.evaluate("""
+                window.smokePreviousReviews = dailyView;
+                new MutationObserver(() => { window.smokePerformanceRefreshed = true; })
+                    .observe(document.querySelector('#weekMetrics'), {childList: true});
+                document.querySelector('[data-tab=portfolio]').click();
+            """)
+            wait_state(lambda view: view['workspace'] == 'portfolio'
+                       and view['performance_refreshed'] and view['reviews_refreshed']
+                       and view['advice'] in ('rendered', 'no holdings')
+                       and all(view[period] in terminal_periods for period in ('today', 'week')))
             stage('browser integrity', 'No uncaught exceptions or blocked requests')
             if browser.errors or diagnostics.blocked:
                 raise RuntimeError('Browser reported an exception or blocked request')
@@ -255,13 +270,20 @@ def run(page_url, api_origin, key, evidence, wait_seconds=15):
     return evidence['result'] == 'passed'
 
 
-def journal(since):
+def journal(since, until, requests):
     # Emit matching HTTP access entries only. Strip client addresses, queries
     # and message text on Oracle before anything crosses SSH.
-    start = max(since, int(time.time()) - 300)
+    start = max(since, until - 300)
+    observed = {}
+    for request in requests:
+        if request['path'] in API_PATHS and request['method'] in READ_METHODS:
+            status = request['status'] if isinstance(request['status'], int) else None
+            key = (request['method'], request['path'], status)
+            timestamp = datetime.fromisoformat(request['at']).timestamp()
+            observed.setdefault(key, []).append(timestamp)
     result = subprocess.run(
         ['sudo', '-n', 'journalctl', '-u', 'northstar.service', '--since', f'@{start}',
-         '--lines', '200', '--output', 'json', '--no-pager'],
+         '--until', f'@{until}', '--lines', '200', '--output', 'json', '--no-pager'],
         capture_output=True, text=True, timeout=10,
     )
     entries = deque(maxlen=40)
@@ -269,10 +291,15 @@ def journal(since):
         row = json.loads(line)
         match = re.search(r'\] "(GET|HEAD|OPTIONS) (/api/[a-z/-]+)(?:\?[^ ]*)? HTTP/1\.[01]" ([1-5][0-9]{2}) ', row.get('MESSAGE', ''))
         if match and match[2] in API_PATHS:
-            timestamp = datetime.fromtimestamp(int(row['__REALTIME_TIMESTAMP']) / 1e6, timezone.utc)
-            entries.append({'at': timestamp.isoformat(timespec='seconds'),
-                            'method': match[1], 'path': match[2], 'status': int(match[3])})
-    return {'since_epoch': start, 'available': result.returncode == 0, 'entries': list(entries)}
+            method, path, status = match[1], match[2], int(match[3])
+            timestamp = int(row['__REALTIME_TIMESTAMP']) / 1e6
+            matches = observed.get((method, path, status), []) + observed.get((method, path, None), [])
+            if observed and not any(abs(timestamp - seen) <= 3 for seen in matches):
+                continue
+            entries.append({'at': datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec='seconds'),
+                            'method': method, 'path': path, 'status': status})
+    return {'since_epoch': start, 'until_epoch': until, 'matched_browser_requests': bool(observed),
+            'available': result.returncode == 0, 'entries': list(entries)}
 
 
 def probe_deadline(signum, frame):
@@ -285,11 +312,13 @@ def main():
     parser.add_argument('--api-origin')
     parser.add_argument('--evidence', type=Path)
     parser.add_argument('--journal-since', type=int)
+    parser.add_argument('--journal-until', type=int)
     args = parser.parse_args()
     if args.journal_since is not None:
         try:
-            print(json.dumps(journal(args.journal_since), indent=2))
-        except (OSError, ValueError, subprocess.TimeoutExpired):
+            requests = json.loads(sys.stdin.read(32_768) or '[]')
+            print(json.dumps(journal(args.journal_since, args.journal_until or int(time.time()), requests), indent=2))
+        except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
             print(json.dumps({'available': False, 'entries': []}))
         return
     page = urlsplit(args.page_url or '')

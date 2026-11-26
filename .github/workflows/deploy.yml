@@ -136,6 +136,9 @@ jobs:
           import os
           from pathlib import Path
           start = Path("verification/started-epoch")
+          browser = Path("verification/browser.json")
+          requests = json.loads(browser.read_text()).get("requests", []) if browser.exists() else []
+          (Path(os.environ["RUNNER_TEMP"]) / "northstar-service-requests").write_text(json.dumps(requests))
           print(json.dumps({
               "release": os.environ["GITHUB_SHA"],
               "run": os.environ["GITHUB_RUN_ID"],
@@ -146,8 +149,10 @@ jobs:
           PY
           if [[ -f verification/started-epoch && -s ~/.ssh/northstar_verify ]]; then
             since=$(cat verification/started-epoch)
+            until=$(date +%s)
             timeout 25s ssh -i ~/.ssh/northstar_verify -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "ubuntu@$ORACLE_HOST" \
-              "cd ~/northstar && python3 scripts/smoke_live_browser.py --journal-since $since" > verification/service.json ||
+              "cd ~/northstar && python3 scripts/smoke_live_browser.py --journal-since $since --journal-until $until" \
+              < "$RUNNER_TEMP/northstar-service-requests" > verification/service.json ||
               printf '%s\n' '{"available":false,"entries":[]}' > verification/service.json
           fi
       - uses: actions/upload-artifact@v4
