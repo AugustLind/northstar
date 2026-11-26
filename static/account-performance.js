@@ -154,7 +154,6 @@ function renderToday(value, refreshErrors = []) {
       value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok),
       'Recorded cash and holdings at provider quotes'
     ) + portfolioPeriodTiles(today, 'Return assumes external cash flows occur at day end');
-  renderPerformanceChart('today', today);
   $('#todayHoldings').innerHTML = holdingMovements(today.holdings);
 }
 
@@ -182,12 +181,12 @@ function renderLast7Days(week = {}, refreshErrors = []) {
     week,
     'Daily-linked return assumes external cash flows occur at day end'
   );
-  renderPerformanceChart('week', week);
+  renderWeeklyPerformanceChart(week);
   $('#weekHoldings').innerHTML = holdingMovements(week.holdings);
 }
 
-function renderPerformanceChart(prefix, period) {
-  const chart = $('#' + prefix + 'Chart');
+function renderWeeklyPerformanceChart(period) {
+  const chart = $('#weekChart');
   const curve = period.curve || [];
   chart.hidden = curve.length < 2;
   if (chart.hidden) {
@@ -199,6 +198,6 @@ function renderPerformanceChart(prefix, period) {
     detail:'NOK · Excludes net external flows',
     currency:'NOK',
     points:curve.map(point=>({time:chartTime(point.date),value:point.adjusted_value_nok})),
-    days:prefix === 'today' ? 2 : 8,
+    days:8,
   });
 }

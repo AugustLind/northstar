@@ -14,6 +14,7 @@ async function loadOverviewAccount(refreshErrors = []) {
     renderToday(value, refreshErrors);
     renderLast7Days(value.last_7_days, refreshErrors);
     renderOverviewChart(value);
+    renderAccountValueChart($('#todayChart'), value, true);
     $('#overviewValue').textContent =
       value.current_value_nok == null ? 'Unavailable' : money(value.current_value_nok);
     $('#overviewValueMeta').textContent =
@@ -494,14 +495,8 @@ async function refreshAccountMarketData(button, status, showFailure) {
     button.textContent = label;
   }
 }
-$('#refreshOverviewAccount').onclick = (event) =>
-  refreshAccountMarketData(event.currentTarget, $('#overviewAccountStatus'));
 $('#refreshToday').onclick = (event) =>
   refreshAccountMarketData(event.currentTarget, $('#todayStatus'), showPortfolioRefreshFailure);
-$('#openAccountPerformance').onclick = () => {
-  openWorkspace('accountPerformance');
-};
-$('#openAccountSetup').onclick = () => openWorkspace('activity');
 $('#markAlertsRead').onclick = async () => {
   if (!dailyView) return;
   try {

@@ -313,8 +313,21 @@ setImmediate(async()=>{
  const performanceFetch=context.fetch;
  const todayFixture={date:'2026-11-21',previous_date:'2026-11-20',live:false,coverage:[],change_nok:100,
    change_pct:1,net_external_nok:0,opening_nok:10000,ending_nok:10100,holdings:[],
-   curve:[{date:'2026-11-20',adjusted_value_nok:10000},{date:'2026-11-21',adjusted_value_nok:10100}]};
+   curve:[{date:'2026-11-20',value_nok:10000,adjusted_value_nok:10000},{date:'2026-11-21',value_nok:11100,adjusted_value_nok:10100}]};
  const weekFixture={...todayFixture,window_start:'2026-11-15',window_end:'2026-11-21',closed_dates:['2026-11-21']};
+ const historicalCurve=[{date:'2026-11-10',value_nok:9800},{date:'2026-11-20',value_nok:10000}];
+ const portfolioPlots=[];
+ const originalPlot=context.plotWorkspaceChart;
+ context.plotWorkspaceChart=(container,options)=>{
+   if(container===nodes['#todayChart']) portfolioPlots.push(options);
+   return originalPlot(container,options);
+ };
+ context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,
+   curve:historicalCurve,today:todayFixture,last_7_days:{...weekFixture,curve:[]}})});
+ await vm.runInContext('loadOverviewAccount()',context);
+ assert.deepStrictEqual(Array.from(portfolioPlots.at(-1).points,point=>point.value),[9800,10000,11100]);
+ assert.strictEqual(portfolioPlots.at(-1).startWithHistory,true);
+ context.plotWorkspaceChart=originalPlot;
  context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:todayFixture,last_7_days:weekFixture})});
  await vm.runInContext('loadOverviewAccount()',context);
  const todayStatus=nodes['#todayStatus'];
