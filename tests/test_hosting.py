@@ -205,6 +205,23 @@ class HostingTests(unittest.TestCase):
         self.assertTrue(all(a['read'] for a in app.read_meta('dashboard_alerts')))
         self.assertFalse(self.request('GET','/api/ledger',headers)['body']['initialized'])
 
+    def test_daily_serves_reviews_when_another_connection_holds_the_write_lock(self):
+        headers={'Authorization':'Bearer test-key'}
+        initial=self.request('GET','/api/daily',headers)
+        self.assertEqual(initial['status'],200)
+        saved=app.read_meta('dashboard_alerts')
+        self.assertTrue(saved)
+        with app.connect() as writer:
+            writer.execute('BEGIN IMMEDIATE')
+            daily=self.request('GET','/api/daily',headers)
+            self.assertEqual(daily['status'],200)
+            self.assertEqual(daily['body']['alerts'],saved)
+            self.assertGreater(daily['body']['generated'],initial['body']['generated'])
+            self.assertIn('buy_candidates',daily['body'])
+        recovered=self.request('GET','/api/daily',headers)
+        self.assertEqual(recovered['status'],200)
+        self.assertEqual(recovered['body']['alerts'],app.read_meta('dashboard_alerts'))
+
     def test_validation_queues_single_job_and_preserves_result_on_failure(self):
         class ImmediateThread:
             def __init__(self,**kwargs):self.target=kwargs['target']

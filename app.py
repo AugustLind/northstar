@@ -87,9 +87,9 @@ def revoke_remembered_sessions():
         db.execute('DELETE FROM remembered_sessions')
 
 
-def connect():
+def connect(*, timeout=5.0):
     DB.parent.mkdir(exist_ok=True)
-    db = sqlite3.connect(DB)
+    db = sqlite3.connect(DB, timeout=timeout)
     db.row_factory = sqlite3.Row
     research_archive.schema(db)
     db.execute('CREATE TABLE IF NOT EXISTS account_baselines (id INTEGER PRIMARY KEY AUTOINCREMENT,created REAL NOT NULL,cutoff_date TEXT NOT NULL,payload TEXT NOT NULL)')
@@ -108,8 +108,8 @@ def read_meta(key, default=None):
         row = db.execute('SELECT payload FROM metadata WHERE key=?', (key,)).fetchone()
     return json.loads(row['payload']) if row else default
 
-def write_meta(key, value):
-    with connect() as db:
+def write_meta(key, value, *, timeout=5.0):
+    with connect(timeout=timeout) as db:
         db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)', (key, json.dumps(value, allow_nan=False)))
         if key.startswith('fundamentals:') and value.get('series'):
             research_archive.capture(db,'financial',key.split(':',1)[1],value,source_asof=value.get('fetched'))
@@ -578,8 +578,17 @@ def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view(snapshot))
     result.update(trade_plan.candidate_plan(snapshot, report, review_plan=plan))
-    alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
-    write_meta('dashboard_alerts',alerts);result['alerts']=alerts
+    saved_alerts = read_meta('dashboard_alerts', [])
+    alerts = daily_board.merge_alerts(saved_alerts, result['reviews'])
+    if alerts != saved_alerts:
+        try:
+            write_meta('dashboard_alerts', alerts, timeout=0.1)
+        except sqlite3.OperationalError as error:
+            if str(error) not in ('database is locked', 'database table is locked', 'database is busy'):
+                raise
+            # Another request can persist the current alerts once the writer finishes.
+            alerts = saved_alerts
+    result['alerts'] = alerts
     result['email']=email_worker().status()
     return result
 
