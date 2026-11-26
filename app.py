@@ -476,8 +476,10 @@ def set_promoted_experiment_model(data):
     return {'promoted_model':read_meta('promoted_experiment_model')}
 
 
-def ledger_view():
-    snapshot=state();profile=snapshot['manual_portfolio_preferences'];baseline=read_meta('ledger_state')
+def ledger_view(snapshot=None):
+    if snapshot is None:
+        snapshot=state()
+    profile=snapshot['manual_portfolio_preferences'];baseline=read_meta('ledger_state')
     with connect() as db:
         transactions.schema(db)
         rows=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM ledger_events ORDER BY date DESC,uid DESC LIMIT 200')]
@@ -573,7 +575,7 @@ def broker_cash_check(data):
 
 def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
-    result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
+    result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view(snapshot))
     result.update(trade_plan.candidate_plan(snapshot, report, review_plan=plan))
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
@@ -586,7 +588,7 @@ def email_plan():
     snapshot=state(True)
     report=read_meta('report')
     plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
-    alerts=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view(),now)['reviews']
+    alerts=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view(snapshot),now)['reviews']
     risk=portfolio_risk.view(snapshot,snapshot['portfolio_preferences'],now)
     quote_times=[q.get('asof') for p in snapshot['positions'] if p['shares']>0
                  for q in [trade_plan.quote_for(snapshot,portfolio_fit.canonical(p['symbol'],p['currency']))]

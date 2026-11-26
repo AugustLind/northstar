@@ -442,7 +442,7 @@ function renderFundedSwitch(comparison) {
 }
 async function loadDaily() {
   const token = ++dailyRequest;
-  loadOverviewAccount();
+  if (!$('#daily').hidden || !$('#portfolio').hidden) loadOverviewAccount();
   try {
     const v = await api('daily');
     if (token === dailyRequest) renderDaily(v);

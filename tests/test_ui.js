@@ -169,7 +169,13 @@ setImmediate(async()=>{
  assert(nodes['#quantityPlanMain'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#quantityPlanMain'].innerHTML.includes('<untrusted>'));
  assert(nodes['#quantityPlanMain'].innerHTML.includes('Shared budget'));
+ nodes['#daily'].hidden=true;
+ nodes['#portfolio'].hidden=true;
+ const beforeCandidates=requests.length;
  await vm.runInContext('loadDaily()',context);
+ assert(requests.slice(beforeCandidates).some(r=>r.path.endsWith('/api/daily')));
+ assert(!requests.slice(beforeCandidates).some(r=>r.path.includes('/api/account-performance')));
+ nodes['#portfolio'].hidden=false;
  assert(nodes['#dailyTop'].innerHTML.includes('Review &lt;untrusted&gt;'));
  assert(nodes['#dailyTop'].innerHTML.includes('data-review-action="holding"'));
  assert(nodes['#portfolioReviewEntry'].innerHTML.includes('Review portfolio'));
