@@ -402,6 +402,30 @@ def build(snapshot,report,profile,now=None):
                      'Signal-review percentage and fee limits are illustrative user-adjustable settings; no order is placed.'}
 
 
+def candidate_watch(report, plan):
+    """Explain the highest-scoring current option when the buy plan is empty."""
+    now = plan['generated']
+    if plan['buys'] or not policy.current_report(report, now):
+        return None
+    card = min(
+        (card for card in report_cards(report).values()
+         if card.get('composite') is not None and signal_current(card, now)
+         and card.get('action') not in SELL_SIGNALS),
+        key=policy.rank_key, default=None,
+    )
+    if card is None:
+        return None
+    symbol = pf.canonical(card['symbol'])
+    blocked = next((row['reason'] for row in plan['blocked_buys'] if row['symbol'] == symbol), None)
+    if blocked:
+        reason = blocked
+    elif buy_signal(card):
+        reason = 'Outside the current recommendation list.'
+    else:
+        reason = (card.get('reasons') or ['The complete technical buy screen is not met.'])[0]
+    return {'symbol': symbol, 'reason': reason}
+
+
 def candidate_plan(snapshot, report, cash=None, review_plan=None):
     """Size an independent candidate preview while retaining account evidence and limits."""
     profile = {**snapshot['portfolio_preferences'], 'reserve_pct': 0.}
@@ -416,6 +440,7 @@ def candidate_plan(snapshot, report, cash=None, review_plan=None):
     return {
         'funded_switch': funded_switch(preview, report, plan),
         'buy_candidates': plan['buys'][:5],
+        'buy_candidate_watch': candidate_watch(report, plan),
         'buy_candidates_stale': not policy.current_report(report, plan['generated']),
         'buy_candidate_warnings': [
             row['symbol']+': '+row['reason'] for row in plan['blocked_buys'] if row['evidence_missing']
