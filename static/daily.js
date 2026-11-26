@@ -45,6 +45,7 @@ async function loadOverviewAccount(refreshErrors = []) {
     overviewAccountLoaded = true;
   } catch (error) {
     if (token === overviewAccountRequest) {
+      if (!overviewAccountLoaded) clearWorkspaceChart($('#overviewChart'), 'Account value history unavailable.');
       showPortfolioRefreshFailure(error, refreshErrors);
       $('#overviewValue').textContent = 'Unavailable';
       $('#overviewMove').textContent = 'Unavailable';
@@ -220,7 +221,7 @@ function renderDaily(v) {
     ? 'research'
     : 'freshness';
   $('#portfolioReviewEntry').innerHTML =
-    '<h2>Needs attention</h2><p>' +
+    '<p>' +
     (blocker
       ? 'Resolve the current data or reconciliation blocker before relying on portfolio sizing or account results.'
       : v.reviews.length
@@ -305,10 +306,16 @@ let cashPreviewRequest = 0;
 function renderCandidatePlan(value) {
   renderBuyCandidates(value);
   renderFundedSwitch(value.funded_switch);
+  $('#switchComparison').hidden = false;
+  $('#buyCandidates').removeAttribute('aria-busy');
 }
 
 async function previewCandidateCash() {
   const token = ++cashPreviewRequest;
+  $('#switchComparison').hidden = true;
+  $('#switchStatus').textContent = 'Calculating comparison…';
+  $('#buyCandidates').setAttribute('aria-busy', 'true');
+  $('#buyCandidatesStatus').textContent = 'Updating ranked quantities…';
   $('#candidateCashBasis').textContent = 'Calculating with ' + money(activeCandidateCash) + ' of available cash…';
   try {
     const plan = await api('candidate-plan', {cash_nok:activeCandidateCash});
@@ -464,7 +471,7 @@ async function refreshAccountMarketData(button, status, showFailure) {
   button.textContent = 'Refreshing market data…';
   try {
     const result = await api('refresh', {});
-    await loadOverviewAccount(result.errors || []);
+    await Promise.all([loadOverviewAccount(result.errors || []), refreshWorkspaceStockCharts()]);
   } catch (error) {
     if (showFailure) showFailure(error);
     else status.textContent = error.message;

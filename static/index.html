@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Northstar · Investment notebook</title>
     <link rel="stylesheet" href="./style.css?v=af789febe637" />
-    <link rel="stylesheet" href="./workspace.css?v=d0620c6b9d9e" />
+    <link rel="stylesheet" href="./workspace.css?v=9e6d23840565" />
   </head>
   <body>
     <header>
@@ -83,18 +83,29 @@
           <p id="overviewAccountStatus" class="overview-account-status" role="status">
             Loading account summary…
           </p>
-          <div class="researchtools overview-account-actions">
+        </section>
+        <div class="overview-workspace">
+          <section id="overviewChart" class="workspace-chart" aria-label="Account value history">Loading account history…</section>
+          <section class="card" aria-labelledby="needsAttentionTitle">
+            <h2 id="needsAttentionTitle">Needs attention</h2>
+            <p id="dailyStatus" role="status">Loading the daily overview…</p>
+            <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
+            <div id="dailyTop"></div>
+          </section>
+        </div>
+        <details class="card">
+          <summary>Account data and reconciliation</summary>
+          <div class="researchtools">
             <button id="refreshOverviewAccount" type="button">Refresh account value</button>
             <button id="openAccountPerformance" type="button">Detailed performance in Portfolio</button>
             <button id="openAccountSetup" type="button">Reconcile or set up activity &amp; cash</button>
           </div>
-          <p class="muted overview-account-status">
+          <p class="muted">
             Current value includes recorded NOK cash and held assets at provider quotes. Historical
             investment gain/loss is measured from the verified opening snapshot to the last completed
             priced date; deposits and withdrawals are excluded from investment return.
           </p>
-        </section>
-        <section id="overviewChart" class="workspace-chart" aria-label="Account value history"></section>
+        </details>
         <div class="sectionhead">
           <div>
             <p class="eyebrow">DAILY PORTFOLIO REVIEW</p>
@@ -141,12 +152,6 @@
             missing data with guesses.
           </p>
         </details>
-        <section class="card" aria-labelledby="needsAttentionTitle">
-          <h2 id="needsAttentionTitle">Needs attention</h2>
-          <p id="dailyStatus" role="status">Loading the daily overview…</p>
-          <section class="card" id="portfolioReviewEntry" aria-live="polite"></section>
-          <div id="dailyTop"></div>
-        </section>
         <details class="workspacefold advanced-tools" id="overviewAdvanced">
           <summary>Advanced tools</summary>
         <section class="card" id="systemHealth">
@@ -1373,7 +1378,7 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
       <script src="./app.js?v=c2814043a351"></script>
-      <script src="./portfolio.js?v=a4094a23bbb2"></script>
+      <script src="./portfolio.js?v=c6404de33645"></script>
       <script src="./navigation.js?v=ca21460fdd54"></script>
       <script src="./charts.js?v=1a61a2335970"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
@@ -1382,10 +1387,10 @@
       <script src="./holdings-import.js?v=66d1af659957"></script>
       <script src="./trade-plan.js?v=c368342a23f8"></script>
       <script src="./ledger.js?v=2145d92f2206"></script>
-      <script src="./lightweight-charts.js?v=e6bd6516d9ab"></script>
-      <script src="./workspace-charts.js?v=42ab7725b1d5"></script>
+      <script src="./lightweight-charts.js?v=a583392cf759"></script>
+      <script src="./workspace-charts.js?v=c91e7d3d774a"></script>
       <script src="./account-performance.js?v=ad436ae0e34a"></script>
-      <script src="./daily.js?v=93c1ee245ba9"></script>
+      <script src="./daily.js?v=11e3528b8de8"></script>
       <script src="./advice.js?v=99a68ba3093b"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>

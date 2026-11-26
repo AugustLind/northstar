@@ -571,27 +571,10 @@ def broker_cash_check(data):
     return result
 
 
-def candidate_plan(snapshot, report, cash=None, now=None):
-    profile = {**snapshot['portfolio_preferences'], 'reserve_pct': 0.}
-    if cash is not None:
-        profile.update(cash_nok=cash, purchase_nok=max(cash, profile['purchase_nok']))
-    preview = {**snapshot, 'portfolio_preferences': profile}
-    plan = trade_plan.build(preview, report, profile, now)
-    return {
-        'funded_switch': trade_plan.funded_switch(preview, report, plan),
-        'buy_candidates': plan['buys'][:5],
-        'buy_candidates_stale': not decision_policy.current_report(report, plan['generated']),
-        'buy_candidate_warnings': [
-            row['symbol']+': '+row['reason'] for row in plan['blocked_buys'] if row['evidence_missing']
-        ],
-        'buy_candidate_research_incomplete': bool((report or {}).get('coverage', {}).get('unavailable')),
-    }
-
-
 def daily_view():
     snapshot=state(True);report=read_meta('report');plan=trade_plan.build(snapshot,report,snapshot['portfolio_preferences'])
     result=daily_board.build(snapshot,report,plan,read_meta('announcements_feed'),ledger_view())
-    result.update(candidate_plan(snapshot, report, now=plan['generated']))
+    result.update(trade_plan.candidate_plan(snapshot, report, review_plan=plan))
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
     result['email']=email_worker().status()
@@ -930,7 +913,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(EMAIL_WORKER.queue_test())
             elif self.path == '/api/candidate-plan':
                 cash = portfolio_fit.number(data.get('cash_nok'), 'Available cash', 1e9)
-                return self.send_json(candidate_plan(state(True), read_meta('report'), cash))
+                return self.send_json(trade_plan.candidate_plan(state(True), read_meta('report'), cash))
             elif self.path == '/api/ledger/reconcile':return self.send_json(broker_cash_check(data))
             elif self.path == '/api/ledger/initialize':return self.send_json(ledger_initialize(data))
             elif self.path == '/api/ledger/inspect':return self.send_json(ledger_inspect(data))

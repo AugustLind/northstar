@@ -348,6 +348,7 @@ $('#refresh').onclick = async () => {
   try {
     const r = await api('refresh', {});
     await reloadHoldings();
+    await refreshWorkspaceStockCharts();
     $('#message').textContent = r.errors.length
       ? r.errors.join('\n')
       : 'Refresh complete. Check provider timestamps before making a decision.';

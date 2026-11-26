@@ -396,3 +396,25 @@ def build(snapshot,report,profile,now=None):
                      + 'sale proceeds are shown gross and net where the fee assumption is available, before tax. The sale scenario is separate from the buy plan; '
                      'sale proceeds do not fund purchases. Recalculate after any real trade. Missing data means no quantity, not zero risk. '
                      'Signal-review percentage and fee limits are illustrative user-adjustable settings; no order is placed.'}
+
+
+def candidate_plan(snapshot, report, cash=None, review_plan=None):
+    """Size an independent candidate preview while retaining account evidence and limits."""
+    profile = {**snapshot['portfolio_preferences'], 'reserve_pct': 0.}
+    if cash is not None:
+        profile.update(cash_nok=cash, purchase_nok=max(cash, profile['purchase_nok']))
+    preview = {**snapshot, 'portfolio_preferences': profile}
+    now = review_plan['generated'] if review_plan else None
+    if review_plan and cash is None and not snapshot['portfolio_preferences']['reserve_pct']:
+        plan = review_plan
+    else:
+        plan = build(preview, report, profile, now)
+    return {
+        'funded_switch': funded_switch(preview, report, plan),
+        'buy_candidates': plan['buys'][:5],
+        'buy_candidates_stale': not policy.current_report(report, plan['generated']),
+        'buy_candidate_warnings': [
+            row['symbol']+': '+row['reason'] for row in plan['blocked_buys'] if row['evidence_missing']
+        ],
+        'buy_candidate_research_incomplete': bool((report or {}).get('coverage', {}).get('unavailable')),
+    }

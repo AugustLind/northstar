@@ -58,7 +58,7 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
   const orders = container.querySelector('.plot-purchases');
   const announcement = container.querySelector('.plot-announcement');
   const windowLabel = container.querySelector('.plot-window');
-  const decimal = new Intl.NumberFormat('en-GB', {minimumFractionDigits:stock ? 2 : 0, maximumFractionDigits:stock ? 2 : 0});
+  const decimal = new Intl.NumberFormat('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2});
   const chart = charts.createChart(host, {
     autoSize:true,
     layout:{background:{color:'#0a0c11'}, textColor:'#aeb7c8', fontSize:12, attributionLogo:false},
@@ -70,7 +70,7 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
     localization:{timeFormatter:time => chartDate.format(time*1000)},
     handleScroll:{vertTouchDrag:false},
   });
-  const priceFormat = {type:'custom', minMove:stock ? .01 : 1, formatter:value=>decimal.format(value)};
+  const priceFormat = {type:'custom', minMove:.01, formatter:value=>decimal.format(value)};
   const price = stock
     ? chart.addSeries(charts.CandlestickSeries, {priceFormat, upColor:'#36b49a', downColor:'#e37480',
         borderVisible:false, wickUpColor:'#36b49a', wickDownColor:'#e37480'})
@@ -123,7 +123,8 @@ function plotWorkspaceChart(container, {title, detail, currency, stockSymbol, po
     const firstDate = data[end].time - (days-1)*86400;
     const first = Math.max(0, data.findIndex(point=>point.time>=firstDate));
     chart.clearCrosshairPosition();
-    scale.setVisibleLogicalRange({from:Math.min(first,end-1)-.5,to:end+3});
+    const padding = Math.min(3, Math.max(.5,(end-first)*.08));
+    scale.setVisibleLogicalRange({from:Math.min(first,end-1)-.5,to:end+padding});
     showPoint(indexes.get(observations.at(-1).time));
   }
   function fit() {
@@ -216,25 +217,32 @@ function renderOverviewChart(value) {
   workspacePurchases = Array.isArray(value.chart_purchases) ? value.chart_purchases : [];
   const chart = $('#overviewChart');
   const dates = new Map();
-  if (value.status === 'available' || value.status === 'estimated') {
-    for (const point of value.curve || []) dates.set(point.date,point.value_nok);
+  for (const point of value.chart_value_history || value.curve || []) {
+    dates.set(point.date,point.value_nok);
   }
   for (const point of value.last_7_days?.curve || []) dates.set(point.date,point.value_nok);
   const points = [...dates].sort(([a],[b])=>a.localeCompare(b)).map(([date,amount])=>({time:chartTime(date),value:amount}));
-  plotWorkspaceChart(chart,{title:'Account value',detail:'NOK · Daily valuations · Includes external cash flows',
+  const gaps = points.some(point=>!Number.isFinite(point.value));
+  plotWorkspaceChart(chart,{title:'Account value',
+    detail:'NOK · Daily valuations · Includes external cash flows' + (gaps ? ' · Some dates unpriced' : ''),
     currency:'NOK',points,days:7});
   workspacePlots.forEach((plot, container)=>{ if (container !== chart) plot.updatePurchases(); });
 }
 
-async function showWorkspaceStock(container, symbol) {
-  if (workspaceStocks.get(container)?.symbol === symbol) return;
+function refreshWorkspaceStockCharts() {
+  return Promise.all([...workspaceStocks].filter(([,request])=>request.symbol)
+    .map(([container,request])=>showWorkspaceStock(container,request.symbol,true)));
+}
+
+async function showWorkspaceStock(container, symbol, refresh = false) {
+  if (!refresh && workspaceStocks.get(container)?.symbol === symbol) return;
   const request = {symbol};
   workspaceStocks.set(container, request);
   if (!symbol) {
     clearWorkspaceChart(container,'Choose a company to view price and volume.');
     return;
   }
-  clearWorkspaceChart(container,'Loading daily price and volume…');
+  if (!refresh || !workspacePlots.has(container)) clearWorkspaceChart(container,'Loading daily price and volume…');
   try {
     const quote = await api('history?symbol=' + encodeURIComponent(symbol));
     if (workspaceStocks.get(container) !== request) return;

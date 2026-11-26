@@ -136,6 +136,21 @@ class AccountPerformanceTests(unittest.TestCase):
         self.assertEqual(value['opening_value_nok'],200);self.assertIsNone(value['realized_trade_pnl_nok'])
         self.assertIn('reconstructed',value['opening_basis'])
 
+    def test_chart_preserves_verified_days_when_a_required_close_is_missing(self):
+        rows = [event(1, '2025-01-02', 'deposit', 100)]
+        snapshot, baseline = setup(rows, quote([('2025-01-01', 10), ('2025-01-03', 11)]))
+
+        value = ap.view(snapshot, baseline, rows, NOW)
+
+        self.assertEqual(value['status'], 'unavailable')
+        self.assertEqual(value['curve'], [])
+        self.assertIsNone(value['investment_pnl_nok'])
+        self.assertEqual(value['chart_value_history'], [
+            {'date': '2025-01-01', 'value_nok': 200},
+            {'date': '2025-01-02', 'value_nok': None},
+            {'date': '2025-01-03', 'value_nok': 310},
+        ])
+
     def test_split_requires_ledger_ratio_and_historical_share_unit_prices(self):
         rows=[event(1,'2025-01-02','split',ratio=2)]
         q=quote([('2025-01-01',100),('2025-01-02',50)],events=[{'time':stamp('2025-01-02'),'kind':'split','ratio':2}])

@@ -94,10 +94,10 @@ header .workspace-nav button.active {
   font-size: clamp(1rem, 2vw, 1.4rem);
   margin: 4px 0;
 }
-#overviewMetrics .overview-account-status,
-#overviewMetrics .overview-account-actions {
+#overviewMetrics .overview-account-status {
   margin: 0;
   padding: 8px 12px;
+  font-size: .83rem;
   border-top: 1px solid var(--border);
 }
 .workspace-chart {
@@ -215,7 +215,17 @@ header .workspace-nav button.active {
   color: var(--accent);
 }
 #buyCandidates article p {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
+  font-size: .83rem;
+  line-height: 1.45;
+}
+.candidate-list > h2, .overview-workspace > .card > h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+.candidate-list > p, .overview-workspace > .card > p {
+  color: var(--muted);
+  font-size: .81rem;
 }
 #buyCandidates article small {
   color: var(--muted);
@@ -265,4 +275,28 @@ header .workspace-nav button.active {
     min-height: 42px;
     min-width: 42px;
   }
+}
+
+.overview-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(245px, 300px);
+  align-items: start;
+  gap: 12px;
+}
+.overview-workspace > .card, .overview-workspace > .workspace-chart {
+  margin-top: 0;
+  border-radius: 5px;
+}
+.overview-workspace .card .card {
+  margin-top: 10px;
+  padding: 10px;
+}
+@media (max-width: 740px) {
+  .overview-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+#message:empty {
+  display: none;
 }

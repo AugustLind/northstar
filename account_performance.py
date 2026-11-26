@@ -421,6 +421,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
             previous=max(earlier)
             if (dt.date.fromisoformat(date)-dt.date.fromisoformat(previous)).days<=4:return prices[s][previous],True
         block(s+': missing exact-date account close on '+date+'.');return None,False
+    chart_values=[];chart_basis_valid=True
     for date in sorted(calendar):
         rows=groups.get(date,[]);external=sum(e['net_cash'] for e in rows if e['type'] in ('deposit','withdrawal'))
         for s,p in holdings.items():
@@ -429,6 +430,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
             ledger_ratio=math.prod(ledger_ratios) if ledger_ratios else None
             if p['shares']>1e-10 and (provider_ratio is not None or ledger_ratio is not None) and (provider_ratio is None or ledger_ratio is None or abs(provider_ratio-ledger_ratio)>1e-8):
                 block(s+': provider/ledger split on '+date+' needs an explicitly matching recorded ratio.')
+                chart_basis_valid=False
         for e in rows:
             if e['type']=='sell':
                 p=holdings.get(pf.canonical(e['symbol']))
@@ -447,6 +449,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
             elif p['currency']!='NOK':block(s+': unsupported valuation currency.');valid=False
             if close is None or fx is None:valid=False
             else:value+=p['shares']*close*fx
+        chart_values.append({'date':date,'value_nok':value if valid and chart_basis_valid else None})
         if not valid:continue
         if curve:
             previous=curve[-1]['value_nok']
@@ -456,7 +459,9 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
         curve.append({'date':date,'time':dt.datetime.fromisoformat(date).replace(tzinfo=dt.timezone.utc).timestamp(),
                       'value_nok':value,'cash_nok':cash,'external_cash_nok':external,'close':linked if linked_valid else None,'prior_close_used':carried})
     if out['coverage'] or not curve or curve[0]['date']!=cutoff or curve[-1]['date']!=end:
-        out['coverage']=out['coverage'][:25];return out
+        out['coverage']=out['coverage'][:25]
+        out['chart_value_history']=chart_values
+        return out
     start_value=curve[0]['value_nok'];end_value=curve[-1]['value_nok'];net=sum(v for d,v in flows)
     pnl=end_value-start_value-net;duration=(dt.date.fromisoformat(end)-dt.date.fromisoformat(cutoff)).days
     weighted=start_value+sum((dt.date.fromisoformat(end)-dt.date.fromisoformat(d)).days/duration*v for d,v in flows)
