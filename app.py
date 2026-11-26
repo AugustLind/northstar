@@ -4,6 +4,7 @@ import math
 import re
 import sqlite3
 import time
+import traceback
 from datetime import datetime, timezone
 import threading
 import os
@@ -823,7 +824,16 @@ class Handler(BaseHTTPRequestHandler):
             if not row:
                 return self.send_json({'error':'History is not downloaded yet. Wait for the scan to finish.'},404)
             return self.send_json(json.loads(row['payload']))
-        if self.path == '/api/daily':return self.send_json(daily_view())
+        if self.path == '/api/daily':
+            try:
+                return self.send_json(daily_view())
+            except (BrokenPipeError, ConnectionResetError):
+                raise
+            except Exception as error:
+                frame = traceback.extract_tb(error.__traceback__)[-1]
+                print(f'Northstar daily failure {type(error).__name__} '
+                      f'{Path(frame.filename).name}:{frame.lineno}', file=sys.stderr, flush=True)
+                return self.send_json({'error': 'Portfolio reviews could not be generated.'}, 500)
         if self.path == '/api/email':return self.send_json(email_worker().status())
         if self.path == '/api/ledger':return self.send_json(ledger_view())
         if self.path == '/api/trade-plan':
