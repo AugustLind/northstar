@@ -243,15 +243,21 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
 
             stage('Candidates', 'Candidates and keep-or-switch reach valid terminal states')
             browser.evaluate("""
+                if (!window.smokeFetchTrackingInstalled) {
+                    const originalFetch = window.fetch;
+                    window.fetch = function(...args) {
+                        const requestUrl = new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href);
+                        return originalFetch.apply(window, args).then(response => {
+                            if (response.ok && requestUrl.pathname === '/api/daily')
+                                window.smokeReviewsRefreshed = true;
+                            if (response.ok && requestUrl.pathname === '/api/account-performance')
+                                window.smokePerformanceRefreshed = true;
+                            return response;
+                        });
+                    };
+                    window.smokeFetchTrackingInstalled = true;
+                }
                 window.smokeReviewsRefreshed = false;
-                const originalLoadDaily = window.loadDaily;
-                window.loadDaily = async function(...args) {
-                    try {
-                        return await originalLoadDaily.apply(this, args);
-                    } finally {
-                        window.smokeReviewsRefreshed = true;
-                    }
-                };
                 document.querySelector('[data-tab=candidates]').click();
             """)
             wait_state(lambda view: view['workspace'] == 'candidates' and view['reviews_refreshed']
@@ -263,14 +269,6 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
             browser.evaluate("""
                 window.smokeReviewsRefreshed = false;
                 window.smokePerformanceRefreshed = false;
-                const originalLoadOverviewAccount = window.loadOverviewAccount;
-                window.loadOverviewAccount = async function(...args) {
-                    try {
-                        return await originalLoadOverviewAccount.apply(this, args);
-                    } finally {
-                        window.smokePerformanceRefreshed = true;
-                    }
-                };
                 document.querySelector('[data-tab=portfolio]').click();
             """)
             wait_state(lambda view: view['workspace'] == 'portfolio'
