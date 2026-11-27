@@ -25,7 +25,8 @@ function renderAccountPerformance(value) {
     toolTile(
       'Account investment P&L',
       value.investment_pnl_nok == null ? 'Unavailable' : money(value.investment_pnl_nok),
-      'Ending value − opening value − net contributions'
+      'Ending value − opening value − net contributions',
+      signedClass(value.investment_pnl_nok)
     ),
     toolTile(
       'Ending account value',
@@ -40,17 +41,20 @@ function renderAccountPerformance(value) {
     toolTile(
       'Daily-linked return',
       toolNumber(value.daily_linked_return_pct, '%'),
-      'End-of-day cash-flow timing assumption'
+      'End-of-day cash-flow timing assumption',
+      signedClass(value.daily_linked_return_pct)
     ),
     toolTile(
       'Modified Dietz return',
       toolNumber(value.modified_dietz_pct, '%'),
-      'Date-weighted approximation'
+      'Date-weighted approximation',
+      signedClass(value.modified_dietz_pct)
     ),
     toolTile(
       'Realised trade P&L',
       value.realized_trade_pnl_nok == null ? 'Unavailable' : money(value.realized_trade_pnl_nok),
-      'NOK GAV/book basis; gains may predate this period. Not a tax calculation.'
+      'NOK GAV/book basis; gains may predate this period. Not a tax calculation.',
+      signedClass(value.realized_trade_pnl_nok)
     ),
     toolTile(
       'Recorded income',
