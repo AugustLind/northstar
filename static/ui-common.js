@@ -20,10 +20,12 @@ const fresh = (q) =>
 
 const toolNumber = (v, suffix = '', digits = 1) =>
   Number.isFinite(v) ? v.toFixed(digits) + suffix : 'Unavailable';
-const toolTile = (label, value, note = '') =>
+const signedClass = (value) =>
+  Number.isFinite(value) ? (value > 0 ? 'positive' : value < 0 ? 'negative' : '') : '';
+const toolTile = (label, value, note = '', valueClass = '') =>
   '<article><small>' +
   esc(label) +
-  '</small><strong>' +
+  '</small><strong class="' + esc(valueClass) + '">' +
   esc(value) +
   '</strong>' +
   (note ? '<small>' + esc(note) + '</small>' : '') +

@@ -64,7 +64,7 @@ function render() {
                 ? 'Provider quote'
                 : 'Stale · excluded from total'
               : 'Refresh or check ticker/currency'
-          }</small></td><td class="${gain >= 0 ? 'positive' : 'negative'}">${
+          }</small></td><td class="${signedClass(gain)}">${
             gain === null ? '—' : gain.toFixed(2) + '%'
           }</td><td>${q ? esc(new Date(q.asof * 1000).toLocaleString()) : 'Not fetched'}<small>${
             q ? esc(q.source) : 'No data'
@@ -444,11 +444,16 @@ function renderSalePlan() {
     output.push('Estimated gross proceeds: ' + money(gross, currency) + '.');
     if (quantity && fee === null) {
       output.push('Selling fee unavailable. Net proceeds are unconfirmed.');
+      output.push('Gain/loss after selling fee unavailable until a sell fee is entered in Portfolio fit.');
       if (goal.value === 'cash') output.push('Shares are sized against gross proceeds.');
     }
     else {
       const saleFee = quantity ? fee : 0;
       output.push(`Estimated net proceeds: ${money(gross - saleFee, currency)} (${money(saleFee, currency)} selling fee).`);
+      if (quantity && Number.isFinite(position.cost) && position.cost > 0)
+        output.push(`Estimated gain/loss after selling fee: ${money(gross - saleFee - quantity * position.cost, currency)} versus saved average cost, before tax.`);
+      else if (quantity)
+        output.push('Gain/loss unavailable until a positive average cost is saved.');
     }
     if (shortfall !== null) output.push('Estimated cash shortfall: ' + money(shortfall, currency) + '.');
   }
