@@ -132,8 +132,10 @@ DOM = r"""(() => {
         if (!status || status.startsWith('Loading')) return 'loading';
         const metrics = node(id + 'Metrics').querySelectorAll('strong');
         if (metrics.length !== count) return 'metrics missing';
-        if (visible(id + 'Chart') && node(id + 'Chart').querySelector('canvas')) return 'chart ready';
-        return node(id + 'Chart').hidden && metrics[count - 2].textContent.startsWith('Unavailable')
+        const chart = node(id + 'Chart');
+        if (visible(id + 'Chart') && chart.querySelector('canvas')) return 'chart ready';
+        if (chart.textContent.trim().startsWith('Chart unavailable.')) return 'coverage unavailable';
+        return chart.hidden && metrics[count - 2].textContent.startsWith('Unavailable')
             ? 'coverage unavailable' : 'chart missing';
     };
     const advice = Array.from(document.querySelectorAll('#holdings [data-holding-advice]'));
