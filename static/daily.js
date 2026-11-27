@@ -149,8 +149,7 @@ function renderDaily(v) {
   dailyView = v;
   if (typeof renderHoldingAssessments === 'function')
     renderHoldingAssessments(v.holding_assessments);
-  if (activeCandidateCash == null) renderCandidatePlan(v);
-  else if (!$('#candidates').hidden) previewCandidateCash();
+  renderCandidatePlan(v);
   $('#dailyStatus').textContent =
     'Updated ' +
     new Date(v.generated * 1000).toLocaleString() +
@@ -309,8 +308,6 @@ function renderDaily(v) {
   }
 }
 let selectedCandidate = '';
-let activeCandidateCash = null;
-let cashPreviewRequest = 0;
 
 function renderCandidatePlan(value) {
   renderBuyCandidates(value);
@@ -319,57 +316,16 @@ function renderCandidatePlan(value) {
   $('#buyCandidates').removeAttribute('aria-busy');
 }
 
-async function previewCandidateCash() {
-  const token = ++cashPreviewRequest;
-  $('#switchComparison').hidden = true;
-  $('#switchStatus').textContent = 'Calculating comparison…';
-  $('#buyCandidates').setAttribute('aria-busy', 'true');
-  $('#buyCandidatesStatus').textContent = 'Updating ranked quantities…';
-  $('#candidateCashBasis').textContent = 'Calculating with ' + money(activeCandidateCash) + ' of available cash…';
-  try {
-    const plan = await api('candidate-plan', {cash_nok:activeCandidateCash});
-    if (token !== cashPreviewRequest) return;
-    renderCandidatePlan(plan);
-    $('#candidateCashBasis').textContent = 'Using ' + money(activeCandidateCash) + ' of available cash for this preview.';
-  } catch (error) {
-    if (token !== cashPreviewRequest) return;
-    renderCandidatePlan({});
-    $('#candidateCashBasis').textContent = 'Cash preview unavailable. ' + error.message;
-  }
-}
-
-function useRecordedCandidateCash() {
-  cashPreviewRequest++;
-  activeCandidateCash = null;
-  $('#candidateCashForm').reset();
-  $('#candidateCashReset').hidden = true;
-  $('#candidateCashBasis').textContent = 'Using recorded cash. Enter an amount to preview with different cash.';
-}
-$('#candidateCashReset').onclick = () => {
-  useRecordedCandidateCash();
-  if (dailyView) renderCandidatePlan(dailyView);
-  else loadDaily();
-};
-
-$('#candidateCashForm').onsubmit = event => {
-  event.preventDefault();
-  const cash = $('#candidateCash').valueAsNumber;
-  if (!Number.isFinite(cash) || cash < 0 || cash > 1e9) return;
-  activeCandidateCash = cash;
-  $('#candidateCashReset').hidden = false;
-  previewCandidateCash();
-};
-
 function renderBuyCandidates(v) {
   const status = $('#buyCandidatesStatus'),
     list = $('#buyCandidates'),
     recovery = $('#buyCandidatesRecovery');
-  const candidates = Array.isArray(v.buy_candidates) ? v.buy_candidates.slice(0, 5) : [];
+  const candidates = Array.isArray(v.top_candidates) ? v.top_candidates.slice(0, 3) : [];
   const market = $('#candidateMarket');
   const previousFocus = document.activeElement?.dataset?.candidateStock;
   list.innerHTML = '';
   recovery.hidden = true;
-  if (v.buy_candidates_stale) {
+  if (v.buy_candidates_stale && !candidates.length) {
     status.textContent =
       'Research is stale or unavailable. Current signals are required before showing buying candidates.';
     recovery.textContent = 'Refresh research';
@@ -378,9 +334,9 @@ function renderBuyCandidates(v) {
   } else if (candidates.length) {
     status.textContent =
       candidates.length +
-      ' eligible candidate' +
+      ' ranked stock' +
       (candidates.length === 1 ? '' : 's') +
-      ' from your current portfolio and trade plan.';
+      ' from the latest scored market analysis. Buy eligibility is shown separately.';
     if (!candidates.some(c => c.symbol === selectedCandidate)) selectedCandidate = candidates[0].symbol;
     list.innerHTML = candidates
       .map(
@@ -389,11 +345,11 @@ function renderBuyCandidates(v) {
           '<article><button type="button" data-candidate-stock="' + esc(c.symbol) +
           '" aria-pressed="' + (c.symbol === selectedCandidate) + '"><span class="candidate-rank" aria-label="Rank ' +
           esc(c.rank) + '">' + esc(c.rank) + '</span><strong>' + esc(c.name) +
-          '</strong><small>' + esc(c.symbol) + '</small></button><p>' + esc(c.portfolio_reason) +
-          '</p><small>' + esc(c.buy_shares) + ' shares · ' + money(c.total_nok) + ' including estimated fee</small></article>'
+          '</strong><small>' + esc(c.symbol) + '</small></button><p>' + esc(c.reasons && c.reasons.join(' ') || 'Ranked by measured technical evidence.') +
+          '</p><small>' + esc(c.action || 'No current signal') + (c.rank_eligible ? ' · Buy signal' : ' · Not currently buy eligible') + '</small></article>'
       )
       .join('');
-  } else if (v.buy_candidate_research_incomplete) {
+  } else if (v.buy_candidate_research_incomplete && !candidates.length) {
     status.textContent = 'Buying candidates unavailable. Some companies lack usable research evidence.';
     recovery.textContent = 'Refresh research';
     recovery.dataset.action = 'refresh';
@@ -407,12 +363,12 @@ function renderBuyCandidates(v) {
     recovery.dataset.action = warnings.length ? 'portfolio' : 'research';
     recovery.hidden = false;
   }
-  if (!v.buy_candidates_stale && !candidates.length && v.buy_candidate_watch) {
+  if (!candidates.length && v.buy_candidate_watch) {
     const { symbol, reason } = v.buy_candidate_watch;
     status.textContent += ' Highest-scoring evaluated option: ' + symbol +
       '. Does not qualify: ' + reason;
   }
-  if (v.buy_candidates_stale || !candidates.length) selectedCandidate = '';
+  if (!candidates.length) selectedCandidate = '';
   if (previousFocus) {
     [...list.querySelectorAll('button')].find(button => button.dataset.candidateStock === previousFocus)?.focus();
   }
