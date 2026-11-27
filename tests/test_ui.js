@@ -188,7 +188,11 @@ setImmediate(async()=>{
  assert.strictEqual(nodes['#buyCandidatesRecovery'].hidden,false);
  assert.strictEqual(nodes['#buyCandidatesRecovery'].dataset.action,'refresh');
  vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:false,buy_candidate_warnings:['Complete portfolio valuation required']})",context);
- assert(nodes['#buyCandidatesStatus'].textContent.includes('current portfolio inputs'));
+ assert(nodes['#buyCandidatesStatus'].textContent.includes('Complete portfolio valuation required'));
+ assert.strictEqual(nodes['#buyCandidatesRecovery'].dataset.action,'portfolio');
+ vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:false,buy_candidate_warnings:['Ledger reconciliation is required.'],buy_candidate_reviews:[{symbol:'SNTIA.OL',reason:'Reconcile holdings and cash against the ledger before sizing purchases.'}]})",context);
+ assert(nodes['#buyCandidatesStatus'].textContent.includes('SNTIA.OL'));
+ assert(nodes['#buyCandidatesStatus'].textContent.includes('Reconcile holdings and cash'));
  assert.strictEqual(nodes['#buyCandidatesRecovery'].dataset.action,'portfolio');
  vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:false,buy_candidate_warnings:[]})",context);
  assert(nodes['#buyCandidatesStatus'].textContent.includes('No eligible buying candidates'));

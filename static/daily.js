@@ -323,11 +323,16 @@ function renderBuyCandidates(v) {
       .join('');
   } else {
     const warnings = Array.isArray(v.buy_candidate_warnings) ? v.buy_candidate_warnings : [];
-    status.textContent = warnings.length
-      ? 'No candidates can be sized with the current portfolio inputs. ' + warnings[0]
+    const reviews = Array.isArray(v.buy_candidate_reviews) ? v.buy_candidate_reviews : [];
+    const blocked = reviews.find((candidate) => candidate.reason && !candidate.reason.startsWith('Eligible for'));
+    status.textContent = blocked
+      ? 'No purchase quantity for ' + blocked.symbol + ': ' + blocked.reason
+      : warnings.length
+      ? warnings.join(' ')
       : 'No eligible buying candidates under the current portfolio settings.';
-    recovery.textContent = warnings.length ? 'Review portfolio inputs' : 'Explore Research';
-    recovery.dataset.action = warnings.length ? 'portfolio' : 'research';
+    const portfolioBlocked = /portfolio|ledger|sector|reserve|cash|holding|share purchase/i.test(status.textContent);
+    recovery.textContent = blocked && !portfolioBlocked ? 'Review in Research' : warnings.length || blocked ? 'Review Portfolio fit' : 'Explore Research';
+    recovery.dataset.action = blocked && !portfolioBlocked ? 'stock' : warnings.length || blocked ? 'portfolio' : 'research';
     recovery.hidden = false;
   }
 }

@@ -144,7 +144,7 @@ def build(snapshot,report,profile,now=None):
     sells=sell_scenario(snapshot,cards,ctx,profile,report_ok,now)
     blocked_sales={r['symbol'] for r in sells if r['sell_shares']}
     ranked=policy.recommendations(cards.values(),(report or {}).get('promoted_model'))
-    buys=[];blocked=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
+    buys=[];blocked=[];candidate_reviews=[];working=copy.deepcopy(snapshot);working_profile=dict(profile)
     left=profile['purchase_nok'];spent=0.;fees=0.;warnings=list(ctx['warnings'])
     buy_fee=profile['buy_fee_nok']
     minimum_order=buy_fee*(1+100/profile['max_buy_fee_pct'])
@@ -210,6 +210,8 @@ def build(snapshot,report,profile,now=None):
                     working['quotes'][old['symbol']]=q
         if reason:
             blocked.append({'symbol':symbol,'buy_shares':0,'reason':reason})
+        candidate_reviews.append({'symbol':symbol,'name':card.get('name',symbol),'rank':card.get('rank'),
+                                 'reason':reason or 'Eligible for a whole-share purchase under the current budget and portfolio limits.'})
     result_ctx=pf.context(working,working_profile,now)
     sale_proceeds=sum(r['gross_proceeds_nok'] or 0 for r in sells)
     for row in sells:
@@ -222,7 +224,7 @@ def build(snapshot,report,profile,now=None):
             'buy_fees_nok':fees,'cash_after_buys_nok':working_profile['cash_nok'],
             'cash_after_sell_scenario_nok':profile['cash_nok']+sale_proceeds-sell_fees if profile['sell_fee_nok'] is not None and sales_complete else None,
             'sell_fees_nok':sell_fees if profile['sell_fee_nok'] is not None and sales_complete else None,
-            'after_buys':result_ctx,'buys':buys,'holdings':sells,'blocked_buys':blocked,'warnings':warnings,
+            'after_buys':result_ctx,'buys':buys,'candidate_reviews':candidate_reviews,'holdings':sells,'blocked_buys':blocked,'warnings':warnings,
             'max_buy_fee_pct':profile['max_buy_fee_pct'],'review_sell_pct':profile['review_sell_pct'],
             'post_buy_warnings':result_ctx['warnings'],
             'method':'Rule-based share-count scenarios, not optimal trade amounts or forecasts. Buys share one budget and use current cash only; '

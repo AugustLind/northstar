@@ -89,6 +89,19 @@ class TradePlanTests(unittest.TestCase):
         self.assertIsNone(row['sell_shares'])
         self.assertIn('Reconcile',row['reasons'][0])
 
+    def test_candidate_review_explains_why_cash_does_not_produce_a_quantity(self):
+        s=snapshot(0);s['ledger_reconciled']=False
+        v=self.plan(s,cards=[card(action='Hold / monitor')],p=profile(cash_nok=2536))
+        self.assertEqual(v['buys'],[])
+        self.assertEqual(v['candidate_reviews'][0]['symbol'],'B.OL')
+        self.assertIn('Reconcile holdings and cash',v['candidate_reviews'][0]['reason'])
+        s['ledger_reconciled']=True
+        s['positions'][0]['shares']=1
+        s['quotes']['A']={'price':100,'asof':NOW-5*86400,'currency':'NOK'}
+        s['quotes']['A.OL']={'price':100,'asof':NOW-5*86400,'currency':'NOK'}
+        v=self.plan(s,cards=[card(action='Hold / monitor')],p=profile(cash_nok=2536))
+        self.assertIn('Complete tracked portfolio valuation',v['candidate_reviews'][0]['reason'])
+
     def test_budget_above_cash_does_not_reserve_unaffordable_orders(self):
         v=self.plan(cards=[card(),card('C.OL',2)],p=profile(cash_nok=5000,purchase_nok=100000,max_buy_fee_pct=2))
         self.assertEqual(len(v['buys']),1)

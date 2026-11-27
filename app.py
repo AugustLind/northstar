@@ -548,6 +548,7 @@ def daily_view():
     result['buy_candidates']=plan['buys'][:3]
     result['buy_candidates_stale']=not decision_policy.current_report(report,time.time())
     result['buy_candidate_warnings']=plan['warnings']
+    result['buy_candidate_reviews']=plan['candidate_reviews'][:3]
     alerts=daily_board.merge_alerts(read_meta('dashboard_alerts',[]),result['reviews'])
     write_meta('dashboard_alerts',alerts);result['alerts']=alerts
     result['email']=email_worker().status()
