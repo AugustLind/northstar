@@ -1,11 +1,10 @@
 /* Holdings notebook, editor and local export. Depends on app.js and ui-common.js. */
+const holdingSymbol = ({ symbol, currency }) =>
+  currency === 'NOK' && !symbol.includes('.') ? symbol + '.OL' : symbol;
 let holdingAdviceBySymbol = new Map();
 
 function holdingQuote(position, quotes) {
-  const symbol = position.currency === 'NOK' && !position.symbol.includes('.')
-    ? position.symbol + '.OL'
-    : position.symbol;
-  return quotes[symbol] || quotes[position.symbol];
+  return quotes[holdingSymbol(position)] || quotes[position.symbol];
 }
 
 function renderHoldingAdvice(symbol, currency) {
@@ -33,6 +32,7 @@ function updateHoldingAdvice(assessments) {
   for (const cell of document.querySelectorAll('#holdings [data-holding-advice]')) {
     cell.innerHTML = renderHoldingAdvice(cell.dataset.holdingAdvice, cell.dataset.currency);
   }
+  if ($('#salePlanner').open) renderSalePlan();
 }
 
 function render() {
@@ -70,7 +70,11 @@ function render() {
             q ? esc(q.source) : 'No data'
           }</small></td><td><button data-edit="${esc(
             p.symbol
-          )}">Edit</button> <button data-delete="${esc(p.symbol)}">Remove</button></td></tr>`;
+          )}">Edit</button> <button data-delete="${esc(p.symbol)}">Remove</button>${
+            p.shares > 0
+              ? ` <button data-plan-sale="${esc(p.symbol)}" aria-label="Plan a sale for ${esc(p.symbol)}">Plan a sale</button>`
+              : ''
+          }</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="7">Your notebook is empty. Add your first holding or watchlist company.</td></tr>';
@@ -109,13 +113,7 @@ function render() {
         );
       const ctx = state.portfolio_context,
         limit = (state.portfolio_preferences || {}).max_stock_pct;
-      const h =
-        ctx &&
-        (ctx.holdings || []).find(
-          (h) =>
-            h.symbol ===
-            (p.currency === 'NOK' && !p.symbol.includes('.') ? p.symbol + '.OL' : p.symbol)
-        );
+      const h = ctx?.holdings?.find((h) => h.symbol === holdingSymbol(p));
       if (h && h.weight_pct != null && h.weight_pct > limit)
         items.push(
           `Represents ${h.weight_pct.toFixed(
@@ -169,8 +167,7 @@ function renderHoldingAssessments(assessments) {
   $('#holdingAssessments').innerHTML =
     state.positions
       .map((p) => {
-        const symbol =
-          p.currency === 'NOK' && !p.symbol.includes('.') ? p.symbol + '.OL' : p.symbol;
+        const symbol = holdingSymbol(p);
         const a = p.shares > 0 ? bySymbol.get(symbol) : null;
         if (!p.shares)
           return `<article class="card"><h3>${esc(
@@ -245,6 +242,7 @@ async function load(connectedState) {
   state = connectedState ?? await api('state');
   $('#accountStatus').textContent = 'Connected';
   render();
+  if ($('#salePlanner').open) renderSalePlan();
 }
 function edit(
   p = {
@@ -303,7 +301,9 @@ $('#holdings').onclick = async (e) => {
     return;
   }
   const editSymbol = e.target.dataset.edit,
-    del = e.target.dataset.delete;
+    del = e.target.dataset.delete,
+    saleSymbol = e.target.dataset.planSale;
+  if (saleSymbol) openSalePlanner(saleSymbol);
   if (editSymbol) edit(state.positions.find((p) => p.symbol === editSymbol));
   if (del && confirm(`Remove ${del} and its notes?`)) {
     try {
@@ -314,6 +314,149 @@ $('#holdings').onclick = async (e) => {
     }
   }
 };
+let salePlannerSymbol;
+const salePlannerForm = $('#salePlannerForm');
+const positiveSaleNumber = (value) => Number.isFinite(value) && value > 0;
+
+function salePlannerInputs(position) {
+  const { symbol, currency } = position;
+  const canonical = holdingSymbol(position);
+  const quote = holdingQuote(position, state.quotes);
+  const usableQuote = quote?.currency === currency && positiveSaleNumber(quote.price) ? quote : null;
+  const fx = state.quotes['NOK=X'];
+  const rate = currency === 'NOK' ? 1 : fx?.currency === 'NOK' && fresh(fx) ? fx.price : null;
+  const profile = state.portfolio_preferences;
+  const portfolio = state.portfolio_context;
+  const fee = profile?.sell_fee_nok;
+  const weightPerShare =
+    portfolio?.complete && positiveSaleNumber(portfolio.total_nok) && fresh(usableQuote) && rate
+      ? (usableQuote.price * rate * 100) / portfolio.total_nok
+      : null;
+  const holding = portfolio?.holdings?.find((item) => item.symbol === canonical);
+  return {
+    quote: usableQuote,
+    weightPerShare,
+    weight: weightPerShare === null ? null : holding?.weight_pct ?? null,
+    assessment: holdingAdviceBySymbol.get(symbol),
+    fee: fee === 0 ? 0 : fee == null || !rate ? null : fee / rate,
+  };
+}
+
+function openSalePlanner(symbol) {
+  const position = state.positions.find((item) => item.symbol === symbol && item.shares > 0);
+  if (!position) return;
+  salePlannerSymbol = symbol;
+  salePlannerForm.reset();
+  const { weight, quote, assessment } = salePlannerInputs(position);
+  const limit = state.portfolio_preferences?.max_stock_pct;
+  if (weight > limit) salePlannerForm.elements.target.value = limit;
+  if (quote && position.above > quote.price) salePlannerForm.elements.limit.value = position.above;
+  renderSalePlan();
+  $('#salePlanner').showModal();
+  if (!assessment && typeof loadDaily === 'function') loadDaily();
+}
+
+function renderSalePlan() {
+  const position = state.positions.find((item) => item.symbol === salePlannerSymbol && item.shares > 0);
+  if (!position) {
+    $('#salePlanner').close();
+    return;
+  }
+  const { symbol, currency, shares } = position;
+  const { quote, weight, weightPerShare, assessment, fee } = salePlannerInputs(position);
+  const { goal, timing, target, cash, limit } = salePlannerForm.elements;
+  const waiting = timing.value === 'limit';
+  $('#saleTrimFields').hidden = goal.value !== 'trim';
+  $('#saleCashFields').hidden = goal.value !== 'cash';
+  $('#saleLimitFields').hidden = !waiting;
+  $('#saleCashCurrency').textContent = currency;
+  $('#saleLimitCurrency').textContent = currency;
+  $('#salePlannerTitle').textContent = 'Plan a sale for ' + symbol;
+  $('#salePlannerPolicy').textContent = assessment?.label
+    ? 'Current Northstar recommendation: ' + assessment.label + ' · ' + assessment.reason
+    : 'Current Northstar recommendation unavailable.';
+  $('#salePlannerQuote').textContent = quote
+    ? 'Latest quote: ' + money(quote.price, currency) +
+      (Number.isFinite(quote.asof)
+        ? ' · ' + new Date(quote.asof * 1000).toLocaleString()
+        : ' · timestamp unavailable') +
+      (fresh(quote) ? '' : ' · stale')
+    : 'Latest quote unavailable.';
+
+  const price = waiting ? limit.valueAsNumber : quote?.price;
+  const hasPrice = positiveSaleNumber(price);
+  const notes = [];
+  if (state.ledger_reconciled === false)
+    notes.push('These estimates use recorded holdings and cash. Check them against your broker.');
+  if (!hasPrice) notes.push(waiting ? 'Enter a positive limit price.' : 'A market quote is needed for Sell soon.');
+  else if (waiting) {
+    if (quote && price <= quote.price) notes.push('Enter a limit price above the latest quote.');
+    else {
+      if (quote && price === position.above) notes.push('Limit uses your saved upper review price.');
+      notes.push('A limit order may go unfilled.');
+    }
+  }
+  const usablePrice = hasPrice && (!waiting || !quote || price > quote.price);
+  let quantity = null;
+  let shortfall = null;
+  if (goal.value === 'exit') {
+    quantity = shares;
+  } else if (goal.value === 'trim') {
+    const desired = target.valueAsNumber;
+    if (weight !== null) notes.push(`Current weight ${weight.toFixed(2)}%.`);
+    if (weight === null) notes.push('Trim sizing needs a complete, current portfolio valuation.');
+    else if (!Number.isFinite(desired) || desired < 0 || desired > 100)
+      notes.push('Enter a target weight from 0% to 100%.');
+    else {
+      quantity = Math.min(shares, Math.max(0, Math.ceil((weight - desired) / weightPerShare - 1e-10)));
+      const remaining = Math.max(0, weight - quantity * weightPerShare);
+      notes.push(`Estimated remaining weight ${remaining.toFixed(2)}% at current valuation before selling costs.`);
+      if (!quantity) notes.push('This holding is already at or below your target weight.');
+      else if (remaining - desired > 1e-8)
+        notes.push('Selling this entire entry would still leave the stock above your target.');
+    }
+  } else if (goal.value === 'cash') {
+    const desired = cash.valueAsNumber;
+    if (!positiveSaleNumber(desired)) notes.push('Enter a positive cash goal.');
+    else if (usablePrice) {
+      const needed = Math.ceil((desired + (fee ?? 0)) / price - 1e-10);
+      quantity = Math.min(shares, Math.max(1, needed));
+      const gap = desired - (quantity * price - (fee ?? 0));
+      if (gap > 1e-8) {
+        notes.push('The estimate shows the maximum proceeds. Selling the full holding would fall short of the cash goal.');
+        if (fee !== null) shortfall = gap;
+      }
+    }
+  }
+
+  const output = [];
+  if (usablePrice) {
+    const formatPrice = new Intl.NumberFormat('nb-NO', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 12,
+    });
+    output.push(`${waiting ? 'Limit' : 'Estimated sale'} price: ${formatPrice.format(price)} per share.`);
+  }
+  if (quantity !== null) output.push(`Shares to sell: ${quantity}.`);
+  if (quantity !== null && usablePrice) {
+    const gross = quantity * price;
+    output.push('Estimated gross proceeds: ' + money(gross, currency) + '.');
+    if (quantity && fee === null) {
+      output.push('Selling fee unavailable. Net proceeds are unconfirmed.');
+      if (goal.value === 'cash') output.push('Shares are sized against gross proceeds.');
+    }
+    else {
+      const saleFee = quantity ? fee : 0;
+      output.push(`Estimated net proceeds: ${money(gross - saleFee, currency)} (${money(saleFee, currency)} selling fee).`);
+    }
+    if (shortfall !== null) output.push('Estimated cash shortfall: ' + money(shortfall, currency) + '.');
+  }
+  $('#salePlannerResult').textContent = [...output, ...notes].join(' ');
+}
+salePlannerForm.addEventListener('input', renderSalePlan);
+salePlannerForm.addEventListener('submit', (event) => event.preventDefault());
+$('#closeSalePlanner').onclick = () => $('#salePlanner').close();
 $('#refresh').onclick = async () => {
   const b = $('#refresh');
   b.disabled = true;
