@@ -665,7 +665,7 @@
         <div class="sectionhead">
           <div>
             <h2>Your companies</h2>
-            <p>Prices and cost basis use each stock’s currency.</p>
+            <p>Prices and cost basis use each stock’s currency. Recording a completed sale into tracked cash is available for NOK holdings.</p>
           </div>
           <div>
             <button type="button" data-view-plan>Buy / sell share counts</button>
@@ -1302,6 +1302,24 @@
         <p class="muted">Estimates exclude taxes. Place any order separately with your broker.</p>
       </form>
     </dialog>
+    <dialog id="recordSaleDialog" aria-labelledby="recordSaleTitle">
+      <form id="recordSaleForm">
+        <div class="sectionhead">
+          <h2 id="recordSaleTitle">Record a completed sale</h2>
+          <button type="button" id="closeRecordSale">Close</button>
+        </div>
+        <p id="recordSaleSharesHelp"></p>
+        <p class="muted">Records a completed NOK sale in Activity &amp; cash. Net proceeds are added to tracked cash. This does not place an order.</p>
+        <div class="grid">
+          <label>Sale date<input name="date" type="date" required /></label>
+          <label>Number of shares sold<input name="shares" type="number" min="0.00000001" step="any" required /></label>
+          <label>Sale price per share · NOK<input name="price" type="number" min="0.00000001" step="any" required /></label>
+          <label>Selling fee · NOK<input name="selling_fee" type="number" min="0" max="10000" step="any" required /></label>
+        </div>
+        <p id="recordSaleMessage" role="status"></p>
+        <button type="submit">Record sale and add net proceeds to cash</button>
+      </form>
+    </dialog>
     <dialog id="editor">
       <form id="positionForm">
         <div class="sectionhead">
@@ -1358,7 +1376,7 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=c074c790edf3"></script>
       <script src="./app.js?v=ecf46b8afc71"></script>
-      <script src="./portfolio.js?v=12d78537b9f5"></script>
+      <script src="./portfolio.js?v=c4854a1e11a0"></script>
       <script src="./navigation.js?v=ca21460fdd54"></script>
       <script src="./charts.js?v=1a61a2335970"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
