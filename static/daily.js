@@ -69,7 +69,6 @@ function resetTradingWorkspace() {
   overviewAccountLoaded = false;
   dailyView = null;
   selectedCandidate = '';
-  useRecordedCandidateCash();
   renderCandidatePlan({});
   resetWorkspaceCharts();
   $('#holdingMarket').hidden = true;
