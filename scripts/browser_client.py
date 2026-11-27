@@ -28,7 +28,7 @@ class Browser:
         try:
             if not chrome:raise RuntimeError('Chrome is required for the browser smoke check.')
             self.process=subprocess.Popen([chrome,'--headless','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--remote-debugging-port=0','--user-data-dir='+str(profile_path),'about:blank'],stdout=self.log,stderr=self.log,start_new_session=True)
-            for _ in range(100):
+            for _ in range(300):
                 if info.exists():break
                 if self.process.poll() is not None:raise RuntimeError('Chrome exited before DevTools started.')
                 time.sleep(.1)
@@ -62,7 +62,14 @@ class Browser:
                 pass
             if self.process.poll() is None:
                 self.process.terminate()
-                self.process.wait(timeout=10)
+                try:
+                    self.process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    try:
+                        self.process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        pass
         if hasattr(self,'sock'):self.sock.close()
         self.log.seek(0)
         self.startup_output=self.log.read(8192)
