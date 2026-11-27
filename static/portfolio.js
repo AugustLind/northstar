@@ -1,6 +1,13 @@
 /* Holdings notebook, editor and local export. Depends on app.js and ui-common.js. */
 let holdingAdviceBySymbol = new Map();
 
+function holdingQuote(position, quotes) {
+  const symbol = position.currency === 'NOK' && !position.symbol.includes('.')
+    ? position.symbol + '.OL'
+    : position.symbol;
+  return quotes[symbol] || quotes[position.symbol];
+}
+
 function renderHoldingAdvice(symbol, currency) {
   const advice = holdingAdviceBySymbol.get(symbol);
   if (!advice) return '<b>Insufficient data</b><small>No current holding advice.</small>';
@@ -35,7 +42,7 @@ function render() {
   $('#holdings').innerHTML = positions.length
     ? positions
         .map((p) => {
-          const q = quotes[p.symbol],
+          const q = holdingQuote(p, quotes),
             valid = q && q.currency === p.currency;
           const gain = valid && p.cost > 0 ? (q.price / p.cost - 1) * 100 : null;
           return `<tr><td><button type="button" class="holding-market-link" data-holding-market="${esc(p.symbol)}">${esc(p.symbol)}</button><small>${
@@ -68,7 +75,7 @@ function render() {
         .join('')
     : '<tr><td colspan="7">Your notebook is empty. Add your first holding or watchlist company.</td></tr>';
   for (const p of positions) {
-    const q = quotes[p.symbol],
+    const q = holdingQuote(p, quotes),
       items = [];
     if (p.shares > 0 && p.long_term)
       items.push(

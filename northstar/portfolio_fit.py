@@ -71,7 +71,7 @@ def context(snapshot, profile, now=None):
         s=canonical(p['symbol'],p['currency'])
         row=holdings.setdefault(s,{'issuer':company_data.issuer(s),'symbol':s,'shares':0.,'value_nok':0.,'sector':profile['sectors'].get(s),'priced':True})
         row['shares']+=p['shares']
-        q=snapshot['quotes'].get(p['symbol']) or snapshot['quotes'].get(s)
+        q=snapshot['quotes'].get(s) or snapshot['quotes'].get(p['symbol'])
         valid=fresh(q,now) and q.get('currency')==p['currency']
         rate=1.
         if p['currency']=='USD':

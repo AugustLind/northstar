@@ -445,7 +445,11 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
                             prices[s].pop(source_day, None)
                         else:
                             prices[s][source_day] = close
-        splits[s]={day(e['time']):e['ratio'] for e in q.get('events',[]) if e.get('kind')=='split' and finite(e.get('ratio')) and e['ratio']>0}
+        splits[s]={}
+        for action in q.get('events',[]):
+            if action.get('kind')=='split' and finite(action.get('ratio')) and action['ratio']>0:
+                action_date=day(action['time'])
+                splits[s][action_date]=splits[s].get(action_date,1.)*action['ratio']
     end=yesterday
     for s in active+(['NOK=X'] if any(historical[s]['currency']=='USD' for s in active) else []):
         if not prices.get(s):block(s+': account price history is unavailable.');continue

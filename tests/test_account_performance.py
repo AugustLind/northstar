@@ -2,6 +2,7 @@ import copy
 import datetime as dt
 import unittest
 from northstar import account_performance as ap
+from northstar import portfolio_fit
 
 NOW=dt.datetime(2025,1,6,tzinfo=dt.timezone.utc).timestamp()
 def stamp(date):return dt.datetime.fromisoformat(date).replace(tzinfo=dt.timezone.utc).timestamp()
@@ -20,6 +21,33 @@ def setup(events,prices,opening_shares=10,opening_cash=100,opening_cost=10,legac
     return snapshot,baseline
 
 class AccountPerformanceTests(unittest.TestCase):
+    def test_legacy_holding_uses_the_same_canonical_quote_for_value_and_sizing(self):
+        snapshot={'positions':[{'symbol':'A','currency':'NOK','shares':10}],
+                  'quotes':{'A.OL':{'price':100,'currency':'NOK','asof':NOW},
+                            'A':{'price':200,'currency':'NOK','asof':NOW}},
+                  'manual_portfolio_preferences':{'cash_nok':0}}
+        profile=portfolio_fit.preferences(snapshot['manual_portfolio_preferences'])
+
+        account=ap.current_summary(snapshot,NOW)
+        sizing=portfolio_fit.context(snapshot,profile,NOW)
+
+        self.assertEqual(account['current_value_nok'],1000)
+        self.assertEqual(sizing['total_nok'],1000)
+
+    def test_multiple_same_day_splits_match_in_full_history(self):
+        rows=[event(1,'2025-01-02','split',ratio=2),
+              event(2,'2025-01-02','split',ratio=3)]
+        prices=quote([('2025-01-01',100),('2025-01-02',100/6),('2025-01-03',100/6)],
+                     events=[{'time':stamp('2025-01-02'),'kind':'split','ratio':2},
+                             {'time':stamp('2025-01-02'),'kind':'split','ratio':3}])
+        prices['fetched']=stamp('2025-01-03T16:00')
+        snapshot,baseline=setup(rows,prices)
+
+        result=ap.view(snapshot,baseline,rows,stamp('2025-01-06T06:00'))
+
+        self.assertEqual(result['status'],'available')
+        self.assertFalse(any('split' in reason for reason in result['coverage']))
+
     def test_new_listing_without_previous_close_still_counts_in_account_return(self):
         prices = quote([])
         prices.update(price=110, asof=stamp('2025-01-06T12:00'))

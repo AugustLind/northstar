@@ -127,7 +127,8 @@ def build_report(snapshot, universe, min_turnover_nok=250000, as_of=None, promot
     seen = set()
     cards = []
     for p in positions:
-        cards.append(screen(p['symbol'], quotes.get(p['symbol']), p, min_turnover_nok, as_of=now))
+        cards.append(screen(p['symbol'], quotes.get(canonical(p)) or quotes.get(p['symbol']),
+                            p, min_turnover_nok, as_of=now))
         seen.add(canonical(p))
     for symbol in universe:
         if symbol.endswith('.OL') and symbol not in seen:

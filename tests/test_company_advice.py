@@ -90,7 +90,7 @@ class AdviceTests(unittest.TestCase):
                 'cards':[card('A.OL',action='Hold / monitor')]}
         self.assertEqual(self.holding_advice(s,report,p)['label'],'Hold')
 
-        s['quotes']['A']['price']=90
+        s['quotes']['A.OL']['price']=90
         advice=self.holding_advice(s,report,p)
         self.assertEqual(advice['label'],'Insufficient data')
         self.assertIn('confirm the current saved review price',advice['reason'])

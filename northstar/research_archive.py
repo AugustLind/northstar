@@ -130,7 +130,8 @@ def replay(db,identifier,root):
     universe=read(db,manifest['universe_id'],before)['value'];saved=read(db,manifest['report_id'],before)['value']
     snapshot={**manifest['context'],'quotes':{s:r['value'] for s,r in quote_rows.items()},'fundamentals':{s:r['value'] for s,r in financial_rows.items()}}
     from northstar import research
-    rebuilt=research.build_report(snapshot,universe['universe'],universe['min_turnover_nok'],as_of=manifest['report_generated'])
+    rebuilt=research.build_report(snapshot,universe['universe'],universe['min_turnover_nok'],
+                                  as_of=manifest['report_generated'],promoted_model=saved.get('promoted_model'))
     old={c['symbol']:c for c in saved['cards']};new={c['symbol']:c for c in rebuilt['cards']}
     def estimate(card):
         value=(card or {}).get('return_estimate') or {}
