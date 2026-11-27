@@ -20,7 +20,7 @@ import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
-SCOPE = 'oslo-multifactor-v2'
+SCOPE = 'oslo-multifactor-v3'
 UNIVERSE_SOURCE = oslo_universe.SOURCE
 DEFAULT_UNIVERSE = oslo_universe.SYMBOLS
 DEFAULT_SETTINGS = {'universe': DEFAULT_UNIVERSE, 'interval_minutes': 360,
