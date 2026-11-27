@@ -459,12 +459,18 @@
             step="any" /></label
         ><button type="button" id="checkBrokerCash">Compare cash balances</button>
         <p id="brokerCashStatus" role="status"></p>
+        <button type="button" id="overwriteBrokerCash" hidden>Overwrite tracked cash with Nordnet balance</button>
+        <p id="brokerCashOverwriteNote" class="muted" hidden>
+          The overwrite is recorded as a cash adjustment, not a deposit or withdrawal, and affects
+          account investment P&amp;L from its recorded date.
+        </p>
         <p>
-          A mismatch withholds share-count plans until resolved. Import missing transactions or
-          correct the verified opening snapshot; this check does not overwrite cash.
+          A mismatch withholds share-count plans. Import missing transactions, or use the overwrite
+          button to set tracked cash to Nordnet’s reported balance. The overwrite records a dated
+          cash adjustment and does not change holdings.
         </p>
       </section>
-      <h3>Recent imported activity</h3>
+      <h3>Recent ledger activity</h3>
       <div id="ledgerEvents"></div>
       <p id="ledgerMethod" class="muted"></p>
     </section>

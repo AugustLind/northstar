@@ -13,7 +13,7 @@ async function loadLedger() {
       (v.baseline ? ' Opening cutoff: ' + v.baseline.cutoff_date + '.' : '') +
       ' ' +
       v.count +
-      ' imported events · Tracked cash ' +
+      ' ledger events · Tracked cash ' +
       money(v.cash_nok) +
       '.';
     $('#ledgerMethod').textContent = v.method;
@@ -55,6 +55,7 @@ $('#ledgerInitialize').onclick = async () => {
     $('#ledgerMessage').textContent =
       'Opening snapshot saved. Earlier/same-day transactions are history only; only later transactions change cash and holdings.';
     await loadLedger();
+    await reloadHoldings();
     if (typeof loadAccountPerformance === 'function') loadAccountPerformance();
   } catch (e) {
     $('#ledgerMessage').textContent = e.message;
@@ -204,6 +205,7 @@ $('#ledgerApply').onclick = async () => {
       r.duplicates +
       ' duplicates skipped. Verify the result against Nordnet.';
     await loadLedger();
+    await reloadHoldings();
     if (typeof loadAccountPerformance === 'function') loadAccountPerformance();
     await reloadHoldings();
     if (typeof loadResearch === 'function') await loadResearch();
@@ -219,6 +221,7 @@ $('#ledgerFile').onchange = () => {
   $('#ledgerRows').innerHTML = '';
 };
 
+let brokerCashOverwriteRequestId = '';
 $('#checkBrokerCash').onclick = async () => {
   try {
     if (!$('#brokerCash').value) throw Error('Enter Nordnet’s available cash balance.');
@@ -232,11 +235,43 @@ $('#checkBrokerCash').onclick = async () => {
       ' · Difference ' +
       money(r.difference) +
       '.';
+    $('#overwriteBrokerCash').hidden = !r.mismatch_active;
+    $('#brokerCashOverwriteNote').hidden = !r.mismatch_active;
+    brokerCashOverwriteRequestId = r.mismatch_active ? crypto.randomUUID() : '';
     await loadLedger();
+    await reloadHoldings();
     if (typeof loadAccountPerformance === 'function') loadAccountPerformance();
     if (typeof loadQuantityPlan === 'function') loadQuantityPlan();
   } catch (e) {
     $('#brokerCashStatus').textContent = e.message;
+  }
+};
+
+$('#overwriteBrokerCash').onclick = async () => {
+  if (!brokerCashOverwriteRequestId) return;
+  const button=$('#overwriteBrokerCash');
+  button.disabled=true;
+  try{
+    const result=await api('ledger/cash-overwrite',{request_id:brokerCashOverwriteRequestId});
+    brokerCashOverwriteRequestId='';
+    button.hidden=true;
+    $('#brokerCashOverwriteNote').hidden=true;
+    await loadLedger();
+    await reloadHoldings();
+    if(typeof loadAccountPerformance==='function')loadAccountPerformance();
+    if(typeof loadQuantityPlan==='function')loadQuantityPlan();
+    $('#brokerCashStatus').textContent=result.duplicate
+      ? 'This cash overwrite was already applied. Tracked cash is '+money(result.cash_nok)+'.'
+      : 'Tracked cash overwritten from '+money(result.previous_cash_nok)+' to '+money(result.cash_nok)+'. '+
+        (result.adjustment_nok ? money(result.adjustment_nok)+' cash adjustment recorded.' : 'No adjustment was needed.')+
+        (state.ledger_reconciled===true ? '' : state.ledger_reconciled==null
+          ? ' Initialize an opening snapshot to enable sale recording and account performance.'
+          : ' Other holdings or ledger differences may still need review.');
+    $('#brokerCash').value='';
+  }catch(error){
+    $('#brokerCashStatus').textContent=error.message;
+  }finally{
+    button.disabled=false;
   }
 };
 

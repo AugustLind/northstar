@@ -496,6 +496,7 @@ def ledger_view(snapshot=None):
     return {'initialized':bool(baseline),'reconciled':reconciled,'baseline':baseline,'cash_nok':profile['cash_nok'],
             'events':rows,'count':count,'broker_cash_check':read_meta('broker_cash_check'), 'holdings_import':read_meta('holdings_import_status'), 'method':'Net broker cash includes actual fees; the 79 NOK estimate is not charged again. '
             'Transactions on or before the opening snapshot date are history only. Later new events update shares, weighted-average cost and cash. '
+            'Manual overwrites of broker cash are recorded as dated cash adjustments. '
             'Same-day buys are booked before sales for weighted-average bookkeeping; this is not FIFO tax accounting. '
             'After a holdings CSV import or manual financial edit, reconcile by verifying holdings/cash and initializing a new snapshot.'}
 
@@ -594,10 +595,15 @@ def ledger_record_sale(data):
         positions=[dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')]
         baseline=meta('ledger_state')
         if not baseline:raise ValueError('Initialize a verified holdings and cash snapshot in Activity & cash before recording a sale.')
-        if not ledger_reconciliation(positions,profile,baseline,meta('broker_cash_check',{})):
+        cash_check=meta('broker_cash_check',{})
+        if cash_check.get('mismatch_active'):
+            raise ValueError('Broker cash does not match tracked cash. Compare the balances in Activity & cash before recording a sale.')
+        if baseline['fingerprint']!=transactions.fingerprint(positions,profile['cash_nok']):
+            raise ValueError('Holdings or cash changed since the opening snapshot. Reconcile them in Activity & cash before recording a sale.')
+        if not ledger_reconciliation(positions,profile,baseline,cash_check):
             raise ValueError('Reconcile holdings and cash in Activity & cash before recording a sale.')
         if sale_date<=baseline['cutoff_date']:
-            raise ValueError('Sale date must be after the opening snapshot date.')
+            raise ValueError('Sale date must be after the opening snapshot cutoff ('+baseline['cutoff_date']+').')
         held=[p for p in positions if p['currency']=='NOK' and portfolio_fit.canonical(p['symbol'],p['currency'])==symbol]
         if len(held)!=1:raise ValueError('Select one existing NOK holding to record as sold.')
         request_id=str(data['request_id'])
@@ -627,6 +633,57 @@ def broker_cash_check(data):
             'mismatch_active':abs(reported-tracked)>.01}
     write_meta('broker_cash_check',result)
     return result
+
+
+def ledger_overwrite_cash(data):
+    request_id=str(data.get('request_id',''))
+    if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}',request_id):
+        raise ValueError('Cash overwrite request expired. Compare balances again.')
+    uid=hashlib.sha256(('cash-overwrite|'+request_id).encode()).hexdigest()
+    with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        transactions.schema(db)
+        prior=db.execute('SELECT payload FROM ledger_events WHERE uid=?',(uid,)).fetchone()
+        if prior:
+            event=json.loads(prior['payload'])
+            profile_row=db.execute("SELECT payload FROM metadata WHERE key='portfolio_preferences'").fetchone()
+            profile=portfolio_fit.preferences(json.loads(profile_row['payload']) if profile_row else {})
+            return {'cash_nok':profile['cash_nok'],'adjustment_nok':event.get('net_cash',0),'duplicate':True}
+        check_row=db.execute("SELECT payload FROM metadata WHERE key='broker_cash_check'").fetchone()
+        if not check_row:raise ValueError('Compare tracked cash with Nordnet before overwriting it.')
+        check=json.loads(check_row['payload'])
+        reported=portfolio_fit.number(check.get('reported_cash'),'Nordnet cash',1e9)
+        profile_row=db.execute("SELECT payload FROM metadata WHERE key='portfolio_preferences'").fetchone()
+        profile=portfolio_fit.preferences(json.loads(profile_row['payload']) if profile_row else {})
+        positions=[dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        baseline_row=db.execute("SELECT payload FROM metadata WHERE key='ledger_state'").fetchone()
+        baseline=json.loads(baseline_row['payload']) if baseline_row else None
+        previous=profile['cash_nok'];adjustment=reported-previous
+        day=datetime.now(timezone.utc).date().isoformat()
+        if abs(adjustment)>.0000001:
+            event={'id':0,'uid':uid,'request_id':request_id,'date':day,'type':'cash_adjustment',
+                   'name':'Broker cash overwrite','symbol':'','quantity':0.,'net_cash':adjustment,
+                   'currency':'NOK','fee':None,'reported_cash_nok':reported}
+            db.execute('INSERT INTO ledger_events VALUES (?,?,?)',(uid,day,json.dumps(event,allow_nan=False)))
+        profile={**profile,'cash_nok':reported}
+        db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('portfolio_preferences',json.dumps(profile,allow_nan=False)))
+        if baseline:
+            # An explicit broker-cash overwrite is a reconciliation of the current account
+            # state. Use today's holdings and cash as a new opening point so stale ledger
+            # fingerprints cannot continue to block sales and account calculations.
+            baseline={'cutoff_date':day,'created':time.time(),'opening_cash_nok':reported,
+                      'opening_positions':[{k:p[k] for k in ('symbol','currency','shares','cost')} for p in positions],
+                      'fingerprint':transactions.fingerprint(positions,reported)}
+            archived=dict(baseline)
+            cursor=db.execute('INSERT INTO account_baselines(created,cutoff_date,payload) VALUES (?,?,?)',
+                              (baseline['created'],day,json.dumps(archived,allow_nan=False)))
+            baseline['baseline_id']=cursor.lastrowid
+            db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',('ledger_state',json.dumps(baseline,allow_nan=False)))
+        db.execute("DELETE FROM metadata WHERE key='broker_cash_check'")
+    if WORKER:WORKER.trigger()
+    current=state()
+    return {'cash_nok':reported,'previous_cash_nok':previous,'adjustment_nok':adjustment,
+            'reconciled':current.get('ledger_reconciled') is True,'duplicate':False}
 
 
 def daily_view():
@@ -995,6 +1052,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == '/api/ledger/inspect':return self.send_json(ledger_inspect(data))
             elif self.path == '/api/ledger/preview':return self.send_json(ledger_preview(data))
             elif self.path == '/api/ledger/apply':return self.send_json(ledger_apply(data))
+            elif self.path == '/api/ledger/cash-overwrite':return self.send_json(ledger_overwrite_cash(data))
             elif self.path == '/api/ledger/sell':return self.send_json(ledger_record_sale(data))
             elif self.path == '/api/alerts/read':
                 ids=data.get('ids',[])
