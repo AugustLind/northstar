@@ -14,6 +14,7 @@ METHOD=('Account valuations use historical-share-unit closes, recorded quantitie
         'Net broker cash already includes fees and withholding; reported fee fields are informational. '
         'Dividend income is recognised on its recorded cash date, not inferred from adjusted prices. '
         'Daily-linked returns assume external deposits/withdrawals occur at day end; transaction exports contain no intraday timing. '
+        'Manual broker-cash overwrites are dated cash adjustments, not external contributions, and affect measured account P&L. '
         'Modified Dietz is a date-weighted approximation, not certified true time-weighted or broker-reported performance. '
         'USD holdings use same-date USD/NOK; issuer business-currency exposure is not inferred. '
         'No missing trades, unsupported transfers, accruals, corporate actions or historical cost bases are invented.')
@@ -282,7 +283,7 @@ def portfolio_performance(snapshot, baseline, events, now):
             holdings = positions_map(snapshot['positions'])
             cash = snapshot['manual_portfolio_preferences']['cash_nok']
             if any(e.get('currency') != 'NOK' or not finite(e.get('net_cash')) or
-                   e['type'] not in {'buy', 'sell', 'split', 'deposit', 'withdrawal', 'dividend', 'interest', 'fee'}
+                   e['type'] not in {'buy', 'sell', 'split', 'deposit', 'withdrawal', 'dividend', 'interest', 'fee', 'cash_adjustment'}
                    for e in since_prior):
                 raise ValueError('Unsupported ledger activity in the measurement period.')
             for event in reversed(since_prior):
@@ -391,7 +392,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
     if cutoff>=yesterday:
         block('At least one completed UTC day after the verified opening cutoff is required.');return out
     selected=sorted((e for e in events if e['date']>cutoff),key=event_order)
-    if any(e.get('currency')!='NOK' or e['type'] not in ('buy','sell','split','deposit','withdrawal','dividend','interest','fee')
+    if any(e.get('currency')!='NOK' or e['type'] not in ('buy','sell','split','deposit','withdrawal','dividend','interest','fee','cash_adjustment')
            or not finite(e.get('net_cash')) for e in selected):
         block('Unsupported transaction currency/type or nonfinite cash amount prevents a complete account calculation.');return out
     try:

@@ -1103,12 +1103,18 @@
                   step="any" /></label
               ><button type="button" id="checkBrokerCash">Compare cash balances</button>
               <p id="brokerCashStatus" role="status"></p>
+              <button type="button" id="overwriteBrokerCash" hidden>Overwrite tracked cash with Nordnet balance</button>
+              <p id="brokerCashOverwriteNote" class="muted" hidden>
+                The overwrite is recorded as a cash adjustment, not a deposit or withdrawal, and affects
+                account investment P&amp;L from its recorded date.
+              </p>
               <p>
-                A mismatch withholds share-count plans until resolved. Import missing transactions or
-                correct the verified opening snapshot; this check does not overwrite cash.
+                A mismatch withholds share-count plans. Import missing transactions, or use the overwrite
+                button to set tracked cash to Nordnet’s reported balance. The overwrite records a dated
+                cash adjustment and does not change holdings.
               </p>
             </section>
-            <h3>Recent imported activity</h3>
+            <h3>Recent ledger activity</h3>
             <div id="ledgerEvents"></div>
             <p id="ledgerMethod" class="muted"></p>
           </section>
@@ -1310,6 +1316,7 @@
         </div>
         <p id="recordSaleSharesHelp"></p>
         <p class="muted">Records a completed NOK sale in Activity &amp; cash. Net proceeds are added to tracked cash. This does not place an order.</p>
+        <p class="muted">If blocked, compare cash with your broker and import missing transactions. If holdings or cash were changed outside the ledger, verify both against your broker before setting a new opening snapshot; a new snapshot changes the performance start date.</p>
         <div class="grid">
           <label>Sale date<input name="date" type="date" required /></label>
           <label>Number of shares sold<input name="shares" type="number" min="0.00000001" step="any" required /></label>
@@ -1317,6 +1324,7 @@
           <label>Selling fee · NOK<input name="selling_fee" type="number" min="0" max="10000" step="any" required /></label>
         </div>
         <p id="recordSaleMessage" role="status"></p>
+        <button id="recordSaleActivity" type="button" hidden>Open Activity &amp; cash</button>
         <button type="submit">Record sale and add net proceeds to cash</button>
       </form>
     </dialog>
@@ -1376,7 +1384,7 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=c074c790edf3"></script>
       <script src="./app.js?v=ecf46b8afc71"></script>
-      <script src="./portfolio.js?v=c4854a1e11a0"></script>
+      <script src="./portfolio.js?v=780636b4e866"></script>
       <script src="./navigation.js?v=ca21460fdd54"></script>
       <script src="./charts.js?v=1a61a2335970"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>
@@ -1384,7 +1392,7 @@
       <script src="./portfolio-fit.js?v=23335f259d4c"></script>
       <script src="./holdings-import.js?v=66d1af659957"></script>
       <script src="./trade-plan.js?v=c368342a23f8"></script>
-      <script src="./ledger.js?v=2145d92f2206"></script>
+      <script src="./ledger.js?v=e62a5662104c"></script>
       <script src="./lightweight-charts.js?v=a583392cf759"></script>
       <script src="./workspace-charts.js?v=4156a88ee685"></script>
       <script src="./account-performance.js?v=90a4a3cdb051"></script>

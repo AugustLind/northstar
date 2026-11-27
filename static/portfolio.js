@@ -467,18 +467,38 @@ $('#closeSalePlanner').onclick = () => $('#salePlanner').close();
 
 let recordSaleSymbol = '', recordSaleRequestId = '';
 const recordSaleForm = $('#recordSaleForm');
+function recordSaleGuidance(message) {
+  if (message.includes('Broker cash does not match'))
+    return 'Compare your current available cash with the broker in Activity & cash. Import any missing transactions; the cash comparison does not change tracked cash.';
+  if (message.includes('Holdings or cash changed since'))
+    return 'Holdings or cash changed outside the ledger. In Activity & cash, import missing activity or verify all holdings and cash against your broker before setting a new opening snapshot. A new snapshot changes the performance start date.';
+  if (message.includes('Initialize a verified'))
+    return 'No opening snapshot is set. In Activity & cash, verify holdings and cash against your broker, then use them as the opening snapshot.';
+  if (message.includes('Sale date must be after the opening snapshot cutoff'))
+    return 'Choose a sale date after the cutoff shown in Activity & cash. Transactions on or before that date are treated as already included in the opening snapshot.';
+  return '';
+}
 function openRecordSale(symbol) {
   const position=state.positions.find((item)=>item.symbol===symbol && item.shares>0 && item.currency==='NOK');
   if(!position)return;
+  const keepDraft=recordSaleSymbol===symbol && recordSaleRequestId;
   recordSaleSymbol=symbol;
-  recordSaleRequestId=crypto.randomUUID();
-  recordSaleForm.reset();
-  recordSaleForm.elements.date.value=new Date().toISOString().slice(0,10);
+  if(!keepDraft){
+    recordSaleRequestId=crypto.randomUUID();
+    recordSaleForm.reset();
+    recordSaleForm.elements.date.value=new Date().toISOString().slice(0,10);
+    recordSaleForm.elements.selling_fee.value=state.portfolio_preferences?.sell_fee_nok ?? '';
+  }
   recordSaleForm.elements.shares.max=position.shares;
-  recordSaleForm.elements.selling_fee.value=state.portfolio_preferences?.sell_fee_nok ?? '';
   $('#recordSaleTitle').textContent='Record a completed sale · '+symbol;
   $('#recordSaleSharesHelp').textContent='Currently tracked: '+position.shares+' shares.';
-  $('#recordSaleMessage').textContent='This records the completed sale in the ledger and adds sale proceeds after the fee to tracked cash. An opening snapshot is required.';
+  const needsReconciliation=state.ledger_reconciled!==true;
+  $('#recordSaleMessage').textContent=needsReconciliation
+    ? state.ledger_reconciled===false
+      ? 'The ledger reports that tracked holdings or cash need reconciliation. Open Activity & cash to compare balances and review ledger activity.'
+      : 'An opening snapshot has not been initialized. Open Activity & cash to verify holdings and cash against your broker.'
+    : 'This records the completed sale in the ledger and adds sale proceeds after the fee to tracked cash. An opening snapshot is required.';
+  $('#recordSaleActivity').hidden=!needsReconciliation;
   $('#recordSaleDialog').showModal();
 }
 recordSaleForm.onsubmit=async(event)=>{
@@ -487,8 +507,9 @@ recordSaleForm.onsubmit=async(event)=>{
   const submit=recordSaleForm.querySelector('[type="submit"]');
   submit.disabled=true;
   $('#recordSaleMessage').textContent='Recording sale…';
+  let data;
   try{
-    const data=await api('ledger/sell',{
+    data=await api('ledger/sell',{
       symbol:recordSaleSymbol,
       date:recordSaleForm.elements.date.value,
       shares:Number(recordSaleForm.elements.shares.value),
@@ -496,21 +517,32 @@ recordSaleForm.onsubmit=async(event)=>{
       fee:Number(recordSaleForm.elements.selling_fee.value),
       request_id:recordSaleRequestId,
     });
-    $('#recordSaleMessage').textContent='Recorded '+data.shares_sold+' shares. Net proceeds '+money(data.net_cash)+' added to cash; tracked cash is now '+money(data.cash_nok)+'. Remaining shares: '+data.remaining_shares+'.';
-    $('#message').textContent=$('#recordSaleMessage').textContent;
-    await reloadHoldings();
-    if(typeof loadLedger==='function')await loadLedger();
-    if(typeof loadAccountPerformance==='function')loadAccountPerformance();
-    if(typeof loadQuantityPlan==='function')loadQuantityPlan();
-    if(typeof loadResearch==='function')await loadResearch();
-    $('#recordSaleDialog').close();
   }catch(error){
-    $('#recordSaleMessage').textContent=error.message;
-  }finally{
+    const guidance=recordSaleGuidance(error.message);
+    $('#recordSaleMessage').textContent=guidance ? error.message+' '+guidance : error.message;
+    $('#recordSaleActivity').hidden=!guidance;
     submit.disabled=false;
+    return;
   }
+  $('#recordSaleMessage').textContent='Recorded '+data.shares_sold+' shares. Net proceeds '+money(data.net_cash)+' added to cash; tracked cash is now '+money(data.cash_nok)+'. Remaining shares: '+data.remaining_shares+'.';
+  $('#message').textContent=$('#recordSaleMessage').textContent;
+  $('#recordSaleDialog').close();
+  recordSaleSymbol='';recordSaleRequestId='';recordSaleForm.reset();
+  submit.disabled=false;
+  await reloadHoldings();
+  if(typeof loadLedger==='function')await loadLedger();
+  if(typeof loadAccountPerformance==='function')loadAccountPerformance();
+  if(typeof loadQuantityPlan==='function')loadQuantityPlan();
+  if(typeof loadResearch==='function')await loadResearch();
 };
-$('#closeRecordSale').onclick=()=>$('#recordSaleDialog').close();
+$('#recordSaleActivity').onclick=()=>{
+  $('#recordSaleDialog').close();
+  openWorkspace('activity');
+};
+$('#closeRecordSale').onclick=()=>{
+  $('#recordSaleDialog').close();
+  recordSaleSymbol='';recordSaleRequestId='';recordSaleForm.reset();
+};
 $('#refresh').onclick = async () => {
   const b = $('#refresh');
   b.disabled = true;

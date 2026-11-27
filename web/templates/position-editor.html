@@ -38,6 +38,7 @@
     </div>
     <p id="recordSaleSharesHelp"></p>
     <p class="muted">Records a completed NOK sale in Activity &amp; cash. Net proceeds are added to tracked cash. This does not place an order.</p>
+    <p class="muted">If blocked, compare cash with your broker and import missing transactions. If holdings or cash were changed outside the ledger, verify both against your broker before setting a new opening snapshot; a new snapshot changes the performance start date.</p>
     <div class="grid">
       <label>Sale date<input name="date" type="date" required /></label>
       <label>Number of shares sold<input name="shares" type="number" min="0.00000001" step="any" required /></label>
@@ -45,6 +46,7 @@
       <label>Selling fee · NOK<input name="selling_fee" type="number" min="0" max="10000" step="any" required /></label>
     </div>
     <p id="recordSaleMessage" role="status"></p>
+    <button id="recordSaleActivity" type="button" hidden>Open Activity &amp; cash</button>
     <button type="submit">Record sale and add net proceeds to cash</button>
   </form>
 </dialog>
