@@ -55,8 +55,8 @@ class MultiAnalysisTests(unittest.TestCase):
         self.assertEqual(report['coverage']['unavailable'],1)
 
     def test_universe_is_broad_and_unique(self):
-        self.assertEqual(len(universe.SYMBOLS),180)
-        self.assertEqual(len(set(universe.SYMBOLS)),180)
+        self.assertEqual(len(universe.SYMBOLS),290)
+        self.assertEqual(len(set(universe.SYMBOLS)),290)
         self.assertTrue(all(s.endswith('.OL') for s in universe.SYMBOLS))
         self.assertIn('KOG.OL',universe.SYMBOLS)
         self.assertIn('PHO.OL',universe.SYMBOLS)

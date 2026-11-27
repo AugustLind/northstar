@@ -120,11 +120,11 @@ def write_meta(key, value, *, timeout=5.0):
 
 def settings():
     saved = read_meta('settings', {})
-    # Migrate the earlier US/large-cap screen once without changing holdings.
+    # Expand older scan lists while preserving saved Oslo symbols and holdings.
     if saved.get('market_scope') != research.SCOPE:
         extra = [s for s in saved.get('universe',[]) if re.fullmatch(r'[A-Z0-9][A-Z0-9\-]{0,16}\.OL',s)]
         saved = {k: v for k, v in saved.items() if k in ('model', 'llm_enabled', 'interval_minutes', 'min_turnover_nok')}
-        saved['universe'] = list(dict.fromkeys(research.DEFAULT_UNIVERSE + extra))[:500]
+        saved['universe'] = list(dict.fromkeys(extra + research.DEFAULT_UNIVERSE))[:500]
     return {**research.DEFAULT_SETTINGS, **saved}
 
 def save_settings(data):

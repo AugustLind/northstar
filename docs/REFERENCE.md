@@ -21,7 +21,7 @@ The background worker starts with the app, refreshes quotes, builds recommendati
 
 ## Broad scan, top 20 and interactive charts
 
-- The default scan covers **180 Oslo tickers**, from a dated 26 October 2026 listing snapshot, rather than the earlier 34-name sample. It is a broad subset, not a complete/live exchange directory. [Snapshot source](https://stockanalysis.com/list/oslo-bors/). Settings accept up to 500 tickers. Older settings migrate to the broader default while retaining custom Oslo symbols and portfolio records.
+- The default scan covers **290 Oslo tickers** from the 27 November 2026 listing snapshot. [Snapshot source](https://stockanalysis.com/list/oslo-bors/). Settings accept up to 500 tickers. Older settings migrate to the broader default while retaining custom Oslo symbols and portfolio records.
 - Every stock with sufficient fresh history gets five technical analyses: Trend, Momentum, Risk, Timing and Liquidity. The default view shows up to 20 eligible stocks by weighted overall score. If fewer qualify, it shows fewer; it never fills missing places with illiquid or unpriced stocks.
 - Sort any view by an individual component, search names/tickers, switch to all stocks or holdings, and open **Explore** for the full breakdown and reasons. The top 20 contains only stocks passing the complete entry policy. Sorting by another component reorders that same selection. Other analysed stocks retain diagnostic component scores without entry ranks.
 
