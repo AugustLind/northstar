@@ -72,7 +72,7 @@ function render() {
             p.symbol
           )}">Edit</button> <button data-delete="${esc(p.symbol)}">Remove</button>${
             p.shares > 0
-              ? ` <button data-plan-sale="${esc(p.symbol)}" aria-label="Plan a sale for ${esc(p.symbol)}">Plan a sale</button>`
+              ? ` <button data-plan-sale="${esc(p.symbol)}" aria-label="Plan a sale for ${esc(p.symbol)}">Plan a sale</button>${p.currency === 'NOK' ? ` <button data-record-sale="${esc(p.symbol)}" aria-label="Record sold shares for ${esc(p.symbol)}">Sold…</button>` : ''}`
               : ''
           }</td></tr>`;
         })
@@ -302,8 +302,10 @@ $('#holdings').onclick = async (e) => {
   }
   const editSymbol = e.target.dataset.edit,
     del = e.target.dataset.delete,
-    saleSymbol = e.target.dataset.planSale;
+    saleSymbol = e.target.dataset.planSale,
+    recordSaleSymbol = e.target.dataset.recordSale;
   if (saleSymbol) openSalePlanner(saleSymbol);
+  if (recordSaleSymbol) openRecordSale(recordSaleSymbol);
   if (editSymbol) edit(state.positions.find((p) => p.symbol === editSymbol));
   if (del && confirm(`Remove ${del} and its notes?`)) {
     try {
@@ -462,6 +464,53 @@ function renderSalePlan() {
 salePlannerForm.addEventListener('input', renderSalePlan);
 salePlannerForm.addEventListener('submit', (event) => event.preventDefault());
 $('#closeSalePlanner').onclick = () => $('#salePlanner').close();
+
+let recordSaleSymbol = '', recordSaleRequestId = '';
+const recordSaleForm = $('#recordSaleForm');
+function openRecordSale(symbol) {
+  const position=state.positions.find((item)=>item.symbol===symbol && item.shares>0 && item.currency==='NOK');
+  if(!position)return;
+  recordSaleSymbol=symbol;
+  recordSaleRequestId=crypto.randomUUID();
+  recordSaleForm.reset();
+  recordSaleForm.elements.date.value=new Date().toISOString().slice(0,10);
+  recordSaleForm.elements.shares.max=position.shares;
+  recordSaleForm.elements.selling_fee.value=state.portfolio_preferences?.sell_fee_nok ?? '';
+  $('#recordSaleTitle').textContent='Record a completed sale · '+symbol;
+  $('#recordSaleSharesHelp').textContent='Currently tracked: '+position.shares+' shares.';
+  $('#recordSaleMessage').textContent='This records the completed sale in the ledger and adds sale proceeds after the fee to tracked cash. An opening snapshot is required.';
+  $('#recordSaleDialog').showModal();
+}
+recordSaleForm.onsubmit=async(event)=>{
+  event.preventDefault();
+  if(!recordSaleForm.reportValidity())return;
+  const submit=recordSaleForm.querySelector('[type="submit"]');
+  submit.disabled=true;
+  $('#recordSaleMessage').textContent='Recording sale…';
+  try{
+    const data=await api('ledger/sell',{
+      symbol:recordSaleSymbol,
+      date:recordSaleForm.elements.date.value,
+      shares:Number(recordSaleForm.elements.shares.value),
+      price:Number(recordSaleForm.elements.price.value),
+      fee:Number(recordSaleForm.elements.selling_fee.value),
+      request_id:recordSaleRequestId,
+    });
+    $('#recordSaleMessage').textContent='Recorded '+data.shares_sold+' shares. Net proceeds '+money(data.net_cash)+' added to cash; tracked cash is now '+money(data.cash_nok)+'. Remaining shares: '+data.remaining_shares+'.';
+    $('#message').textContent=$('#recordSaleMessage').textContent;
+    await reloadHoldings();
+    if(typeof loadLedger==='function')await loadLedger();
+    if(typeof loadAccountPerformance==='function')loadAccountPerformance();
+    if(typeof loadQuantityPlan==='function')loadQuantityPlan();
+    if(typeof loadResearch==='function')await loadResearch();
+    $('#recordSaleDialog').close();
+  }catch(error){
+    $('#recordSaleMessage').textContent=error.message;
+  }finally{
+    submit.disabled=false;
+  }
+};
+$('#closeRecordSale').onclick=()=>$('#recordSaleDialog').close();
 $('#refresh').onclick = async () => {
   const b = $('#refresh');
   b.disabled = true;

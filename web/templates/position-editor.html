@@ -30,6 +30,24 @@
     <p class="muted">Estimates exclude taxes. Place any order separately with your broker.</p>
   </form>
 </dialog>
+<dialog id="recordSaleDialog" aria-labelledby="recordSaleTitle">
+  <form id="recordSaleForm">
+    <div class="sectionhead">
+      <h2 id="recordSaleTitle">Record a completed sale</h2>
+      <button type="button" id="closeRecordSale">Close</button>
+    </div>
+    <p id="recordSaleSharesHelp"></p>
+    <p class="muted">Records a completed NOK sale in Activity &amp; cash. Net proceeds are added to tracked cash. This does not place an order.</p>
+    <div class="grid">
+      <label>Sale date<input name="date" type="date" required /></label>
+      <label>Number of shares sold<input name="shares" type="number" min="0.00000001" step="any" required /></label>
+      <label>Sale price per share · NOK<input name="price" type="number" min="0.00000001" step="any" required /></label>
+      <label>Selling fee · NOK<input name="selling_fee" type="number" min="0" max="10000" step="any" required /></label>
+    </div>
+    <p id="recordSaleMessage" role="status"></p>
+    <button type="submit">Record sale and add net proceeds to cash</button>
+  </form>
+</dialog>
 <dialog id="editor">
   <form id="positionForm">
     <div class="sectionhead">

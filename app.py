@@ -572,6 +572,54 @@ def ledger_apply(data):
     return {'imported':result['imported'],'duplicates':result['duplicates']}
 
 
+def ledger_record_sale(data):
+    symbol=portfolio_fit.canonical(data.get('symbol'),'NOK')
+    shares=portfolio_fit.number(data.get('shares'),'Shares to sell',1e9)
+    price=portfolio_fit.number(data.get('price'),'Sale price per share',1e9)
+    fee=portfolio_fit.number(data.get('fee'),'Selling fee',10000)
+    if shares<=0 or price<=0:raise ValueError('Enter a positive share count and sale price.')
+    if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}',str(data.get('request_id',''))):
+        raise ValueError('Sale request expired. Close the form and try again.')
+    sale_date=transactions.date(data.get('date',''))
+    if sale_date>datetime.now(timezone.utc).date().isoformat():raise ValueError('Sale date cannot be in the future.')
+    gross=shares*price
+    net_cash=gross-fee
+    if not math.isfinite(gross) or net_cash<=0:raise ValueError('Selling fee must be less than gross sale proceeds.')
+    with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        def meta(key,default=None):
+            row=db.execute('SELECT payload FROM metadata WHERE key=?',(key,)).fetchone()
+            return json.loads(row['payload']) if row else default
+        profile=portfolio_fit.preferences(meta('portfolio_preferences',{}))
+        positions=[dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        baseline=meta('ledger_state')
+        if not baseline:raise ValueError('Initialize a verified holdings and cash snapshot in Activity & cash before recording a sale.')
+        if not ledger_reconciliation(positions,profile,baseline,meta('broker_cash_check',{})):
+            raise ValueError('Reconcile holdings and cash in Activity & cash before recording a sale.')
+        if sale_date<=baseline['cutoff_date']:
+            raise ValueError('Sale date must be after the opening snapshot date.')
+        held=[p for p in positions if p['currency']=='NOK' and portfolio_fit.canonical(p['symbol'],p['currency'])==symbol]
+        if len(held)!=1:raise ValueError('Select one existing NOK holding to record as sold.')
+        request_id=str(data['request_id'])
+        uid=hashlib.sha256(('manual-sale|'+request_id).encode()).hexdigest()
+        duplicate=db.execute('SELECT 1 FROM ledger_events WHERE uid=?',(uid,)).fetchone()
+        if not duplicate and shares>held[0]['shares']+1e-8:raise ValueError('Shares sold cannot exceed the current holding.')
+        row={'id':1,'uid':uid,'date':sale_date,'type':'sell','name':symbol,'symbol':symbol,
+             'quantity':shares,'net_cash':net_cash,'currency':'NOK','fee':fee,'error':None,
+             'broker_id_present':True}
+        result=transactions.apply(db,[row],[{'id':1,'symbol':symbol}],baseline,profile,positions)
+        last=meta('last_trades',{})
+        for s,t in result['last_trades'].items():last[s]=max(t,last.get(s,0))
+        for key,value in [('portfolio_preferences',result['profile']),('ledger_state',result['ledger']),('last_trades',last)]:
+            db.execute('INSERT OR REPLACE INTO metadata VALUES (?,?)',(key,json.dumps(value,allow_nan=False)))
+        updated=[dict(p) for p in db.execute('SELECT * FROM positions ORDER BY symbol')]
+        remaining=sum(p['shares'] for p in updated if p['currency']=='NOK' and portfolio_fit.canonical(p['symbol'],p['currency'])==symbol)
+    if WORKER:WORKER.trigger()
+    return {'shares_sold':shares,'price':price,'gross_proceeds':gross,'fee':fee,'net_cash':net_cash,
+            'cash_nok':result['profile']['cash_nok'],'remaining_shares':remaining,
+            'imported':result['imported'],'duplicates':result['duplicates']}
+
+
 def broker_cash_check(data):
     reported=portfolio_fit.number(data.get('cash_nok'),'Broker cash',1e9)
     tracked=state()['manual_portfolio_preferences']['cash_nok']
@@ -947,6 +995,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == '/api/ledger/inspect':return self.send_json(ledger_inspect(data))
             elif self.path == '/api/ledger/preview':return self.send_json(ledger_preview(data))
             elif self.path == '/api/ledger/apply':return self.send_json(ledger_apply(data))
+            elif self.path == '/api/ledger/sell':return self.send_json(ledger_record_sale(data))
             elif self.path == '/api/alerts/read':
                 ids=data.get('ids',[])
                 if not isinstance(ids,list):raise ValueError('Alert IDs must be a list.')
