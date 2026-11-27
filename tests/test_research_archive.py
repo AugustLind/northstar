@@ -47,3 +47,18 @@ class ArchiveTests(unittest.TestCase):
         value=ar.replay(self.db,id,app.ROOT)
         self.assertEqual(value['differences'],0);self.assertTrue(value['same_analysis_code'])
         self.assertEqual(ar.read(self.db,ar.read(self.db,id)['value']['quote_ids']['A.OL'])['value'],saved['quotes']['A.OL'])
+
+    def test_replay_uses_the_promoted_model_from_the_recorded_run(self):
+        q=quote();q['currency']='NOK'
+        snapshot={'positions':[],'quotes':{'A.OL':q,'B.OL':copy.deepcopy(q)},
+                  'fundamentals':{},'portfolio_preferences':{}}
+        model={'max_positions':1}
+        report=research.build_report(snapshot,['A.OL','B.OL'],promoted_model=model)
+        self.assertEqual(len(report['top20']),1)
+        identifier=ar.capture_run(self.db,report,snapshot,{'universe':['A.OL','B.OL']},
+                                  ar.analysis_fingerprint(app.ROOT))
+
+        replay=ar.replay(self.db,identifier,app.ROOT)
+
+        self.assertTrue(replay['same_analysis_code'])
+        self.assertEqual(replay['differences'],0)

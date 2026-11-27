@@ -355,19 +355,26 @@ def ledger_reconciliation(positions, profile, baseline, cash_check):
 
 def state(include_fundamentals=False):
     with connect() as db:
+        db.execute('BEGIN')
         result = {'positions': [dict(r) for r in db.execute('SELECT * FROM positions ORDER BY symbol')],
                 'quotes': {r['symbol']: json.loads(r['payload']) for r in db.execute('SELECT * FROM quotes')}}
+        metadata_filter = "key IN ('portfolio_preferences','signal_state','last_trades','ledger_state','broker_cash_check') OR key LIKE 'company:%'"
         if include_fundamentals:
-            result['fundamentals'] = {r['key'].split(':', 1)[1]: json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'fundamentals:%'")}
-            result['announcements']=read_meta('announcements_feed',{})
-        result['companies']={r['key'].split(':',1)[1]:json.loads(r['payload']) for r in db.execute("SELECT key,payload FROM metadata WHERE key LIKE 'company:%'")}
-        result['manual_portfolio_preferences']=portfolio_fit.preferences(read_meta('portfolio_preferences',{}))
+            metadata_filter += " OR key LIKE 'fundamentals:%' OR key='announcements_feed'"
+        metadata = {r['key']: json.loads(r['payload']) for r in db.execute(
+            'SELECT key,payload FROM metadata WHERE ' + metadata_filter)}
+        if include_fundamentals:
+            result['fundamentals'] = {key.split(':', 1)[1]: value for key,value in metadata.items()
+                                      if key.startswith('fundamentals:')}
+            result['announcements']=metadata.get('announcements_feed',{})
+        result['companies']={key.split(':',1)[1]:value for key,value in metadata.items() if key.startswith('company:')}
+        result['manual_portfolio_preferences']=portfolio_fit.preferences(metadata.get('portfolio_preferences',{}))
         result['portfolio_preferences']=company_data.effective(result['manual_portfolio_preferences'],result['companies'])
-        result['signal_state']=read_meta('signal_state',{})
-        result['last_trades']=read_meta('last_trades',{})
-        baseline=read_meta('ledger_state')
+        result['signal_state']=metadata.get('signal_state',{})
+        result['last_trades']=metadata.get('last_trades',{})
+        baseline=metadata.get('ledger_state')
         result['ledger_reconciled']=ledger_reconciliation(result['positions'], result['manual_portfolio_preferences'],
-                                                        baseline, read_meta('broker_cash_check',{}))
+                                                        baseline, metadata.get('broker_cash_check',{}))
         result['portfolio_context']=portfolio_fit.context(result,result['portfolio_preferences'])
         return result
 

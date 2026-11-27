@@ -1,4 +1,5 @@
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -35,6 +36,48 @@ class PortfolioTests(unittest.TestCase):
             self.assertEqual(fetch.call_count, 2)
         self.assertEqual(app.state()['quotes']['KOG']['price'], 310)
         self.assertEqual(app.state()['positions'][0]['symbol'], 'KOG')
+
+    def test_portfolio_state_reads_holdings_and_cash_from_one_commit(self):
+        app.save_position(self.position())
+        app.write_meta('portfolio_preferences',{'cash_nok':100})
+        with app.connect() as db:
+            db.execute('PRAGMA journal_mode=WAL')
+        original_connect=app.connect
+        first_connection=True
+        writer_finished=threading.Event()
+        writer_errors=[]
+
+        def write_new_state():
+            try:
+                with original_connect() as db:
+                    db.execute('UPDATE positions SET shares=20 WHERE symbol=?',('EQNR.OL',))
+                    db.execute('UPDATE metadata SET payload=? WHERE key=?',
+                               ('{"cash_nok":200}','portfolio_preferences'))
+            except Exception as error:
+                writer_errors.append(error)
+            finally:
+                writer_finished.set()
+
+        def connect_during_read(*,timeout=5.0):
+            nonlocal first_connection
+            db=original_connect(timeout=timeout)
+            if first_connection:
+                first_connection=False
+                def trace(statement):
+                    if statement.startswith('SELECT * FROM quotes'):
+                        db.set_trace_callback(None)
+                        threading.Thread(target=write_new_state).start()
+                        self.assertTrue(writer_finished.wait(3),'Concurrent ledger write timed out')
+                db.set_trace_callback(trace)
+            return db
+
+        with patch.object(app,'connect',side_effect=connect_during_read):
+            snapshot=app.state()
+
+        self.assertEqual(writer_errors,[])
+        self.assertIn((snapshot['positions'][0]['shares'],
+                       snapshot['manual_portfolio_preferences']['cash_nok']),
+                      {(10,100),(20,200)})
 
     def test_promotion_requires_a_latest_historical_candidate_and_can_restore_baseline(self):
         app.write_meta('validation_report',{'generated':123,'robustness':{'variants':[

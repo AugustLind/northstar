@@ -23,6 +23,15 @@ def snapshot(shares=0):
             'quotes':{'A':q(),'A.OL':q(),'B.OL':q(),'C.OL':q()}}
 
 class TradePlanTests(unittest.TestCase):
+    def test_holding_review_uses_canonical_quote_when_both_aliases_exist(self):
+        account=snapshot(10)
+        account['quotes']['A']['source']='old bare quote'
+        account['quotes']['A.OL']['source']='current Oslo quote'
+
+        review=self.plan(account)
+
+        self.assertEqual(review['holdings'][0]['quote_source'],'current Oslo quote')
+
     def plan(self,s=None,cards=None,p=None):
         return tp.build(s or snapshot(),{'generated':NOW,'policy_version':tp.policy.VERSION,'cards':cards if cards is not None else [card()]},p or profile(),NOW)
 
@@ -107,7 +116,7 @@ class TradePlanTests(unittest.TestCase):
 
     def test_sell_review_prices_use_basis_and_both_fee_assumptions(self):
         s=snapshot(10);s['positions'][0].update(cost=100,above=150)
-        s['quotes']['A']['source']='Independent quote fixture'
+        s['quotes']['A.OL']['source']='Independent quote fixture'
         v=self.plan(s,p=profile(buy_fee_nok=25,sell_fee_nok=12))
         row=v['holdings'][0]
         self.assertEqual(row['break_even_price'],103.7)
@@ -130,7 +139,8 @@ class TradePlanTests(unittest.TestCase):
         self.assertIsNone(row['break_even_price'])
         self.assertIn('sell-fee assumption',row['break_even_status'])
         s['quotes']['A']['asof']=NOW-5*86400
-        s['quotes']['A']['source']='Independent quote fixture'
+        s['quotes']['A.OL']['asof']=NOW-5*86400
+        s['quotes']['A.OL']['source']='Independent quote fixture'
         row=self.plan(s,p=profile(sell_fee_nok=12))['holdings'][0]
         self.assertIsNone(row['break_even_price'])
         self.assertIsNone(row['limit_reference_price'])
@@ -207,6 +217,7 @@ class TradePlanTests(unittest.TestCase):
         v=self.plan(s,p=profile(sectors={}))
         self.assertEqual(v['buys'],[])
         s['quotes']['A']['asof']-=5*86400
+        s['quotes']['A.OL']['asof']-=5*86400
         v=self.plan(s)
         self.assertIsNone(v['holdings'][0]['sell_shares'])
         self.assertEqual(v['buys'],[])

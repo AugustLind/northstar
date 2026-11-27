@@ -24,6 +24,16 @@ def position(**changes):
 
 
 class ScreenTests(unittest.TestCase):
+    def test_bare_oslo_holding_uses_canonical_quote_for_research(self):
+        current=quote();current.update(price=120,currency='NOK')
+        old=quote();old.update(price=80,currency='NOK')
+        snapshot={'positions':[{'symbol':'A','currency':'NOK','shares':10}],
+                  'quotes':{'A.OL':current,'A':old},'portfolio_preferences':{}}
+
+        report=research.build_report(snapshot,['A.OL'])
+
+        self.assertEqual(report['cards'][0]['price'],120)
+
     def test_buy_requires_all_conditions(self):
         result = research.screen('MSFT', quote())
         self.assertEqual(result['action'], 'Consider buying')

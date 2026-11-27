@@ -48,7 +48,7 @@ class PortfolioFitTests(unittest.TestCase):
         self.assertEqual(v['total_nok'],10500)
 
     def test_missing_price_blocks_total_weights_and_preview(self):
-        s=snapshot();s['quotes']['A']['asof']-=5*86400
+        s=snapshot();s['quotes']['A']['asof']-=5*86400;s['quotes']['A.OL']['asof']-=5*86400
         v=pf.context(s,profile(),NOW)
         self.assertIsNone(v['total_nok'])
         self.assertIsNone(v['holdings'][0]['weight_pct'])

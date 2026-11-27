@@ -3,6 +3,10 @@ const holdingSymbol = ({ symbol, currency }) =>
   currency === 'NOK' && !symbol.includes('.') ? symbol + '.OL' : symbol;
 let holdingAdviceBySymbol = new Map();
 
+function holdingQuote(position, quotes) {
+  return quotes[holdingSymbol(position)] || quotes[position.symbol];
+}
+
 function renderHoldingAdvice(symbol, currency) {
   const advice = holdingAdviceBySymbol.get(symbol);
   if (!advice) return '<b>Insufficient data</b><small>No current holding advice.</small>';
@@ -38,7 +42,7 @@ function render() {
   $('#holdings').innerHTML = positions.length
     ? positions
         .map((p) => {
-          const q = quotes[p.symbol],
+          const q = holdingQuote(p, quotes),
             valid = q && q.currency === p.currency;
           const gain = valid && p.cost > 0 ? (q.price / p.cost - 1) * 100 : null;
           return `<tr><td><button type="button" class="holding-market-link" data-holding-market="${esc(p.symbol)}">${esc(p.symbol)}</button><small>${
@@ -75,7 +79,7 @@ function render() {
         .join('')
     : '<tr><td colspan="7">Your notebook is empty. Add your first holding or watchlist company.</td></tr>';
   for (const p of positions) {
-    const q = quotes[p.symbol],
+    const q = holdingQuote(p, quotes),
       items = [];
     if (p.shares > 0 && p.long_term)
       items.push(
@@ -317,7 +321,7 @@ const positiveSaleNumber = (value) => Number.isFinite(value) && value > 0;
 function salePlannerInputs(position) {
   const { symbol, currency } = position;
   const canonical = holdingSymbol(position);
-  const quote = state.quotes[symbol] || state.quotes[canonical];
+  const quote = holdingQuote(position, state.quotes);
   const usableQuote = quote?.currency === currency && positiveSaleNumber(quote.price) ? quote : null;
   const fx = state.quotes['NOK=X'];
   const rate = currency === 'NOK' ? 1 : fx?.currency === 'NOK' && fresh(fx) ? fx.price : null;

@@ -37,6 +37,12 @@ vm.createContext(context);
 for(const file of JSON.parse(fs.readFileSync('static/assets.json','utf8')).scripts){if(!['config.js','lightweight-charts.js'].includes(file))vm.runInContext(fs.readFileSync('static/'+file,'utf8'),context);}
 setImmediate(async()=>{
  try{
+ const savedPositions=vm.runInContext('state.positions',context);
+ const savedQuotes=vm.runInContext('state.quotes',context);
+ vm.runInContext("state.positions=[{symbol:'A',currency:'NOK',shares:1,cost:100,below:null,above:null}];state.quotes={'A':{price:200,currency:'NOK',asof:Date.now()/1000,source:'Bare source'},'A.OL':{price:100,currency:'NOK',asof:Date.now()/1000,source:'Canonical source'}};render()",context);
+ assert(nodes['#holdings'].innerHTML.includes('Canonical source'));
+ assert(!nodes['#holdings'].innerHTML.includes('Bare source'));
+ vm.runInContext('state.positions=restoredPositions;state.quotes=restoredQuotes;render()',Object.assign(context,{restoredPositions:savedPositions,restoredQuotes:savedQuotes}));
  await vm.runInContext('loadSystemStatus()',context);
  assert(nodes['#systemComponents'].innerHTML.includes('&lt;untrusted&gt;'));
  assert(!nodes['#systemComponents'].innerHTML.includes('<untrusted>'));

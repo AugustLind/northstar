@@ -13,7 +13,7 @@ SELL_SIGNALS=policy.SELL_SIGNALS
 def quote_for(snapshot,symbol):
     existing=next((snapshot['quotes'].get(p['symbol']) for p in snapshot['positions']
                    if pf.canonical(p['symbol'],p['currency'])==symbol and snapshot['quotes'].get(p['symbol'])),None)
-    return existing or snapshot['quotes'].get(symbol)
+    return snapshot['quotes'].get(symbol) or existing
 
 
 def signal_current(card,now):
