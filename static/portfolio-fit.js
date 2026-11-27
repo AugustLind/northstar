@@ -32,7 +32,7 @@ function renderPortfolioFit(v) {
   $('#portfolioValueStatus').textContent = p.complete
     ? 'Total value = liquid money + currently priced stocks.'
     : 'Some holdings or exchange rates need current prices before the total can be calculated.';
-  if (!$('#portfolioCashForm').matches(':focus-within'))
+  if (document.activeElement !== $('#portfolioCashInput'))
     $('#portfolioCashInput').value = p.cash_nok;
   $('#fitCashShare').textContent = fitPercent(p.cash_pct) + ' of tracked total';
   $('#fitCandidateCount').textContent = v.candidates.filter((c) => c.buy_candidate).length;
