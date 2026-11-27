@@ -125,6 +125,35 @@ async function loadAnnouncements() {
     if (token === newsRequest) $('#newsStatus').textContent = e.message;
   }
 }
+let portfolioNewsRequest = 0;
+async function loadPortfolioAnnouncements() {
+  const token = ++portfolioNewsRequest;
+  const symbols = (state.positions || [])
+    .filter((position) => position.shares > 0)
+    .map((position) => position.currency === 'NOK' && !position.symbol.includes('.') ? position.symbol + '.OL' : position.symbol);
+  const unique = [...new Set(symbols)];
+  if (!unique.length) {
+    $('#portfolioNewsStatus').textContent = 'Add a holding to see its issuer announcements here.';
+    $('#portfolioNewsItems').innerHTML = '';
+    return;
+  }
+  $('#portfolioNewsStatus').textContent = 'Loading NewsWeb announcements for ' + unique.join(', ') + '…';
+  try {
+    const results = await Promise.all(unique.map(async (symbol) => ({
+      symbol,
+      news: await api('announcements?symbol=' + encodeURIComponent(symbol)),
+    })));
+    if (token !== portfolioNewsRequest) return;
+    const items = results.flatMap(({ symbol, news }) => (news.items || []).map((item) => ({ ...item, symbol })));
+    items.sort((a, b) => (b.published || 0) - (a.published || 0));
+    $('#portfolioNewsStatus').textContent = 'Official NewsWeb issuer notices for your current holdings. Coverage depends on available issuer data.';
+    $('#portfolioNewsItems').innerHTML = items.slice(0, 30).map((item) => noticeCard(item)).join('') ||
+      '<p>No matching notices were found in the covered feed. This does not mean no announcements were issued.</p>';
+  } catch (error) {
+    if (token === portfolioNewsRequest) $('#portfolioNewsStatus').textContent = error.message;
+  }
+}
+$('#refreshPortfolioNews').onclick = loadPortfolioAnnouncements;
 async function loadStockAnnouncements(symbol) {
   const token = ++stockNewsRequest;
   try {
