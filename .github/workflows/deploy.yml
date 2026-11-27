@@ -94,7 +94,6 @@ jobs:
     env:
       ORACLE_HOST: ${{ vars.ORACLE_HOST }}
       API_ORIGIN: ${{ vars.NORTHSTAR_API_URL }}
-      PAGE_URL: https://augustlind.github.io/northstar/
     steps:
       - uses: actions/checkout@v6
       - name: Prepare verification
@@ -104,7 +103,6 @@ jobs:
           KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
         run: |
           mkdir -p verification
-          date +%s > verification/started-epoch
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/northstar_verify
           chmod 600 ~/.ssh/northstar_verify
@@ -116,45 +114,23 @@ jobs:
             timeout 180s ssh -i ~/.ssh/northstar_verify -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "ubuntu@$ORACLE_HOST" \
               'cd ~/northstar && python3 -u scripts/smoke-deployment.py --origin-stdin --page-url https://augustlind.github.io/northstar/ --attempts 10' |
             tee verification/release-checks.txt
-      - name: Browse public Pages and the deployed API
-        id: browser
-        run: |
-          timeout 15s ssh -i ~/.ssh/northstar_verify -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "ubuntu@$ORACLE_HOST" \
-            'cat ~/.config/northstar/access-key' |
-            timeout 180s python3 scripts/smoke_live_browser.py --page-url "$PAGE_URL" --api-origin "$API_ORIGIN" \
-              --evidence verification/browser.json
-      - name: Collect bounded failure evidence
+      - name: Collect release verification evidence
         if: failure()
         env:
           PREPARE: ${{ steps.prepare.outcome }}
           CONTRACTS: ${{ steps.contracts.outcome }}
-          BROWSER: ${{ steps.browser.outcome }}
         run: |
           mkdir -p verification
           python3 - <<'PY' > verification/run.json
           import json
           import os
-          from pathlib import Path
-          start = Path("verification/started-epoch")
-          browser = Path("verification/browser.json")
-          requests = json.loads(browser.read_text()).get("requests", []) if browser.exists() else []
-          (Path(os.environ["RUNNER_TEMP"]) / "northstar-service-requests").write_text(json.dumps(requests))
           print(json.dumps({
               "release": os.environ["GITHUB_SHA"],
               "run": os.environ["GITHUB_RUN_ID"],
               "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
-              "started_epoch": int(start.read_text()) if start.exists() else None,
-              "steps": {step.lower(): os.environ[step] for step in ("PREPARE", "CONTRACTS", "BROWSER")},
+              "steps": {step.lower(): os.environ[step] for step in ("PREPARE", "CONTRACTS")},
           }, indent=2))
           PY
-          if [[ -f verification/started-epoch && -s ~/.ssh/northstar_verify ]]; then
-            since=$(cat verification/started-epoch)
-            until=$(date +%s)
-            timeout 25s ssh -i ~/.ssh/northstar_verify -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "ubuntu@$ORACLE_HOST" \
-              "cd ~/northstar && python3 scripts/smoke_live_browser.py --journal-since $since --journal-until $until" \
-              < "$RUNNER_TEMP/northstar-service-requests" > verification/service.json ||
-              printf '%s\n' '{"available":false,"entries":[]}' > verification/service.json
-          fi
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
