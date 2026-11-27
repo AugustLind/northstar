@@ -261,13 +261,13 @@ setImmediate(async()=>{
  assert(nodes['#dailyTop'].innerHTML.includes('data-review-action="holding"'));
  assert(nodes['#portfolioReviewEntry'].innerHTML.includes('Review portfolio'));
  assert(!nodes['#dailyTop'].innerHTML.includes('javascript:'));
- const candidate=(i)=>({symbol:'CAND'+i+'.OL',name:'Candidate <'+i+'>',rank:i,buy_shares:2,total_nok:279,portfolio_reason:'Fits Energy limits <safe>'});
+ const candidate=(i)=>({symbol:'CAND'+i+'.OL',name:'Candidate <'+i+'>',rank:i,rank_eligible:true,action:'Consider buying',reasons:['Fits Energy limits <safe>']});
  for(let count=0;count<=3;count++){
-  vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:count},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
+  vm.runInContext('renderBuyCandidates('+JSON.stringify({top_candidates:Array.from({length:count},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
   assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,count);
  }
- vm.runInContext('renderBuyCandidates('+JSON.stringify({buy_candidates:Array.from({length:6},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
- assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,5);
+ vm.runInContext('renderBuyCandidates('+JSON.stringify({top_candidates:Array.from({length:6},(_,i)=>candidate(i)),buy_candidates_stale:false,buy_candidate_warnings:[]})+')',context);
+ assert.strictEqual((nodes['#buyCandidates'].innerHTML.match(/data-candidate-stock=/g)||[]).length,3);
  assert(nodes['#buyCandidates'].innerHTML.includes('&lt;safe&gt;'));
  assert(!nodes['#buyCandidates'].innerHTML.includes('<safe>'));
  vm.runInContext("renderBuyCandidates({buy_candidates:[],buy_candidates_stale:true,buy_candidate_warnings:[]})",context);
