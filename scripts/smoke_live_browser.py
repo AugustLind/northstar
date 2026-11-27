@@ -261,10 +261,10 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
             browser.evaluate("""
                 window.smokeReviewsRefreshed = false;
                 window.smokePerformanceRefreshed = false;
-                const originalLoadAccountPerformance = window.loadAccountPerformance;
-                window.loadAccountPerformance = async function() {
+                const originalLoadOverviewAccount = window.loadOverviewAccount;
+                window.loadOverviewAccount = async function(...args) {
                     try {
-                        await originalLoadAccountPerformance();
+                        return await originalLoadOverviewAccount.apply(this, args);
                     } finally {
                         window.smokePerformanceRefreshed = true;
                     }
