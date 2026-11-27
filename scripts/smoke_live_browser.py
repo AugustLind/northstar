@@ -153,6 +153,9 @@ DOM = r"""(() => {
         sign_in: visible('connectionPanel') ? 'required' : text('accountStatus') === 'Connected' ? 'connected' : 'loading',
         workspace: ['portfolio', 'candidates'].find(id =>
             visible(id) && text('workspaceTitle').toLowerCase() === id) || 'other',
+        portfolio_visible: visible('portfolio'),
+        today_visible: visible('todayTitle'),
+        week_visible: visible('weekTitle'),
         today: period('today', 3),
         today_basis: text('todayStatus').startsWith('Session ') ? 'open session'
             : text('todayStatus').startsWith('Last completed session ') ? 'last completed session' : 'unknown',
@@ -244,11 +247,19 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
             stage('return to Portfolio', 'Portfolio is visible with both performance sections')
             browser.evaluate("""
                 window.smokePreviousReviews = dailyView;
-                new MutationObserver(() => { window.smokePerformanceRefreshed = true; })
-                    .observe(document.querySelector('#weekMetrics'), {childList: true});
+                window.smokePerformanceRefreshed = false;
+                const originalLoadAccountPerformance = window.loadAccountPerformance;
+                window.loadAccountPerformance = async function() {
+                    try {
+                        await originalLoadAccountPerformance();
+                    } finally {
+                        window.smokePerformanceRefreshed = true;
+                    }
+                };
                 document.querySelector('[data-tab=portfolio]').click();
             """)
             wait_state(lambda view: view['workspace'] == 'portfolio'
+                       and view['portfolio_visible'] and view['today_visible'] and view['week_visible']
                        and view['performance_refreshed'] and view['reviews_refreshed']
                        and view['advice'] in ('rendered', 'no holdings')
                        and all(view[period] in terminal_periods for period in ('today', 'week')))
