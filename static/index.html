@@ -1270,6 +1270,38 @@
         Built for patient ownership · Private portfolio storage · No broker credentials required
       </footer>
     </main>
+    <dialog id="salePlanner" aria-labelledby="salePlannerTitle">
+      <form id="salePlannerForm">
+        <div class="sectionhead">
+          <h2 id="salePlannerTitle">Plan a sale</h2>
+          <button type="button" id="closeSalePlanner">Close</button>
+        </div>
+        <p id="salePlannerPolicy"></p>
+        <p id="salePlannerQuote"></p>
+        <div class="grid">
+          <label>Sale goal<select name="goal">
+            <option value="trim">Reduce my position</option>
+            <option value="cash">Raise cash</option>
+            <option value="exit">Exit the position</option>
+          </select></label>
+          <label>Timing<select name="timing">
+            <option value="soon">Sell soon</option>
+            <option value="limit">Wait for a higher price</option>
+          </select></label>
+          <div id="saleTrimFields">
+            <label>Target portfolio weight (%)<input name="target" type="number" min="0" max="100" step="any" /></label>
+          </div>
+          <div id="saleCashFields" hidden>
+            <label>Cash goal after fees (<span id="saleCashCurrency"></span>)<input name="cash" type="number" min="0" step="any" /></label>
+          </div>
+          <div id="saleLimitFields" hidden>
+            <label>Limit price per share (<span id="saleLimitCurrency"></span>)<input name="limit" type="number" min="0" step="any" /></label>
+          </div>
+        </div>
+        <p id="salePlannerResult" role="status"></p>
+        <p class="muted">Estimates exclude taxes. Place any order separately with your broker.</p>
+      </form>
+    </dialog>
     <dialog id="editor">
       <form id="positionForm">
         <div class="sectionhead">
@@ -1326,7 +1358,7 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=a383e4205a2e"></script>
       <script src="./app.js?v=ecf46b8afc71"></script>
-      <script src="./portfolio.js?v=3e092122eb73"></script>
+      <script src="./portfolio.js?v=73c459d630e4"></script>
       <script src="./navigation.js?v=ca21460fdd54"></script>
       <script src="./charts.js?v=1a61a2335970"></script>
       <script src="./news.js?v=dc0ed3da919c"></script>

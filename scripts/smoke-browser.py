@@ -46,6 +46,9 @@ def prove_holding_advice(browser):
         app.write_meta('portfolio_preferences', current)
         app.write_meta('report', report_for(original))
         check('Hold', 'No confirmed sell trigger')
+        browser.evaluate("document.querySelector('#holdings [data-plan-sale]').click()")
+        browser.wait("document.querySelector('#salePlanner').open && document.querySelector('#salePlannerPolicy').textContent.startsWith('Current Northstar recommendation: Hold ·')",'sale planner opens from a holding marked Hold')
+        browser.evaluate("document.querySelector('#closeSalePlanner').click()")
         app.write_meta('portfolio_preferences', {**current, 'max_stock_pct': 20})
         check('Sell review', '20.0% position limit', '1 share', '33.33%')
         app.write_meta('portfolio_preferences', {**current, 'max_sector_pct': 20})
@@ -454,6 +457,26 @@ def run():
                 raise RuntimeError('Mobile workspace navigation does not fit on one row.')
             browser.evaluate("openWorkspace('accountPerformance')")
             browser.wait("document.querySelector('#workspaceTitle').textContent==='Portfolio' && document.querySelector('#portfolioAdvanced').open && document.querySelector('#accountPerformanceStatus').textContent.includes('available')",'Overview to detailed account performance')
+            browser.wait("!!document.querySelector('[data-plan-sale=\"SYNTH.OL\"]')",'sale planner button on the loaded holding')
+            browser.evaluate("document.querySelector('[data-plan-sale=\"SYNTH.OL\"]').click()")
+            browser.wait("document.querySelector('#salePlanner').open && document.querySelector('#salePlannerTitle').textContent.includes('SYNTH.OL') && document.querySelector('#salePlannerPolicy').textContent.startsWith('Current Northstar recommendation: Sell review ·')",'sale planner shows the current position-limit review')
+            browser.wait("document.querySelector('#salePlannerResult').textContent.includes('Shares to sell: 1.')",'trim one share to reach the configured 20% stock limit')
+            browser.evaluate("""(() => {
+                const form = document.querySelector('#salePlannerForm');
+                form.elements.goal.value = 'cash';
+                form.elements.cash.value = '200';
+                form.elements.cash.dispatchEvent(new Event('input', {bubbles: true}));
+            })()""")
+            browser.wait("document.querySelector('#salePlannerResult').textContent.includes('Shares to sell: 2.') && document.querySelector('#salePlannerResult').textContent.includes('Net proceeds are unconfirmed')",'200 NOK gross cash goal with an unknown fee')
+            browser.evaluate("""(() => {
+                const form = document.querySelector('#salePlannerForm');
+                form.elements.goal.value = 'exit';
+                form.elements.timing.value = 'limit';
+                form.elements.limit.value = '150';
+                form.elements.limit.dispatchEvent(new Event('input', {bubbles: true}));
+            })()""")
+            browser.wait("document.querySelector('#salePlannerResult').textContent.includes('Shares to sell: 3.') && document.querySelector('#salePlannerResult').textContent.includes(money(450))",'full exit at a user-entered 150 NOK limit')
+            browser.evaluate("document.querySelector('#closeSalePlanner').click()")
             if not browser.evaluate("document.querySelector('#accountPerformanceMetrics').textContent.includes(money(60))"):
                 raise RuntimeError('Detailed performance did not keep the synthetic 100 NOK deposit and 40 NOK withdrawal separate as net contributions.')
             browser.wait("document.querySelector('#fitStatus').textContent.includes('Current portfolio check:') && document.querySelector('#portfolioRiskStatus').textContent.includes('Risk model:')",'portfolio allocation and risk workflows')
