@@ -65,6 +65,7 @@ class Diagnostics:
         self.requests = deque(maxlen=80)
         self.console = deque(maxlen=20)
         self.pending = {}
+        self.successful_api_responses = {}
         self.blocked = False
 
     def route(self, url):
@@ -119,6 +120,11 @@ class Diagnostics:
         path, method = self.pending.pop(params['requestId'], (fallback, ''))
         self.requests.append({'path': path, 'method': method if method in READ_METHODS else 'other',
                               'status': status, 'at': utc_now()})
+        if path.startswith('/api/') and isinstance(status, int) and 200 <= status < 300:
+            self.successful_api_responses[path] = self.successful_api_responses.get(path, 0) + 1
+
+    def successful_api_response_count(self, path):
+        return self.successful_api_responses.get(path, 0)
 
 
 DOM = r"""(() => {
@@ -167,10 +173,10 @@ DOM = r"""(() => {
         reviews_freshness: ['current', 'stale', 'unavailable'].filter(status =>
             typeof dailyView !== 'undefined' && Array.isArray(dailyView?.holding_assessments)
             && dailyView.holding_assessments.some(item => item.status === status)),
-        performance_refreshed: window.smokePerformanceRefreshed === true,
+        performance_refreshed: false,
         advice: !text('dailyStatus').startsWith('Updated ') ? 'reviews pending or failed'
             : !adviceReady ? 'advice missing' : advice.length ? 'rendered' : 'no holdings',
-        reviews_refreshed: window.smokeReviewsRefreshed === true,
+        reviews_refreshed: false,
         reviews_ready: text('dailyStatus').startsWith('Updated '),
         candidates: ranked ? 'ranked' : cards.length ? 'invalid cards'
             : candidates.startsWith('Research is stale or unavailable.') ? 'stale or unavailable'
@@ -196,10 +202,20 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
         evidence.update(stage=name, assertion=assertion)
         stage.started = time.monotonic()
 
+    refresh_baseline = {}
+
     def wait_state(ready):
         deadline = time.monotonic() + wait_seconds
         while time.monotonic() < deadline:
             evidence['readiness'] = browser.evaluate(DOM)
+            evidence['readiness']['reviews_refreshed'] = (
+                diagnostics.successful_api_response_count('/api/daily')
+                > refresh_baseline.get('/api/daily', 0)
+            )
+            evidence['readiness']['performance_refreshed'] = (
+                diagnostics.successful_api_response_count('/api/account-performance')
+                > refresh_baseline.get('/api/account-performance', 0)
+            )
             evidence.setdefault('observations', {})[evidence['stage']] = evidence['readiness']
             if ready(evidence['readiness']):
                 return
@@ -242,35 +258,22 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
             wait_state(lambda view: view['advice'] in ('rendered', 'no holdings'))
 
             stage('Candidates', 'Candidates and keep-or-switch reach valid terminal states')
-            browser.evaluate("""
-                if (!window.smokeFetchTrackingInstalled) {
-                    const originalFetch = window.fetch;
-                    window.fetch = function(...args) {
-                        const requestUrl = new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href);
-                        return originalFetch.apply(window, args).then(response => {
-                            if (response.ok && requestUrl.pathname === '/api/daily')
-                                window.smokeReviewsRefreshed = true;
-                            if (response.ok && requestUrl.pathname === '/api/account-performance')
-                                window.smokePerformanceRefreshed = true;
-                            return response;
-                        });
-                    };
-                    window.smokeFetchTrackingInstalled = true;
-                }
-                window.smokeReviewsRefreshed = false;
-                document.querySelector('[data-tab=candidates]').click();
-            """)
+            refresh_baseline = {
+                '/api/daily': diagnostics.successful_api_response_count('/api/daily'),
+                '/api/account-performance': diagnostics.successful_api_response_count('/api/account-performance'),
+            }
+            browser.evaluate("document.querySelector('[data-tab=candidates]').click()")
             wait_state(lambda view: view['workspace'] == 'candidates' and view['reviews_refreshed']
                        and view['reviews_ready']
                        and view['candidates'] in ('ranked', 'stale or unavailable', 'coverage unavailable', 'empty')
                        and view['switch'] in ('comparison ready', 'no qualifier', 'unavailable'))
 
             stage('return to Portfolio', 'Portfolio is visible with both performance sections')
-            browser.evaluate("""
-                window.smokeReviewsRefreshed = false;
-                window.smokePerformanceRefreshed = false;
-                document.querySelector('[data-tab=portfolio]').click();
-            """)
+            refresh_baseline = {
+                '/api/daily': diagnostics.successful_api_response_count('/api/daily'),
+                '/api/account-performance': diagnostics.successful_api_response_count('/api/account-performance'),
+            }
+            browser.evaluate("document.querySelector('[data-tab=portfolio]').click()")
             wait_state(lambda view: view['workspace'] == 'portfolio'
                        and view['portfolio_visible'] and view['today_visible'] and view['week_visible']
                        and view['performance_refreshed'] and view['reviews_refreshed'] and view['reviews_ready']
