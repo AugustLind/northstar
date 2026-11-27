@@ -153,6 +153,9 @@ DOM = r"""(() => {
         sign_in: visible('connectionPanel') ? 'required' : text('accountStatus') === 'Connected' ? 'connected' : 'loading',
         workspace: ['portfolio', 'candidates'].find(id =>
             visible(id) && text('workspaceTitle').toLowerCase() === id) || 'other',
+        portfolio_visible: visible('portfolio'),
+        today_visible: visible('todayTitle'),
+        week_visible: visible('weekTitle'),
         today: period('today', 3),
         today_basis: text('todayStatus').startsWith('Session ') ? 'open session'
             : text('todayStatus').startsWith('Last completed session ') ? 'last completed session' : 'unknown',
@@ -165,7 +168,8 @@ DOM = r"""(() => {
         performance_refreshed: window.smokePerformanceRefreshed === true,
         advice: !text('dailyStatus').startsWith('Updated ') ? 'reviews pending or failed'
             : !adviceReady ? 'advice missing' : advice.length ? 'rendered' : 'no holdings',
-        reviews_refreshed: typeof dailyView !== 'undefined' && dailyView !== window.smokePreviousReviews,
+        reviews_refreshed: window.smokeReviewsRefreshed === true,
+        reviews_ready: text('dailyStatus').startsWith('Updated '),
         candidates: ranked ? 'ranked' : cards.length ? 'invalid cards'
             : candidates.startsWith('Research is stale or unavailable.') ? 'stale or unavailable'
             : candidates.startsWith('Buying candidates unavailable') ? 'coverage unavailable'
@@ -236,20 +240,40 @@ def run(page_url, api_origin, key, evidence, wait_seconds=30):
             wait_state(lambda view: view['advice'] in ('rendered', 'no holdings'))
 
             stage('Candidates', 'Candidates and keep-or-switch reach valid terminal states')
-            browser.evaluate("window.smokePreviousReviews = dailyView; document.querySelector('[data-tab=candidates]').click()")
+            browser.evaluate("""
+                window.smokeReviewsRefreshed = false;
+                const originalLoadDaily = window.loadDaily;
+                window.loadDaily = async function(...args) {
+                    try {
+                        return await originalLoadDaily.apply(this, args);
+                    } finally {
+                        window.smokeReviewsRefreshed = true;
+                    }
+                };
+                document.querySelector('[data-tab=candidates]').click();
+            """)
             wait_state(lambda view: view['workspace'] == 'candidates' and view['reviews_refreshed']
+                       and view['reviews_ready']
                        and view['candidates'] in ('ranked', 'stale or unavailable', 'coverage unavailable', 'empty')
                        and view['switch'] in ('comparison ready', 'no qualifier', 'unavailable'))
 
             stage('return to Portfolio', 'Portfolio is visible with both performance sections')
             browser.evaluate("""
-                window.smokePreviousReviews = dailyView;
-                new MutationObserver(() => { window.smokePerformanceRefreshed = true; })
-                    .observe(document.querySelector('#weekMetrics'), {childList: true});
+                window.smokeReviewsRefreshed = false;
+                window.smokePerformanceRefreshed = false;
+                const originalLoadOverviewAccount = window.loadOverviewAccount;
+                window.loadOverviewAccount = async function(...args) {
+                    try {
+                        return await originalLoadOverviewAccount.apply(this, args);
+                    } finally {
+                        window.smokePerformanceRefreshed = true;
+                    }
+                };
                 document.querySelector('[data-tab=portfolio]').click();
             """)
             wait_state(lambda view: view['workspace'] == 'portfolio'
-                       and view['performance_refreshed'] and view['reviews_refreshed']
+                       and view['portfolio_visible'] and view['today_visible'] and view['week_visible']
+                       and view['performance_refreshed'] and view['reviews_refreshed'] and view['reviews_ready']
                        and view['advice'] in ('rendered', 'no holdings')
                        and all(view[period] in terminal_periods for period in ('today', 'week')))
             stage('browser integrity', 'No uncaught exceptions or blocked requests')
