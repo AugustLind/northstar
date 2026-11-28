@@ -357,6 +357,21 @@ setImmediate(async()=>{
  assert.deepStrictEqual(Array.from(portfolioPlots.at(-1).points,point=>point.value),[9800,10000,11100]);
  assert.strictEqual(portfolioPlots.at(-1).startWithHistory,true);
  context.plotWorkspaceChart=originalPlot;
+ const currentHistory=[{date:'2026-11-19',value_nok:4200},{date:'2026-11-20',value_nok:4417.82}];
+ const proxyPlots=[];
+ context.plotWorkspaceChart=(container,options)=>{
+   if(container===nodes['#todayChart']||container===nodes['#weekChart'])proxyPlots.push({container,options});
+   return originalPlot(container,options);
+ };
+ context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,
+   current_holdings_value_history:currentHistory,today:{...todayFixture,curve:[]},
+   last_7_days:{...weekFixture,curve:[]}})});
+ await vm.runInContext('loadOverviewAccount()',context);
+ assert(proxyPlots.some(({container,options})=>container===nodes['#todayChart']&&
+   options.title==='Current holdings value (historical prices)'&&options.points.length===2));
+ assert(proxyPlots.some(({container,options})=>container===nodes['#weekChart']&&
+   options.title==='Current holdings value (historical prices)'&&options.points.length===2));
+ context.plotWorkspaceChart=originalPlot;
  context.fetch=async()=>({ok:true,json:async()=>({...accountPerformanceFixture,today:todayFixture,last_7_days:weekFixture})});
  await vm.runInContext('loadOverviewAccount()',context);
  const todayStatus=nodes['#todayStatus'];

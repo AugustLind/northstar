@@ -233,10 +233,21 @@ function renderAccountValueChart(chart, value, startWithHistory = false) {
   if (startWithHistory) {
     for (const point of value.today?.curve || []) dates.set(point.date, point.value_nok);
   }
-  const points = [...dates].sort(([a],[b])=>a.localeCompare(b)).map(([date,amount])=>({time:chartTime(date),value:amount}));
+  let points = [...dates].sort(([a],[b])=>a.localeCompare(b)).map(([date,amount])=>({time:chartTime(date),value:amount}));
+  let title = 'Account value';
+  let detail = 'NOK · Includes external cash flows';
+  if (points.filter(point=>Number.isFinite(point.time)&&Number.isFinite(point.value)).length < 2) {
+    const history = value.current_holdings_value_history || [];
+    const proxy = history.map(point=>({time:chartTime(point.date),value:point.value_nok}));
+    if (proxy.filter(point=>Number.isFinite(point.time)&&Number.isFinite(point.value)).length >= 2) {
+      points = proxy;
+      title = 'Current holdings value (historical prices)';
+      detail = 'NOK · Today’s share counts held constant; past trades and cash flows excluded';
+    }
+  }
   const gaps = points.some(point=>!Number.isFinite(point.value));
-  plotWorkspaceChart(chart,{title:'Account value',
-    detail:'NOK · Includes external cash flows' + (gaps ? ' · Some dates unpriced' : ''),
+  plotWorkspaceChart(chart,{title,
+    detail:detail + (gaps ? ' · Some dates unpriced' : ''),
     currency:'NOK',points,days:7,startWithHistory});
 }
 

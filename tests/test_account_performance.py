@@ -34,6 +34,23 @@ class AccountPerformanceTests(unittest.TestCase):
         self.assertEqual(account['current_value_nok'],1000)
         self.assertEqual(sizing['total_nok'],1000)
 
+    def test_current_holdings_history_is_available_without_ledger_performance(self):
+        prices=quote([('2025-01-02',10),('2025-01-03',12)])
+        prices.update(price=13,currency='NOK',asof=NOW)
+        snapshot={'ledger_reconciled':False,
+                  'positions':[{'symbol':'A.OL','currency':'NOK','shares':2}],
+                  'quotes':{'A.OL':prices},
+                  'manual_portfolio_preferences':{'cash_nok':100}}
+
+        result=ap.view(snapshot,None,[],NOW)
+
+        self.assertEqual(result['status'],'unavailable')
+        self.assertEqual(result['curve'],[])
+        self.assertEqual(result['current_holdings_value_history'],[
+            {'date':'2025-01-02','value_nok':120},
+            {'date':'2025-01-03','value_nok':124},
+        ])
+
     def test_multiple_same_day_splits_match_in_full_history(self):
         rows=[event(1,'2025-01-02','split',ratio=2),
               event(2,'2025-01-02','split',ratio=3)]
