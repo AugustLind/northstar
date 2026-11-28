@@ -161,7 +161,7 @@ function renderToday(value, refreshErrors = []) {
   $('#todayHoldings').innerHTML = holdingMovements(today.holdings);
 }
 
-function renderLast7Days(week = {}, refreshErrors = []) {
+function renderLast7Days(week = {}, refreshErrors = [], currentHistory = []) {
   const windowLabel = week.window_start
     ? week.window_start + ' to ' + week.window_end + ' (Europe/Oslo)'
     : '';
@@ -185,23 +185,35 @@ function renderLast7Days(week = {}, refreshErrors = []) {
     week,
     'Daily-linked return assumes external cash flows occur at day end'
   );
-  renderWeeklyPerformanceChart(week);
+  renderWeeklyPerformanceChart(week, currentHistory);
   $('#weekHoldings').innerHTML = holdingMovements(week.holdings);
 }
 
-function renderWeeklyPerformanceChart(period) {
+function renderWeeklyPerformanceChart(period, currentHistory = []) {
   const chart = $('#weekChart');
   const curve = period.curve || [];
-  chart.hidden = curve.length < 2;
-  if (chart.hidden) {
-    clearWorkspaceChart(chart, '');
+  const actual = curve.filter(point=>Number.isFinite(Date.parse(point.date))&&Number.isFinite(point.adjusted_value_nok));
+  if (actual.length >= 2) {
+    chart.hidden = false;
+    plotWorkspaceChart(chart, {
+      title:'Investment value',
+      detail:'NOK · Excludes net external flows',
+      currency:'NOK',
+      points:actual.map(point=>({time:chartTime(point.date),value:point.adjusted_value_nok})),
+      days:8,
+    });
     return;
   }
+  const proxy = currentHistory
+    .filter(point=>Number.isFinite(Date.parse(point.date))&&Number.isFinite(point.value_nok))
+    .map(point=>({time:chartTime(point.date),value:point.value_nok}));
+  chart.hidden = proxy.length < 2;
+  if (chart.hidden) { clearWorkspaceChart(chart, ''); return; }
   plotWorkspaceChart(chart, {
-    title:'Investment value',
-    detail:'NOK · Excludes net external flows',
+    title:'Current holdings value (historical prices)',
+    detail:'NOK · Today’s share counts held constant; past trades and cash flows excluded',
     currency:'NOK',
-    points:curve.map(point=>({time:chartTime(point.date),value:point.adjusted_value_nok})),
+    points:proxy,
     days:8,
   });
 }

@@ -99,6 +99,44 @@ def current_summary(snapshot,now,events=()):
     return result
 
 
+def current_holdings_value_history(snapshot,now):
+    """Value today's holdings at historical closes; this is not account performance."""
+    positions=[p for p in snapshot.get('positions',[])
+              if finite(p.get('shares')) and p['shares']>0]
+    if not positions:return []
+    quotes=snapshot.get('quotes',{})
+    today=dt.datetime.fromtimestamp(now,OSLO).date()
+    def prices_for(quote,currency):
+        if not quote or quote.get('currency')!=currency or quote.get('account_history_version')!=1:return {}
+        prices={}
+        for bar in quote.get('history',[]):
+            if not isinstance(bar,dict):continue
+            stamp=bar.get('time');close=bar.get('account_close')
+            if not finite(stamp) or not finite(close) or close<=0:continue
+            try:date=dt.datetime.fromtimestamp(stamp,OSLO).date()
+            except (OverflowError,OSError,ValueError):continue
+            if date<today:prices[date.isoformat()]=close
+        return prices
+    series=[]
+    for position in positions:
+        symbol=pf.canonical(position['symbol'],position['currency'])
+        quote=quotes.get(symbol) or quotes.get(position['symbol'])
+        prices=prices_for(quote,position['currency'])
+        fx_prices={}
+        if position['currency']=='USD':
+            fx_prices=prices_for(quotes.get('NOK=X'),'NOK')
+            prices={date:value*fx_prices[date] for date,value in prices.items() if date in fx_prices}
+        elif position['currency']!='NOK':
+            return []
+        if not prices:return []
+        series.append((position['shares'],prices))
+    dates=set.intersection(*(set(prices) for _,prices in series))
+    cash=snapshot.get('manual_portfolio_preferences',{}).get('cash_nok')
+    if not finite(cash):return []
+    return [{'date':date,'value_nok':cash+sum(shares*prices[date] for shares,prices in series)}
+            for date in sorted(dates)]
+
+
 def positions_map(rows):
     result={}
     for p in rows:
@@ -381,6 +419,7 @@ def view(snapshot,baseline,events,now=None,allow_prior_close=False):
          'daily_linked_return_pct':None,'modified_dietz_pct':None,'realized_trade_pnl_nok':None,
          'income_nok':None,'reported_fees_nok':None,'carried_valuations':0,'excluded_later_events':0,'opening_basis':None}
     out.update(current_summary(snapshot,now,events))
+    out['current_holdings_value_history']=current_holdings_value_history(snapshot,now)
     out['today'], out['last_7_days'] = portfolio_performance(snapshot,baseline,events,now)
     def block(reason):
         if reason not in out['coverage']:out['coverage'].append(reason)

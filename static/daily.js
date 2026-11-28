@@ -20,7 +20,7 @@ async function loadOverviewAccount(refreshErrors = []) {
     const value = await api('account-performance?allow_prior_close=0');
     if (token !== overviewAccountRequest) return;
     renderToday(value, refreshErrors);
-    renderLast7Days(value.last_7_days, refreshErrors);
+    renderLast7Days(value.last_7_days, refreshErrors, value.current_holdings_value_history);
     renderOverviewChart(value);
     renderAccountValueChart($('#todayChart'), value, true);
     $('#overviewValue').textContent =
