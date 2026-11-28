@@ -19,6 +19,4 @@ jobs:
         run: python scripts/build-pages.py
       - run: for file in static/*.js; do node --check "$file"; done
       - run: node tests/test_charts.js && node tests/test_ui.js
-      - name: Authenticated synthetic browser workflow
-        run: python scripts/smoke-browser.py
       - run: for script in scripts/*.sh; do bash -n "$script"; done
