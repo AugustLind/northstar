@@ -655,6 +655,25 @@
           </div>
           <div id="todayHoldings" class="tablewrap"></div>
         </section>
+        <section class="card" aria-labelledby="portfolioValueTitle">
+          <h2 id="portfolioValueTitle">Portfolio value</h2>
+          <p id="portfolioValueStatus" role="status">Loading holdings and cash…</p>
+          <div class="metrics">
+            <article><small>Total value · NOK</small><strong id="portfolioTotalValue">—</strong></article>
+            <article><small>Stocks · NOK</small><strong id="portfolioStocksValue">—</strong></article>
+            <article><small>Liquid money · NOK</small><strong id="portfolioCashValue">—</strong></article>
+          </div>
+          <form id="portfolioCashForm" class="researchtools">
+            <label>Liquid money · NOK<input id="portfolioCashInput" type="number" min="0" max="1000000000" step="any" required /></label>
+            <button id="savePortfolioCash">Save liquid money</button>
+            <p id="portfolioCashStatus" role="status"></p>
+          </form>
+        </section>
+        <section class="card stocknewsbox" aria-labelledby="portfolioNewsTitle">
+          <div class="sectionhead"><h2 id="portfolioNewsTitle">News for your holdings</h2><button id="refreshPortfolioNews" type="button">Refresh news</button></div>
+          <p id="portfolioNewsStatus" role="status">Loading holding announcements…</p>
+          <div id="portfolioNewsItems"></div>
+        </section>
         <section class="card" aria-labelledby="weekTitle">
           <h2 id="weekTitle">Last 7 days</h2>
           <p id="weekStatus" role="status">Loading account performance…</p>
@@ -724,7 +743,7 @@
           basis is entered manually.
         </p>
         <section id="holdingMarket" class="workspace-chart" aria-label="Holding price and volume" hidden></section>
-        <details class="workspacefold advanced-tools" id="portfolioAdvanced">
+        <details class="workspacefold" id="portfolioAdvanced" hidden>
           <summary>Advanced tools</summary>
         <section class="card" id="portfolioAssessments">
           <h2>Holding assessments</h2>
@@ -1123,7 +1142,7 @@
       </section>
       <section id="candidates" class="tab candidate-workspace" hidden>
         <aside class="card candidate-list" aria-labelledby="buyCandidatesTitle">
-          <h2 id="buyCandidatesTitle">Top 5 candidates</h2>
+          <h2 id="buyCandidatesTitle">Top 3 candidates</h2>
           <p id="buyCandidatesStatus" role="status" aria-live="polite">Loading eligible candidates…</p>
           <div id="buyCandidates"></div>
           <button id="buyCandidatesRecovery" type="button" hidden></button>
@@ -1137,15 +1156,6 @@
           <section id="candidateMarket" class="workspace-chart" aria-label="Candidate price and volume"></section>
           <section class="card" aria-labelledby="switchTitle">
             <h2 id="switchTitle">Keep vs. switch</h2>
-            <form id="candidateCashForm">
-              <label>Available cash (NOK)
-                <input id="candidateCash" type="number" min="0" max="1000000000" step="0.01"
-                  inputmode="decimal" data-ephemeral required />
-              </label>
-              <button>Recalculate</button>
-              <button type="button" id="candidateCashReset" hidden>Use recorded cash</button>
-            </form>
-            <p id="candidateCashBasis" class="muted">Using recorded cash. Enter an amount to preview with different cash.</p>
             <p id="switchStatus" role="status" aria-live="polite">Loading comparison…</p>
             <div id="switchComparison" class="tablewrap"></div>
           </section>
@@ -1384,19 +1394,19 @@
       <script src="./config.js?v=c164e48e9700"></script>
       <script src="./ui-common.js?v=c074c790edf3"></script>
       <script src="./app.js?v=ecf46b8afc71"></script>
-      <script src="./portfolio.js?v=780636b4e866"></script>
+      <script src="./portfolio.js?v=37b418e25d8c"></script>
       <script src="./navigation.js?v=ca21460fdd54"></script>
       <script src="./charts.js?v=1a61a2335970"></script>
-      <script src="./news.js?v=dc0ed3da919c"></script>
+      <script src="./news.js?v=1734cea05091"></script>
       <script src="./validation.js?v=098d62b0f747"></script>
-      <script src="./portfolio-fit.js?v=23335f259d4c"></script>
+      <script src="./portfolio-fit.js?v=72976e9c3220"></script>
       <script src="./holdings-import.js?v=66d1af659957"></script>
       <script src="./trade-plan.js?v=c368342a23f8"></script>
       <script src="./ledger.js?v=e62a5662104c"></script>
       <script src="./lightweight-charts.js?v=a583392cf759"></script>
       <script src="./workspace-charts.js?v=4156a88ee685"></script>
       <script src="./account-performance.js?v=90a4a3cdb051"></script>
-      <script src="./daily.js?v=d3f84e0409df"></script>
+      <script src="./daily.js?v=9345c69af685"></script>
       <script src="./advice.js?v=99a68ba3093b"></script>
       <script src="./explorer.js?v=67c374da4b13"></script>
       <script src="./financial-view.js?v=2856c6dce4aa"></script>

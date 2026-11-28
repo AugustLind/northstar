@@ -1,6 +1,6 @@
 <section id="candidates" class="tab candidate-workspace" hidden>
   <aside class="card candidate-list" aria-labelledby="buyCandidatesTitle">
-    <h2 id="buyCandidatesTitle">Top 5 candidates</h2>
+    <h2 id="buyCandidatesTitle">Top 3 candidates</h2>
     <p id="buyCandidatesStatus" role="status" aria-live="polite">Loading eligible candidates…</p>
     <div id="buyCandidates"></div>
     <button id="buyCandidatesRecovery" type="button" hidden></button>
@@ -14,15 +14,6 @@
     <section id="candidateMarket" class="workspace-chart" aria-label="Candidate price and volume"></section>
     <section class="card" aria-labelledby="switchTitle">
       <h2 id="switchTitle">Keep vs. switch</h2>
-      <form id="candidateCashForm">
-        <label>Available cash (NOK)
-          <input id="candidateCash" type="number" min="0" max="1000000000" step="0.01"
-            inputmode="decimal" data-ephemeral required />
-        </label>
-        <button>Recalculate</button>
-        <button type="button" id="candidateCashReset" hidden>Use recorded cash</button>
-      </form>
-      <p id="candidateCashBasis" class="muted">Using recorded cash. Enter an amount to preview with different cash.</p>
       <p id="switchStatus" role="status" aria-live="polite">Loading comparison…</p>
       <div id="switchComparison" class="tablewrap"></div>
     </section>

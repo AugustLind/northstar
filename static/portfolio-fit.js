@@ -26,6 +26,14 @@ function renderPortfolioFit(v) {
     (v.report_stale ? ' · stale; no candidate cleared.' : '');
   $('#fitTotal').textContent = fitMoney(p.total_nok);
   $('#fitCash').textContent = fitMoney(p.cash_nok);
+  $('#portfolioTotalValue').textContent = fitMoney(p.total_nok);
+  $('#portfolioCashValue').textContent = fitMoney(p.cash_nok);
+  $('#portfolioStocksValue').textContent = fitMoney(p.complete ? p.priced_holdings_nok : null);
+  $('#portfolioValueStatus').textContent = p.complete
+    ? 'Total value = liquid money + currently priced stocks.'
+    : 'Some holdings or exchange rates need current prices before the total can be calculated.';
+  if (document.activeElement !== $('#portfolioCashInput'))
+    $('#portfolioCashInput').value = p.cash_nok;
   $('#fitCashShare').textContent = fitPercent(p.cash_pct) + ' of tracked total';
   $('#fitCandidateCount').textContent = v.candidates.filter((c) => c.buy_candidate).length;
   $('#fitWarnings').innerHTML = p.warnings
@@ -304,3 +312,23 @@ $('#fitCandidates').onclick = (e) => {
     $('#fitPreviewForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 $('#refreshFit').onclick = loadPortfolioFit;
+
+$('#portfolioCashForm').onsubmit = async (event) => {
+  event.preventDefault();
+  if (!fitView) return;
+  const value = $('#portfolioCashInput').valueAsNumber;
+  if (!Number.isFinite(value) || value < 0 || value > 1e9) return;
+  const button = $('#savePortfolioCash');
+  button.disabled = true;
+  $('#portfolioCashStatus').textContent = 'Saving liquid money…';
+  try {
+    await api('portfolio-fit', { ...fitView.profile, cash_nok: value });
+    $('#portfolioCashStatus').textContent = 'Saved. Total value includes this cash and currently priced stocks.';
+    fitDirty = false;
+    await Promise.all([loadPortfolioFit(), reloadHoldings(), loadOverviewAccount()]);
+  } catch (error) {
+    $('#portfolioCashStatus').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};

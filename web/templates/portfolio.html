@@ -11,6 +11,25 @@
     </div>
     <div id="todayHoldings" class="tablewrap"></div>
   </section>
+  <section class="card" aria-labelledby="portfolioValueTitle">
+    <h2 id="portfolioValueTitle">Portfolio value</h2>
+    <p id="portfolioValueStatus" role="status">Loading holdings and cash…</p>
+    <div class="metrics">
+      <article><small>Total value · NOK</small><strong id="portfolioTotalValue">—</strong></article>
+      <article><small>Stocks · NOK</small><strong id="portfolioStocksValue">—</strong></article>
+      <article><small>Liquid money · NOK</small><strong id="portfolioCashValue">—</strong></article>
+    </div>
+    <form id="portfolioCashForm" class="researchtools">
+      <label>Liquid money · NOK<input id="portfolioCashInput" type="number" min="0" max="1000000000" step="any" required /></label>
+      <button id="savePortfolioCash">Save liquid money</button>
+      <p id="portfolioCashStatus" role="status"></p>
+    </form>
+  </section>
+  <section class="card stocknewsbox" aria-labelledby="portfolioNewsTitle">
+    <div class="sectionhead"><h2 id="portfolioNewsTitle">News for your holdings</h2><button id="refreshPortfolioNews" type="button">Refresh news</button></div>
+    <p id="portfolioNewsStatus" role="status">Loading holding announcements…</p>
+    <div id="portfolioNewsItems"></div>
+  </section>
   <section class="card" aria-labelledby="weekTitle">
     <h2 id="weekTitle">Last 7 days</h2>
     <p id="weekStatus" role="status">Loading account performance…</p>
@@ -80,7 +99,7 @@
     basis is entered manually.
   </p>
   <section id="holdingMarket" class="workspace-chart" aria-label="Holding price and volume" hidden></section>
-  <details class="workspacefold advanced-tools" id="portfolioAdvanced">
+  <details class="workspacefold" id="portfolioAdvanced" hidden>
     <summary>Advanced tools</summary>
   <section class="card" id="portfolioAssessments">
     <h2>Holding assessments</h2>

@@ -446,6 +446,11 @@ def candidate_plan(snapshot, report, cash=None, review_plan=None):
     return {
         'funded_switch': funded_switch(scenario, report, switch_plan),
         'buy_candidates': plan['buys'][:5],
+        'top_candidates': sorted(
+            (card for card in (report or {}).get('cards', [])
+             if card.get('composite') is not None and card.get('score') is not None),
+            key=policy.rank_key
+        )[:3],
         'buy_candidate_watch': candidate_watch(report, plan),
         'buy_candidates_stale': not policy.current_report(report, plan['generated']),
         'buy_candidate_warnings': [

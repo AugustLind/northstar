@@ -37,6 +37,7 @@ function updateHoldingAdvice(assessments) {
 
 function render() {
   const { positions, quotes } = state;
+  if (typeof loadPortfolioAnnouncements === 'function') loadPortfolioAnnouncements();
   const alerts = [],
     assessments = [];
   $('#holdings').innerHTML = positions.length
